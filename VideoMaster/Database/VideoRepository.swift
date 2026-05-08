@@ -99,6 +99,29 @@ struct VideoRepository {
         }
     }
 
+    func updateHasSubtitles(videoId: Int64, hasSubtitles: Bool) async throws {
+        try await dbPool.write { db in
+            try db.execute(
+                sql: "UPDATE video SET hasSubtitles = ? WHERE id = ?",
+                arguments: [hasSubtitles ? 1 : 0, videoId]
+            )
+        }
+    }
+
+    /// Bulk update of the `hasSubtitles` flag in a single transaction. Each tuple is
+    /// `(videoId, hasSubtitles)`. A no-op for an empty array.
+    func updateHasSubtitles(updates: [(videoId: Int64, hasSubtitles: Bool)]) async throws {
+        guard !updates.isEmpty else { return }
+        try await dbPool.write { db in
+            for (id, flag) in updates {
+                try db.execute(
+                    sql: "UPDATE video SET hasSubtitles = ? WHERE id = ?",
+                    arguments: [flag ? 1 : 0, id]
+                )
+            }
+        }
+    }
+
     func recordPlay(videoId: Int64) async throws {
         try await dbPool.write { db in
             try db.execute(

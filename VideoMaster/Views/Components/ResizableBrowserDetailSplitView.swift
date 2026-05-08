@@ -120,8 +120,16 @@ struct ResizableBrowserDetailSplitView<Content: View, Detail: View>: NSViewRepre
             }
             contentHost.rootView = content()
         }
-        if let detailHost = subviews[1] as? NSHostingView<Detail>, coord.lastDetailID != detailID {
-            coord.lastDetailID = detailID
+        // Always refresh detail `rootView` (mirrors browser `content()` above).
+        //
+        // If we only update when `detailID` changes, the first snapshot after an in-place rename can be
+        // `detailID == new path` while `filteredVideos` still resolves to no row — SwiftUI emits the
+        // “Select a video” placeholder. When the filtered list catches up, `detailID` is unchanged, so we
+        // would skip `detailHost.rootView = detail()` forever and stick on the placeholder/stale pane.
+        if let detailHost = subviews[1] as? NSHostingView<Detail> {
+            if coord.lastDetailID != detailID {
+                coord.lastDetailID = detailID
+            }
             detailHost.rootView = detail()
         }
 

@@ -113,9 +113,12 @@ struct ResizableSplitView<Sidebar: View, Content: View, Detail: View>: NSViewRep
                 contentHost.rootView = content()
             }
         }
-        // Detail always updates (player controls etc.)
-        if let detailHost = subviews[2] as? NSHostingView<Detail>, coord.lastDetailID != detailID {
-            coord.lastDetailID = detailID
+        // Same rationale as `ResizableBrowserDetailSplitView`: rebuild detail content every pass so async
+        // library updates cannot strand a stale `rootView` when `detailID` already matches.
+        if let detailHost = subviews[2] as? NSHostingView<Detail> {
+            if coord.lastDetailID != detailID {
+                coord.lastDetailID = detailID
+            }
             detailHost.rootView = detail()
         }
 

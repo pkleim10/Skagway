@@ -64,12 +64,53 @@ struct TableScrollHelper: NSViewRepresentable {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: focusWork)
     }
 
-    /// Prefer `scrollRowToVisible` over manipulating `documentView` scroll — the latter triggered
-    /// scroll/layout while SwiftUI was rebuilding outline rows (crash report 2026-03-20).
+    /// Scroll so the selected row sits near the **vertical center** of the scroll viewport.
+    /// `scrollRowToVisible` only minimizes scroll and often pins the row to an edge.
     private static func scrollRowSafely(_ row: Int, in tableView: NSTableView) {
         guard row >= 0, row < tableView.numberOfRows else { return }
         tableView.layoutSubtreeIfNeeded()
-        tableView.scrollRowToVisible(row)
+
+        guard let scrollView = tableView.enclosingScrollView else {
+            tableView.scrollRowToVisible(row)
+            return
+        }
+        scrollView.layoutSubtreeIfNeeded()
+        let clipView = scrollView.contentView
+        clipView.layoutSubtreeIfNeeded()
+
+        let rowRect = tableView.rect(ofRow: row)
+        guard !rowRect.isEmpty else {
+            tableView.scrollRowToVisible(row)
+            return
+        }
+
+        let viewportH = clipView.bounds.height
+        guard viewportH > 0 else {
+            tableView.scrollRowToVisible(row)
+            return
+        }
+
+        // Rectangle in table coordinates spanning one viewport tall, vertically centered on the row.
+        // scrollToVisible on the table scrolls the enclosing NSScrollView to place this rect appropriately.
+        let tableExtent = max(tableView.bounds.height, rowRect.maxY)
+        let maxOriginY = max(0, tableExtent - viewportH)
+        let rowMid = rowRect.midY
+        let desiredOriginY = rowMid - viewportH / 2
+        let originY = min(maxOriginY, max(0, desiredOriginY.rounded()))
+
+        let targetRect = NSRect(
+            x: tableView.bounds.minX,
+            y: originY,
+            width: tableView.bounds.width,
+            height: viewportH
+        )
+        tableView.scrollToVisible(targetRect)
+
+        tableView.layoutSubtreeIfNeeded()
+        guard tableView.rect(ofRow: row).intersects(tableView.visibleRect) else {
+            tableView.scrollRowToVisible(row)
+            return
+        }
     }
 
     /// Prefer the table with the most rows (video list) over sidebar/collections.
@@ -148,6 +189,22 @@ struct LibraryListView: View {
                     )
                 }
                 Menu("Open With") {
+                    // If the right-clicked row is part of a multi-selection,
+                    // send the whole selection; otherwise just this one video.
+                    let urlsToSend: [URL] = {
+                        if ids.count > 1, ids.contains(video.id) {
+                            return ids.compactMap { id in
+                                viewModel.filteredVideos.first(where: { $0.id == id })?.url
+                            }
+                        }
+                        return [video.url]
+                    }()
+                    if ExternalApps.isSubmarineInstalled {
+                        Button("Submarine") {
+                            ExternalApps.openInSubmarine(urlsToSend)
+                        }
+                        Divider()
+                    }
                     let appURLs = NSWorkspace.shared.urlsForApplications(toOpen: video.url)
                     ForEach(appURLs, id: \.self) { appURL in
                         Button(appURL.deletingPathExtension().lastPathComponent) {
@@ -430,6 +487,19 @@ struct LibraryListView: View {
             } else {
                 Text(video.fileName)
                     .lineLimit(1)
+                if video.hasSubtitles {
+                    // Accent-tinted pill with a white filled captions.bubble — matches the
+                    // "on" appearance of the Subtitles toggle in the detail pane so the two
+                    // surfaces read as the same affordance.
+                    Image(systemName: "captions.bubble.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 4))
+                        .help("Subtitles available")
+                        .accessibilityLabel("Subtitles available")
+                }
             }
         }
     }

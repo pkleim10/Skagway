@@ -72,6 +72,7 @@ actor LibraryScanner {
             guard !exists else { return }
 
             let metadata = await metadataExtractor.extract(from: fileURL)
+            let hasSRT = SubtitleTrack.findSidecarSRT(for: fileURL) != nil
 
             let videoInput = Video(
                 filePath: fileURL.path,
@@ -85,7 +86,8 @@ actor LibraryScanner {
                 creationDate: metadata.creationDate,
                 dateAdded: Date(),
                 rating: 0,
-                playCount: 0
+                playCount: 0,
+                hasSubtitles: hasSRT
             )
 
             let video = try await videoRepo.insert(videoInput)
@@ -221,6 +223,7 @@ actor LibraryScanner {
     private func importFile(_ fileURL: URL) async {
         do {
             let metadata = await metadataExtractor.extract(from: fileURL)
+            let hasSRT = SubtitleTrack.findSidecarSRT(for: fileURL) != nil
 
             let videoInput = Video(
                 filePath: fileURL.path,
@@ -234,7 +237,8 @@ actor LibraryScanner {
                 creationDate: metadata.creationDate,
                 dateAdded: Date(),
                 rating: 0,
-                playCount: 0
+                playCount: 0,
+                hasSubtitles: hasSRT
             )
 
             let video = try await videoRepo.insert(videoInput)

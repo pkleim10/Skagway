@@ -1,6 +1,7 @@
 import AVKit
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct VideoDetailView: View {
     let video: Video
@@ -25,6 +26,14 @@ struct VideoDetailView: View {
     @State private var editedName: String = ""
     @State private var inlinePlayer: AVPlayer?
     @State private var fullscreenInlineController: FullscreenInlinePlayerWindowController?
+    @State private var didAutoResumeInlinePlayback = false
+    @State private var resumedFromSeconds: Double?
+    @State private var resumeBannerOpacity: Double = 1
+    @State private var resumeBannerFadeTask: Task<Void, Never>?
+    /// Observable subtitle track for the current video; auto-populated on video change
+    /// when a sidecar `.srt` exists. Kept across playback start/stop so a single library
+    /// session doesn't rediscover for the same selection.
+    @State private var subtitleTrack = SubtitleTrack()
     /// Tracks detail column size for auto-adjust splitter (thumbnail/filmstrip vs metadata).
     @State private var detailPaneSize: CGSize = .zero
     private var effectiveHeight: CGFloat { viewModel.effectiveDetailHeight }
@@ -100,6 +109,7 @@ struct VideoDetailView: View {
             let path = video.filePath
             detailThumbnailLo = nil
             detailThumbnailHi = nil
+            discoverSidecarSubtitles()
             // Filmstrip mode: load cached strip before any `await` so SwiftUI never paints a frame with
             // `filmstrip == nil` while the strip exists on disk (that frame read as thumbnail/placeholder flash).
             if viewModel.showThumbnailInDetail {
@@ -247,9 +257,27 @@ struct VideoDetailView: View {
                             .aspectRatio(16.0 / 9.0, contentMode: .fit)
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                     } else {
-                        FloatingPlayerView(player: player)
-                            .aspectRatio(16.0 / 9.0, contentMode: .fit)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        ZStack {
+                            FloatingPlayerView(player: player)
+                            SubtitleOverlayContainer(track: subtitleTrack)
+                            if didAutoResumeInlinePlayback, let resumeSecs = resumedFromSeconds {
+                                resumeOverlay(resumedFromSeconds: resumeSecs) {
+                                    cancelResumeBannerFadeTask()
+                                    resumeBannerOpacity = 1
+                                    didAutoResumeInlinePlayback = false
+                                    resumedFromSeconds = nil
+                                    PlaybackPositionStore.clear(filePath: video.filePath)
+                                    player.seek(to: .zero) { _ in
+                                        player.play()
+                                    }
+                                }
+                                .opacity(resumeBannerOpacity)
+                                .padding(10)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            }
+                        }
+                        .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
                 } else if preferThumbnail, let detailStill {
                     Image(nsImage: detailStill)
@@ -298,6 +326,19 @@ struct VideoDetailView: View {
                 player.play()
             }
         }
+        .onChange(of: viewModel.fadeResumeBannerAutomatically) { _, enabled in
+            if !enabled {
+                cancelResumeBannerFadeTask()
+                resumeBannerOpacity = 1
+            } else if didAutoResumeInlinePlayback {
+                scheduleResumeBannerFadeIfNeeded()
+            }
+        }
+        .onChange(of: viewModel.resumeBannerFadeDelaySeconds) { _, _ in
+            if didAutoResumeInlinePlayback, viewModel.fadeResumeBannerAutomatically {
+                scheduleResumeBannerFadeIfNeeded()
+            }
+        }
     }
 
     private func startInlinePlayback() {
@@ -307,11 +348,36 @@ struct VideoDetailView: View {
     private func startInlinePlayback(at seconds: Double) {
         let player = AVPlayer(url: video.url)
         inlinePlayer = player
-        if seconds > 0 {
+        subtitleTrack.attach(to: player)
+        // If this play is not explicitly a seek (filmstrip click, etc.), try to
+        // resume from the last-known position for this specific video.
+        let resumeSeconds: Double? = {
+            guard seconds <= 0 else { return nil }
+            guard let s = PlaybackPositionStore.loadSeconds(filePath: video.filePath) else { return nil }
+            // Avoid resuming from essentially-zero.
+            return s >= 1.0 ? s : nil
+        }()
+        if let resumeSeconds {
+            resumeBannerOpacity = 1
+            didAutoResumeInlinePlayback = true
+            resumedFromSeconds = resumeSeconds
+            player.seek(to: CMTime(seconds: resumeSeconds, preferredTimescale: 600)) { _ in
+                player.play()
+            }
+            scheduleResumeBannerFadeIfNeeded()
+        } else if seconds > 0 {
+            cancelResumeBannerFadeTask()
+            resumeBannerOpacity = 1
+            didAutoResumeInlinePlayback = false
+            resumedFromSeconds = nil
             player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600)) { _ in
                 player.play()
             }
         } else {
+            cancelResumeBannerFadeTask()
+            resumeBannerOpacity = 1
+            didAutoResumeInlinePlayback = false
+            resumedFromSeconds = nil
             player.play()
         }
         Task { await viewModel.recordPlay(for: video) }
@@ -319,19 +385,104 @@ struct VideoDetailView: View {
         if viewModel.playInlineStartsFullscreen {
             let controller = FullscreenInlinePlayerWindowController()
             fullscreenInlineController = controller
-            controller.present(player: player, title: video.fileName, startWindowInFullscreen: true) {
-                fullscreenInlineController = nil
-                inlinePlayer = nil
+            controller.present(
+                player: player,
+                title: video.fileName,
+                startWindowInFullscreen: true,
+                subtitleTrack: subtitleTrack
+            ) {
+                // Let the `.onChange(of: viewModel.isPlayingInline)` path own teardown
+                // so we can persist the last playback time while we still have a player.
                 viewModel.isPlayingInline = false
             }
         }
     }
 
     private func stopInlinePlayback() {
+        persistInlinePlaybackPositionIfPossible()
+        cancelResumeBannerFadeTask()
+        resumeBannerOpacity = 1
         fullscreenInlineController?.closeWindow()
         fullscreenInlineController = nil
+        subtitleTrack.detach()
         inlinePlayer?.pause()
         inlinePlayer = nil
+    }
+
+    private func cancelResumeBannerFadeTask() {
+        resumeBannerFadeTask?.cancel()
+        resumeBannerFadeTask = nil
+    }
+
+    private func scheduleResumeBannerFadeIfNeeded() {
+        cancelResumeBannerFadeTask()
+        guard viewModel.fadeResumeBannerAutomatically else { return }
+        let delay = max(1, viewModel.resumeBannerFadeDelaySeconds)
+        resumeBannerFadeTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.35)) {
+                resumeBannerOpacity = 0
+            }
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            guard !Task.isCancelled else { return }
+            didAutoResumeInlinePlayback = false
+            resumedFromSeconds = nil
+            resumeBannerOpacity = 1
+        }
+    }
+
+    private func persistInlinePlaybackPositionIfPossible() {
+        guard let player = inlinePlayer else { return }
+        let seconds = player.currentTime().seconds
+        guard seconds.isFinite, seconds > 0 else { return }
+        PlaybackPositionStore.saveSeconds(seconds, filePath: video.filePath)
+    }
+
+    private func resumeOverlay(resumedFromSeconds: Double, startAtBeginning: @escaping () -> Void) -> some View {
+        HStack(spacing: 10) {
+            Text("Resumed at \(formatTimestamp(resumedFromSeconds))")
+                .font(.caption)
+                .foregroundStyle(.primary)
+            Button("Start at beginning", action: startAtBeginning)
+                .font(.caption)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(.thinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.secondary.opacity(0.2), lineWidth: 1)
+        )
+    }
+
+    private func formatTimestamp(_ seconds: Double) -> String {
+        let total = max(0, Int(seconds.rounded(.down)))
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        let s = total % 60
+        if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
+        return String(format: "%d:%02d", m, s)
+    }
+
+    /// Looks for a sibling `.srt` file (same basename) and loads it into the track.
+    /// Clears the track if the new video has no sidecar.
+    ///
+    /// Also syncs the persisted `hasSubtitles` flag on the video so the list-view CC icon and
+    /// detail Subtitles attribute stay in sync if the sidecar was added after the original import
+    /// (covers existing libraries where the user drops an `.srt` next to an already-imported video).
+    private func discoverSidecarSubtitles() {
+        let videoPath = video.filePath
+        if let srt = SubtitleTrack.findSidecarSRT(for: video.url) {
+            subtitleTrack.load(from: srt)
+            Task { await viewModel.setHasSubtitles(videoPath: videoPath, hasSubtitles: true) }
+        } else {
+            subtitleTrack.unload()
+            Task { await viewModel.setHasSubtitles(videoPath: videoPath, hasSubtitles: false) }
+        }
     }
 
     private func handleFilmstripClick(at location: CGPoint, in size: CGSize) {
@@ -399,8 +550,63 @@ struct VideoDetailView: View {
                         NSWorkspace.shared.selectFile(video.filePath, inFileViewerRootedAtPath: "")
                     }
                     .controlSize(.small)
+
+                    subtitleControls
                 }
                 .padding(.top, 4)
+            }
+        }
+    }
+
+    // MARK: - Subtitles
+
+    /// Toggle + load-from-file controls that appear next to Play/Show-in-Finder.
+    /// Visible whenever an SRT has been discovered or manually loaded. A small "Load Subtitles…"
+    /// button is always available so the user can pick a non-sidecar `.srt` on demand.
+    @ViewBuilder
+    private var subtitleControls: some View {
+        if !subtitleTrack.cues.isEmpty {
+            Toggle(isOn: Binding(
+                get: { subtitleTrack.isEnabled },
+                set: { subtitleTrack.isEnabled = $0 }
+            )) {
+                Label("Subtitles", systemImage: subtitleTrack.isEnabled ? "captions.bubble.fill" : "captions.bubble")
+                    .labelStyle(.iconOnly)
+            }
+            .toggleStyle(.button)
+            .controlSize(.small)
+            .help(subtitleTrack.isEnabled
+                ? "Subtitles on (\(subtitleTrack.sourceURL?.lastPathComponent ?? "SRT"))"
+                : "Subtitles off")
+        }
+
+        Button {
+            pickSubtitleFile()
+        } label: {
+            Label("Load Subtitles…", systemImage: "square.and.arrow.down")
+                .labelStyle(.iconOnly)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .help("Load a subtitle file (.srt) for this video")
+    }
+
+    private func pickSubtitleFile() {
+        let panel = NSOpenPanel()
+        panel.title = "Load Subtitle File"
+        panel.prompt = "Load"
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [UTType(filenameExtension: "srt")].compactMap { $0 }
+        panel.directoryURL = video.url.deletingLastPathComponent()
+        if panel.runModal() == .OK, let url = panel.url {
+            let count = subtitleTrack.load(from: url)
+            if count > 0 {
+                subtitleTrack.isEnabled = true
+                // If the player is live, observer picks up the new cues automatically via `load()` → `updateCurrentCue()`.
+                let videoPath = video.filePath
+                Task { await viewModel.setHasSubtitles(videoPath: videoPath, hasSubtitles: true) }
             }
         }
     }
@@ -471,6 +677,10 @@ struct VideoDetailView: View {
                         if let pc = commonValue(\.playCount) { return "\(pc)" }
                         return "--"
                     }())
+                    MetadataRow(label: "Subtitles", value: {
+                        guard let flag = commonValue(\.hasSubtitles) else { return "Various" }
+                        return flag ? "Yes" : "No"
+                    }())
                     MetadataRow(label: "Videos", value: "\(vids.count)")
                 }
             } else {
@@ -505,6 +715,8 @@ struct VideoDetailView: View {
                         )
                     }
                     MetadataRow(label: "Plays", value: "\(video.playCount)")
+                    // Prefer the live track's filename over a bare "Yes" — more useful when multiple SRTs exist.
+                    MetadataRow(label: "Subtitles", value: subtitlesDetailValue)
                 }
             }
 
@@ -519,6 +731,13 @@ struct VideoDetailView: View {
         viewModel.customMetadataFieldDefinitions.sorted {
             $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
+    }
+
+    /// Single-select "Subtitles" metadata value. Prefers the live track's filename (shows the
+    /// exact loaded file), falls back to "Yes"/"—" from the persisted `hasSubtitles` flag.
+    private var subtitlesDetailValue: String {
+        if let name = subtitleTrack.sourceURL?.lastPathComponent { return name }
+        return resolvedVideo.hasSubtitles ? "Yes" : "—"
     }
 
     private var customMetadataFieldsSection: some View {

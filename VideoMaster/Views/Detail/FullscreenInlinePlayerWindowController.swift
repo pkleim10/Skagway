@@ -1,25 +1,40 @@
 import AppKit
 import AVFoundation
 import AVKit
+import SwiftUI
 
 /// Hosts inline playback in a separate window so the main library window stays normal.
 /// Edge-to-edge mode uses a borderless window at `NSScreen.frame` (no `toggleFullScreen` space animation).
 final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private let playerView = AVPlayerView()
+    /// Hosting view that renders the Netflix-style subtitle overlay on top of `playerView`.
+    /// Created lazily in `present(...)` so the SwiftUI view observes the provided `SubtitleTrack`.
+    private var subtitleHost: NSHostingView<SubtitleOverlayContainer>?
     private var onEnded: (() -> Void)?
     private var didEnd = false
     private var keyDownMonitor: Any?
     private var savedPresentationOptions: NSApplication.PresentationOptions = []
     private var didApplyPresentationOptions = false
 
-    func present(player: AVPlayer, title: String, startWindowInFullscreen: Bool, onEnded: @escaping () -> Void) {
+    func present(
+        player: AVPlayer,
+        title: String,
+        startWindowInFullscreen: Bool,
+        subtitleTrack: SubtitleTrack,
+        onEnded: @escaping () -> Void
+    ) {
         self.onEnded = onEnded
 
         playerView.player = player
         playerView.controlsStyle = .floating
         // Edge-to-edge already fills the display; hide to avoid a second fullscreen mode.
         playerView.showsFullScreenToggleButton = !startWindowInFullscreen
+
+        let host = NSHostingView(rootView: SubtitleOverlayContainer(track: subtitleTrack))
+        host.translatesAutoresizingMaskIntoConstraints = false
+        // Overlay is hit-testing-disabled inside the SwiftUI view itself; clicks still reach AVPlayerView controls.
+        self.subtitleHost = host
 
         if startWindowInFullscreen {
             presentEdgeToEdge(title: title)
@@ -39,6 +54,18 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
         playerView.frame = content.bounds
         playerView.autoresizingMask = [.width, .height]
         content.addSubview(playerView)
+
+        // Subtitle overlay is layered above the player view but below the close button,
+        // so the close button remains clickable even when a cue is visible.
+        if let host = subtitleHost {
+            content.addSubview(host)
+            NSLayoutConstraint.activate([
+                host.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+                host.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+                host.topAnchor.constraint(equalTo: content.topAnchor),
+                host.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            ])
+        }
 
         let closeButton = makeCloseButton()
         closeButton.translatesAutoresizingMaskIntoConstraints = false
@@ -89,6 +116,16 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
         playerView.frame = content.bounds
         playerView.autoresizingMask = [.width, .height]
         content.addSubview(playerView)
+
+        if let host = subtitleHost {
+            content.addSubview(host)
+            NSLayoutConstraint.activate([
+                host.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+                host.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+                host.topAnchor.constraint(equalTo: content.topAnchor),
+                host.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            ])
+        }
 
         let w = NSWindow(
             contentRect: content.bounds,
@@ -144,6 +181,8 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
         }
         playerView.player?.pause()
         playerView.player = nil
+        subtitleHost?.removeFromSuperview()
+        subtitleHost = nil
         window?.delegate = nil
         window = nil
         onEnded?()

@@ -85,6 +85,13 @@ struct VideoMasterApp: App {
                 }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
                 .disabled(!appState.hasLibrary)
+
+                Button("Scan for Subtitles") {
+                    Task { await appState.libraryViewModel?.scanForSubtitles() }
+                }
+                .disabled(!appState.hasLibrary
+                    || (appState.libraryViewModel?.isScanning ?? false)
+                    || (appState.libraryViewModel?.videos.isEmpty ?? true))
             }
             CommandGroup(replacing: .importExport) {
                 Button("Play in External Player") {

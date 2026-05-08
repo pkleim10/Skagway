@@ -110,6 +110,14 @@ enum DatabaseMigration {
             )
         }
 
+        migrator.registerMigration("v6_hasSubtitles") { db in
+            try db.alter(table: "video") { t in
+                // Default 0 means "unknown / not detected". Set at import when a sidecar `.srt`
+                // is found, and updated at playback/selection time via the detail view.
+                t.add(column: "hasSubtitles", .integer).notNull().defaults(to: 0)
+            }
+        }
+
         try migrator.migrate(pool)
     }
 }

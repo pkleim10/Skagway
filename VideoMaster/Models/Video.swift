@@ -17,6 +17,9 @@ struct Video: Codable, Equatable, Hashable, Identifiable {
     var thumbnailPath: String?
     var lastPlayed: Date?
     var playCount: Int
+    /// True when a sidecar `.srt` was detected at import or during the detail/playback flow.
+    /// Surfaced as a subtle CC icon in list rows and a Subtitles attribute in the detail pane.
+    var hasSubtitles: Bool = false
 
     var id: String { filePath }
 
@@ -24,7 +27,7 @@ struct Video: Codable, Equatable, Hashable, Identifiable {
         case databaseId = "id"
         case filePath, fileName, fileSize, duration, width, height
         case codec, frameRate, creationDate, dateAdded, rating
-        case thumbnailPath, lastPlayed, playCount
+        case thumbnailPath, lastPlayed, playCount, hasSubtitles
     }
 }
 

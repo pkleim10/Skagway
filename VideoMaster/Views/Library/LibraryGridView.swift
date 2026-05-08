@@ -110,9 +110,14 @@ struct LibraryGridView: View {
                         guard let id = targetId else { return }
                         viewModel.scrollToVideoId = nil
                         guard viewModel.filteredVideos.contains(where: { $0.id == id }) else { return }
-                        // Defer so detail/playback stay responsive; `scrollTo` matches real layout (unlike AppKit estimates).
+                        // Defer so lazy layout settles; `.center` aligns the targeted cell with viewport center.
+                        // Sync `scrollPositionId` so `scrollPosition(anchor: .center)` state matches programmatic scroll.
                         Task { @MainActor in
                             try? await Task.sleep(for: .milliseconds(120))
+                            scrollPositionId = id
+                            proxy.scrollTo(id, anchor: .center)
+                            try? await Task.sleep(for: .milliseconds(100))
+                            scrollPositionId = id
                             proxy.scrollTo(id, anchor: .center)
                         }
                     }
@@ -262,6 +267,24 @@ struct LibraryGridView: View {
             NSWorkspace.shared.selectFile(video.filePath, inFileViewerRootedAtPath: "")
         }
         Menu("Open With") {
+            // If the right-clicked tile is part of a multi-selection,
+            // send the whole selection; otherwise just this one video.
+            let urlsToSend: [URL] = {
+                if viewModel.selectedVideoIds.count > 1,
+                   viewModel.selectedVideoIds.contains(video.id)
+                {
+                    return viewModel.selectedVideoIds.compactMap { id in
+                        viewModel.filteredVideos.first(where: { $0.id == id })?.url
+                    }
+                }
+                return [video.url]
+            }()
+            if ExternalApps.isSubmarineInstalled {
+                Button("Submarine") {
+                    ExternalApps.openInSubmarine(urlsToSend)
+                }
+                Divider()
+            }
             let appURLs = NSWorkspace.shared.urlsForApplications(toOpen: video.url)
             ForEach(appURLs, id: \.self) { appURL in
                 Button(appURL.deletingPathExtension().lastPathComponent) {

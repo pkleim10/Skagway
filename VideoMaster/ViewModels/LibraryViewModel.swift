@@ -198,6 +198,8 @@ final class LibraryViewModel {
     private static let lastAppliedFilmstripColumnsKey = "VideoMaster.lastAppliedFilmstripColumns"
     private static let surpriseMeAutoPlaysKey = "VideoMaster.surpriseMeAutoPlays"
     private static let playInlineStartsFullscreenKey = "VideoMaster.playInlineStartsFullscreen"
+    private static let fadeResumeBannerAutomaticallyKey = "VideoMaster.fadeResumeBannerAutomatically"
+    private static let resumeBannerFadeDelaySecondsKey = "VideoMaster.resumeBannerFadeDelaySeconds"
     private static let recentlyAddedDaysKey = "VideoMaster.recentlyAddedDays"
     private static let recentlyPlayedDaysKey = "VideoMaster.recentlyPlayedDays"
     private static let topRatedMinRatingKey = "VideoMaster.topRatedMinRating"
@@ -318,6 +320,25 @@ final class LibraryViewModel {
     var playInlineStartsFullscreen: Bool = false {
         didSet {
             UserDefaults.standard.set(playInlineStartsFullscreen, forKey: Self.playInlineStartsFullscreenKey)
+        }
+    }
+
+    /// When true, the “Resumed at … / Start at beginning” banner in inline playback fades out after `resumeBannerFadeDelaySeconds`.
+    var fadeResumeBannerAutomatically: Bool = false {
+        didSet {
+            UserDefaults.standard.set(fadeResumeBannerAutomatically, forKey: Self.fadeResumeBannerAutomaticallyKey)
+        }
+    }
+
+    /// Delay before the resume banner begins its fade (seconds). Clamped 1…120 when set.
+    var resumeBannerFadeDelaySeconds: Int = 5 {
+        didSet {
+            let clamped = min(max(resumeBannerFadeDelaySeconds, 1), 120)
+            if clamped != resumeBannerFadeDelaySeconds {
+                resumeBannerFadeDelaySeconds = clamped
+            } else {
+                UserDefaults.standard.set(clamped, forKey: Self.resumeBannerFadeDelaySecondsKey)
+            }
         }
     }
 
@@ -706,6 +727,12 @@ final class LibraryViewModel {
         if defaults.object(forKey: Self.playInlineStartsFullscreenKey) != nil {
             playInlineStartsFullscreen = defaults.bool(forKey: Self.playInlineStartsFullscreenKey)
         }
+        if defaults.object(forKey: Self.fadeResumeBannerAutomaticallyKey) != nil {
+            fadeResumeBannerAutomatically = defaults.bool(forKey: Self.fadeResumeBannerAutomaticallyKey)
+        }
+        if let sec = defaults.object(forKey: Self.resumeBannerFadeDelaySecondsKey) as? Int, sec >= 1 {
+            resumeBannerFadeDelaySeconds = min(sec, 120)
+        }
         if let rows = defaults.object(forKey: Self.filmstripRowsKey) as? Int, rows > 0 {
             defaultFilmstripRows = rows
         }
@@ -1078,6 +1105,18 @@ final class LibraryViewModel {
                 scrollToVideoId = sortScrollId
             }
         }
+
+        // When the visible row *set* changes (e.g. clearing search restores the full library) selection
+        // can stay valid while the grid/list viewport is unrelated — scroll the primary selection into view.
+        // Skipped when rename/sort handling above already queued a scroll (`scrollToVideoId` non-nil).
+        if structureChanged, scrollToVideoId == nil,
+           let id = lastSelectedVideoId ?? selectedVideoIds.first,
+           !selectedVideoIds.isEmpty,
+           selectedVideoIds.contains(id),
+           newValue.contains(where: { $0.id == id })
+        {
+            scrollToVideoId = id
+        }
     }
 
     // MARK: - Library Counts
@@ -1389,6 +1428,112 @@ final class LibraryViewModel {
             }
         }
         videos = updated
+    }
+
+    /// Rescans videos in the **current filtered list** for a sidecar `.srt` file and updates the
+    /// `hasSubtitles` flag accordingly (search, tags, collections, sidebar filters, etc. all narrow scope).
+    /// Disk I/O is chunked and dispatched off the main actor so the UI remains responsive; progress is
+    /// reported via `scanCurrent` / `scanTotal` / `scanProgress`.
+    func scanForSubtitles() async {
+        guard !isScanning else { return }
+        guard !filteredVideos.isEmpty else {
+            let message = videos.isEmpty ? "No videos to scan" : "No videos match the current filter"
+            scanProgress = message
+            Task { [message] in
+                try? await Task.sleep(for: .seconds(2))
+                if scanProgress == message { scanProgress = "" }
+            }
+            return
+        }
+
+        // Snapshot inputs once — only videos with a DB id can be updated.
+        struct Row: Sendable {
+            let dbId: Int64
+            let filePath: String
+            let had: Bool
+        }
+        let snapshot: [Row] = filteredVideos.compactMap { v in
+            guard let id = v.databaseId else { return nil }
+            return Row(dbId: id, filePath: v.filePath, had: v.hasSubtitles)
+        }
+        let total = snapshot.count
+
+        isScanning = true
+        stopObserving()
+        scanTotal = total
+        scanCurrent = 0
+        scanProgress = "Scanning \(total) video\(total == 1 ? "" : "s") for subtitles…"
+
+        // Process in chunks on a background task so the UI can keep drawing progress.
+        let chunkSize = 200
+        var updates: [(videoId: Int64, hasSubtitles: Bool)] = []
+        var index = 0
+        while index < snapshot.count {
+            let end = min(index + chunkSize, snapshot.count)
+            let chunk = Array(snapshot[index..<end])
+            let chunkUpdates: [(Int64, Bool)] = await Task.detached(priority: .userInitiated) {
+                var out: [(Int64, Bool)] = []
+                out.reserveCapacity(chunk.count)
+                for row in chunk {
+                    let url = URL(fileURLWithPath: row.filePath)
+                    let hasNow = SubtitleTrack.findSidecarSRT(for: url) != nil
+                    if hasNow != row.had {
+                        out.append((row.dbId, hasNow))
+                    }
+                }
+                return out
+            }.value
+            updates.append(contentsOf: chunkUpdates.map { ($0.0, $0.1) })
+            index = end
+            scanCurrent = index
+        }
+
+        let added = updates.reduce(0) { $0 + ($1.hasSubtitles ? 1 : 0) }
+        let removed = updates.count - added
+
+        if !updates.isEmpty {
+            try? await videoRepo.updateHasSubtitles(updates: updates)
+            videos = (try? await videoRepo.fetchAll()) ?? videos
+            // `applyFilteredVideos` only bumps `filteredVideosVersion` when the **set** of rows
+            // changes — so a subtitle-only edit leaves the list/grid `.id(...)` unchanged and
+            // SwiftUI reuses stale `Video` values. Force a version bump so both views remount
+            // with the refreshed `hasSubtitles` flag.
+            filteredVideosVersion &+= 1
+        }
+        startObserving()
+        isScanning = false
+
+        let summary: String
+        switch (added, removed) {
+        case (0, 0):
+            summary = "No subtitle changes found"
+        case (let a, 0):
+            summary = "Found subtitles for \(a) video\(a == 1 ? "" : "s")"
+        case (0, let r):
+            summary = "Cleared subtitles flag on \(r) video\(r == 1 ? "" : "s")"
+        case (let a, let r):
+            summary = "Added \(a), cleared \(r)"
+        }
+        scanProgress = summary
+        Task { [summary] in
+            try? await Task.sleep(for: .seconds(4))
+            if scanProgress == summary { scanProgress = "" }
+        }
+    }
+
+    /// Sets the `hasSubtitles` flag in-memory and persists to the DB. No-op if the flag already matches,
+    /// so repeated calls (e.g. from the detail pane on every selection) are free.
+    func setHasSubtitles(videoPath: String, hasSubtitles: Bool) async {
+        guard let idx = videos.firstIndex(where: { $0.filePath == videoPath }) else { return }
+        guard videos[idx].hasSubtitles != hasSubtitles else { return }
+        // Mutate a local copy first so the `didSet` observer on `videos` fires exactly once.
+        var updated = videos
+        updated[idx].hasSubtitles = hasSubtitles
+        let dbId = updated[idx].databaseId
+        videos = updated
+        if let dbId {
+            try? await videoRepo.updateHasSubtitles(videoId: dbId, hasSubtitles: hasSubtitles)
+        }
     }
 
     func persistRating(for videoIds: Set<String>, rating: Int) async {

@@ -177,6 +177,24 @@ struct VideoSettingsView: View {
             }
 
             Section {
+                Toggle("Fade resume banner after delay", isOn: $viewModel.fadeResumeBannerAutomatically)
+                HStack(spacing: 24) {
+                    compactStepper(
+                        "Seconds before fade",
+                        value: $viewModel.resumeBannerFadeDelaySeconds,
+                        range: 1...120
+                    )
+                    Spacer()
+                }
+                .disabled(!viewModel.fadeResumeBannerAutomatically)
+                .opacity(viewModel.fadeResumeBannerAutomatically ? 1 : 0.45)
+            } header: {
+                Text("Playback")
+            } footer: {
+                Text("After resuming inline playback from a remembered position, VideoMaster shows a banner with Start at beginning. When fade is enabled, that banner fades out after the delay; playback keeps going from the resumed time.")
+            }
+
+            Section {
                 Picker("Maximum large preview thumbnail (long-edge)", selection: $viewModel.detailPreviewMaxLongEdge) {
                     ForEach(ThumbnailService.detailPreviewLongEdgeChoices, id: \.self) { w in
                         Text("\(w) px").tag(w)
