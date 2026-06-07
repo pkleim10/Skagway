@@ -38,7 +38,7 @@ private struct LibraryContentView: View {
 
     /// Identity for the bottom filter strip hosting view (collections/tags counts).
     private var filterStripHostID: String {
-        "\(vm.sidebarFilter.hashValue)-\(vm.collections.count)-\(vm.tags.count)-\(vm.libraryCounts.all)-\(vm.showRecentlyAdded)-\(vm.showRecentlyPlayed)-\(vm.showTopRated)-\(vm.showDuplicates)-\(vm.showCorrupt)-\(vm.showMissing)"
+        "\(vm.sidebarFilter.hashValue)-\(vm.collections.count)-\(vm.tags.count)-\(vm.libraryCounts.all)-\(vm.showRecentlyAdded)-\(vm.showRecentlyPlayed)-\(vm.showTopRated)-\(vm.showDuplicates)-\(vm.showCorrupt)-\(vm.showMissing)-\(vm.showRecentlyConverted)-\(vm.libraryCounts.recentlyConverted)"
     }
 
     /// Column targets for the split view always follow browsing layout so toggling playback
@@ -302,7 +302,7 @@ private struct LibraryContentView: View {
             }
             return event
         }
-        // Space key — play/pause (but not when typing in search or other text fields)
+        // Space key — play/pause; Shift+Space — restart from beginning
         if event.keyCode == 49 {
             if let first = NSApp.keyWindow?.firstResponder,
                first is NSTextView || first is NSTextField
@@ -310,8 +310,11 @@ private struct LibraryContentView: View {
                 return event
             }
             guard !lvm.isEditingText, !lvm.selectedVideoIds.isEmpty else { return event }
+            let isShift = event.modifierFlags.contains(.shift)
             DispatchQueue.main.async {
-                if lvm.isPlayingInline {
+                if isShift {
+                    lvm.inlineRestartFromBeginning += 1
+                } else if lvm.isPlayingInline {
                     lvm.inlinePlayPauseToggle += 1
                 } else {
                     lvm.isPlayingInline = true
@@ -372,6 +375,14 @@ private struct LibraryContentView: View {
                         total: Double(vm.scanTotal)
                     )
                     .frame(width: 120)
+                }
+            } else if vm.isConverting {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.mini)
+                    Text(vm.conversionProgress)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             } else if !vm.scanProgress.isEmpty {
                 Text(vm.scanProgress)

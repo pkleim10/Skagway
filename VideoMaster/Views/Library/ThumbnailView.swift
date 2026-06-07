@@ -3,6 +3,7 @@ import SwiftUI
 struct AsyncThumbnailView: View {
     let filePath: String
     let thumbnailService: ThumbnailService
+    var cacheVersion: String? = nil
     @State private var image: NSImage?
 
     var body: some View {
@@ -21,7 +22,7 @@ struct AsyncThumbnailView: View {
                     }
             }
         }
-        .task(id: filePath) {
+        .task(id: "\(filePath)|\(cacheVersion ?? "")") {
             image = thumbnailService.loadThumbnail(for: filePath)
         }
     }

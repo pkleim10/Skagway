@@ -43,6 +43,7 @@ struct BottomFilterColumnsView: View {
             Toggle("Duplicates", isOn: $viewModel.showDuplicates)
             Toggle("Corrupt", isOn: $viewModel.showCorrupt)
             Toggle("Missing", isOn: $viewModel.showMissing)
+            Toggle("Recently Converted", isOn: $viewModel.showRecentlyConverted)
         }
         .sheet(isPresented: $showNewCollectionSheet) {
             CollectionEditorView(
@@ -116,6 +117,10 @@ struct BottomFilterColumnsView: View {
                 if viewModel.showCorrupt {
                     sidebarRow("Corrupt", icon: "exclamationmark.triangle", count: viewModel.libraryCounts.corrupt)
                         .tag(SidebarFilter.corrupt)
+                }
+                if viewModel.showRecentlyConverted {
+                    sidebarRow("Recently Converted", icon: "arrow.triangle.2.circlepath", count: viewModel.libraryCounts.recentlyConverted)
+                        .tag(SidebarFilter.recentlyConverted)
                 }
                 if viewModel.showMissing {
                     sidebarRow("Missing", icon: "questionmark.circle", count: viewModel.libraryCounts.missing, unscanned: !viewModel.missingCountScanned)

@@ -61,6 +61,12 @@ final class ThumbnailService: @unchecked Sendable {
     private var inflightFilmstrips: [String: Task<NSImage, Error>] = [:]
     private var inflightDetailPreviews: [String: Task<URL, Error>] = [:]
 
+    var hasPendingThumbnails: Bool {
+        inflightLock.lock()
+        defer { inflightLock.unlock() }
+        return !inflightThumbnails.isEmpty
+    }
+
     private static let filmstripCachePrefix = "_filmstrip"
     private static let detailPreviewCachePrefix = "_detailPreview"
 

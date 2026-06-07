@@ -3,6 +3,15 @@ import Foundation
 actor FFprobeService {
     static let shared = FFprobeService()
 
+    private static func resolveBinary(_ name: String) -> String? {
+        let candidates = [
+            "/opt/homebrew/bin/\(name)",
+            "/usr/local/bin/\(name)",
+            "/usr/bin/\(name)",
+        ]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
     private var cachedPath: String?
 
     var isAvailable: Bool {
@@ -11,12 +20,7 @@ actor FFprobeService {
 
     private var ffprobePath: String? {
         if let cached = cachedPath { return cached }
-        let candidates = [
-            "/opt/homebrew/bin/ffprobe",
-            "/usr/local/bin/ffprobe",
-            "/usr/bin/ffprobe",
-        ]
-        let found = candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+        let found = Self.resolveBinary("ffprobe")
         cachedPath = found
         return found
     }

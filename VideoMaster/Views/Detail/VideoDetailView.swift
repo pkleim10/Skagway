@@ -34,6 +34,8 @@ struct VideoDetailView: View {
     /// when a sidecar `.srt` exists. Kept across playback start/stop so a single library
     /// session doesn't rediscover for the same selection.
     @State private var subtitleTrack = SubtitleTrack()
+    @State private var inlinePlayerError: String? = nil
+    @State private var playerStatusTask: Task<Void, Never>? = nil
     /// Tracks detail column size for auto-adjust splitter (thumbnail/filmstrip vs metadata).
     @State private var detailPaneSize: CGSize = .zero
     private var effectiveHeight: CGFloat { viewModel.effectiveDetailHeight }
@@ -102,6 +104,7 @@ struct VideoDetailView: View {
         }
         .task(id: video.id) {
             stopInlinePlayback()
+            inlinePlayerError = nil
             viewModel.isPlayingInline = false
             viewModel.pendingFilmstripSeekSeconds = nil
             isEditingName = false
@@ -304,6 +307,9 @@ struct VideoDetailView: View {
                                 .foregroundStyle(.secondary)
                         }
                 }
+        if let errorMsg = inlinePlayerError {
+            inlinePlayerErrorOverlay(errorMsg)
+        }
         }
         .frame(maxWidth: .infinity, maxHeight: maxHeight)
         .onChange(of: viewModel.isPlayingInline) { _, isPlaying in
@@ -326,6 +332,19 @@ struct VideoDetailView: View {
                 player.play()
             }
         }
+        .onChange(of: viewModel.inlineRestartFromBeginning) { _, _ in
+            if let player = inlinePlayer {
+                cancelResumeBannerFadeTask()
+                didAutoResumeInlinePlayback = false
+                resumedFromSeconds = nil
+                resumeBannerOpacity = 1
+                PlaybackPositionStore.clear(filePath: video.filePath)
+                player.seek(to: .zero) { _ in player.play() }
+            } else {
+                viewModel.pendingFilmstripSeekSeconds = -1
+                viewModel.isPlayingInline = true
+            }
+        }
         .onChange(of: viewModel.fadeResumeBannerAutomatically) { _, enabled in
             if !enabled {
                 cancelResumeBannerFadeTask()
@@ -339,6 +358,9 @@ struct VideoDetailView: View {
                 scheduleResumeBannerFadeIfNeeded()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+            persistInlinePlaybackPositionIfPossible()
+        }
     }
 
     private func startInlinePlayback() {
@@ -346,59 +368,104 @@ struct VideoDetailView: View {
     }
 
     private func startInlinePlayback(at seconds: Double) {
-        let player = AVPlayer(url: video.url)
-        inlinePlayer = player
-        subtitleTrack.attach(to: player)
-        // If this play is not explicitly a seek (filmstrip click, etc.), try to
-        // resume from the last-known position for this specific video.
-        let resumeSeconds: Double? = {
-            guard seconds <= 0 else { return nil }
-            guard let s = PlaybackPositionStore.loadSeconds(filePath: video.filePath) else { return nil }
-            // Avoid resuming from essentially-zero.
-            return s >= 1.0 ? s : nil
-        }()
-        if let resumeSeconds {
-            resumeBannerOpacity = 1
-            didAutoResumeInlinePlayback = true
-            resumedFromSeconds = resumeSeconds
-            player.seek(to: CMTime(seconds: resumeSeconds, preferredTimescale: 600)) { _ in
-                player.play()
-            }
-            scheduleResumeBannerFadeIfNeeded()
-        } else if seconds > 0 {
-            cancelResumeBannerFadeTask()
-            resumeBannerOpacity = 1
-            didAutoResumeInlinePlayback = false
-            resumedFromSeconds = nil
-            player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600)) { _ in
-                player.play()
-            }
-        } else {
-            cancelResumeBannerFadeTask()
-            resumeBannerOpacity = 1
-            didAutoResumeInlinePlayback = false
-            resumedFromSeconds = nil
-            player.play()
-        }
-        Task { await viewModel.recordPlay(for: video) }
+        inlinePlayerError = nil
+        playerStatusTask?.cancel()
 
-        if viewModel.playInlineStartsFullscreen {
-            let controller = FullscreenInlinePlayerWindowController()
-            fullscreenInlineController = controller
-            controller.present(
-                player: player,
-                title: video.fileName,
-                startWindowInFullscreen: true,
-                subtitleTrack: subtitleTrack
-            ) {
-                // Let the `.onChange(of: viewModel.isPlayingInline)` path own teardown
-                // so we can persist the last playback time while we still have a player.
+        playerStatusTask = Task { @MainActor in
+            // Pre-flight: ask AVFoundation whether it can play this file before
+            // creating the player, so unsupported formats are rejected immediately
+            // rather than silently showing a blank player.
+            let asset = AVURLAsset(url: video.url)
+            let playable = (try? await asset.load(.isPlayable)) ?? false
+            guard !Task.isCancelled else { return }
+            guard playable else {
+                if FileManager.default.fileExists(atPath: video.filePath) {
+                    let ext = video.url.pathExtension.uppercased()
+                    inlinePlayerError = ext.isEmpty
+                        ? "This file cannot be played by the built-in player."
+                        : "\(ext) files cannot be played by the built-in player."
+                } else {
+                    inlinePlayerError = "The file could not be found. The drive may not be mounted."
+                }
                 viewModel.isPlayingInline = false
+                return
+            }
+
+            let player = AVPlayer(url: video.url)
+            inlinePlayer = player
+            subtitleTrack.attach(to: player)
+
+            // If this play is not explicitly a seek (filmstrip click, Shift+Space, etc.), try to
+            // resume from the last-known position for this specific video.
+            let resumeSeconds: Double? = {
+                guard seconds == 0 else { return nil }
+                guard let s = PlaybackPositionStore.loadSeconds(filePath: video.filePath) else { return nil }
+                // Avoid resuming from essentially-zero.
+                guard s >= 1.0 else { return nil }
+                // If the video ended, start from the beginning instead of resuming.
+                if let duration = video.duration, duration > 0, s >= duration - 5.0 { return nil }
+                return s
+            }()
+            if let resumeSeconds {
+                resumeBannerOpacity = 1
+                didAutoResumeInlinePlayback = true
+                resumedFromSeconds = resumeSeconds
+                player.seek(to: CMTime(seconds: resumeSeconds, preferredTimescale: 600)) { _ in
+                    player.play()
+                }
+                scheduleResumeBannerFadeIfNeeded()
+            } else if seconds > 0 {
+                cancelResumeBannerFadeTask()
+                resumeBannerOpacity = 1
+                didAutoResumeInlinePlayback = false
+                resumedFromSeconds = nil
+                player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600)) { _ in
+                    player.play()
+                }
+            } else {
+                cancelResumeBannerFadeTask()
+                resumeBannerOpacity = 1
+                didAutoResumeInlinePlayback = false
+                resumedFromSeconds = nil
+                player.play()
+            }
+            Task { await viewModel.recordPlay(for: video) }
+
+            if viewModel.playInlineStartsFullscreen {
+                let controller = FullscreenInlinePlayerWindowController()
+                fullscreenInlineController = controller
+                controller.present(
+                    player: player,
+                    title: video.fileName,
+                    startWindowInFullscreen: true,
+                    subtitleTrack: subtitleTrack
+                ) {
+                    // Let the `.onChange(of: viewModel.isPlayingInline)` path own teardown
+                    // so we can persist the last playback time while we still have a player.
+                    viewModel.isPlayingInline = false
+                }
+            }
+
+            // Status monitoring: catch load failures that slip past the isPlayable check
+            // (e.g. files that report playable but have an undecodable codec inside).
+            guard let item = player.currentItem else { return }
+            for await status in item.publisher(for: \AVPlayerItem.status).values {
+                guard !Task.isCancelled else { return }
+                if status == .failed {
+                    inlinePlayerError = item.error?.localizedDescription
+                        ?? "The file could not be opened for playback."
+                    viewModel.isPlayingInline = false
+                    return
+                } else if status == .readyToPlay {
+                    return
+                }
             }
         }
     }
 
     private func stopInlinePlayback() {
+        playerStatusTask?.cancel()
+        playerStatusTask = nil
         persistInlinePlaybackPositionIfPossible()
         cancelResumeBannerFadeTask()
         resumeBannerOpacity = 1
@@ -457,6 +524,42 @@ struct VideoDetailView: View {
             RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(Color.secondary.opacity(0.2), lineWidth: 1)
         )
+    }
+
+    private func inlinePlayerErrorOverlay(_ message: String) -> some View {
+        ZStack {
+            Color.black.opacity(0.55)
+            VStack(spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 30))
+                    .foregroundStyle(.yellow)
+                Text("Playback Failed")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.85))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 280)
+                HStack(spacing: 10) {
+                    Button("Open in External Player") {
+                        inlinePlayerError = nil
+                        NSWorkspace.shared.open(video.url)
+                        Task { await viewModel.recordPlay(for: video) }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    Button("Dismiss") {
+                        inlinePlayerError = nil
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .foregroundStyle(.white)
+                }
+            }
+            .padding()
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private func formatTimestamp(_ seconds: Double) -> String {
@@ -1053,6 +1156,9 @@ struct VideoDetailView: View {
         let service = thumbnailService
         let stableId = video.id
 
+        // Re-validate corrupt videos — covers files repaired externally after import.
+        await viewModel.refreshMetadataIfCorrupt(for: resolvedVideo)
+
         // Metadata / detail pane first — do not wait for filmstrip load or generation.
         tags = viewModel.tagsForVideos(selectedIds)
         await reloadCustomMetadata()
@@ -1137,6 +1243,7 @@ struct VideoDetailView: View {
         let v = resolvedVideo
         if let url = try? await thumbnailService.generateThumbnail(for: v) {
             detailThumbnailLo = NSImage(contentsOf: url)
+            Task { await viewModel.setThumbnailPath(videoPath: v.filePath, url: url) }
         }
     }
 

@@ -82,7 +82,30 @@ final class LibraryViewModel {
     var selectedRatingStars: Set<Int> = [] {
         didSet { recomputeFilteredVideos() }
     }
-    var isScanning: Bool = false
+    var ffmpegUserPath: String = "" {
+        didSet { UserDefaults.standard.set(ffmpegUserPath, forKey: Self.ffmpegPathKey) }
+    }
+
+    /// The ffmpeg binary to use: user-configured path first, then standard Homebrew/system locations.
+    var resolvedFFmpegPath: String? {
+        if !ffmpegUserPath.isEmpty {
+            return FileManager.default.isExecutableFile(atPath: ffmpegUserPath) ? ffmpegUserPath : nil
+        }
+        let candidates = ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
+    private var thumbnailsSettled: Bool = true
+
+    var isScanning: Bool = false {
+        didSet {
+            if isScanning && !oldValue {
+                thumbnailsSettled = false
+            } else if !isScanning && oldValue {
+                startThumbnailSettlingTask()
+            }
+        }
+    }
     var scanProgress: String = ""
     var scanCurrent: Int = 0
     var scanTotal: Int = 0
@@ -122,6 +145,7 @@ final class LibraryViewModel {
     var pendingFilmstripSeekSeconds: Double?
     var pendingAutoPlay: Bool = false
     var inlinePlayPauseToggle: Int = 0
+    var inlineRestartFromBeginning: Int = 0
     var isEditingText: Bool = false
     var renamingVideoId: String?
     var renameText: String = ""
@@ -209,7 +233,10 @@ final class LibraryViewModel {
     private static let showDuplicatesKey = "VideoMaster.showDuplicates"
     private static let showCorruptKey = "VideoMaster.showCorrupt"
     private static let showMissingKey = "VideoMaster.showMissing"
+    private static let showRecentlyConvertedKey = "VideoMaster.showRecentlyConverted"
+    private static let recentlyConvertedEntriesKey = "VideoMaster.recentlyConvertedEntries"
     private static let showFilterStripKey = "VideoMaster.showFilterStrip"
+    private static let ffmpegPathKey = "VideoMaster.ffmpegPath"
     private static let customMetadataFieldDefinitionsKey = "VideoMaster.customMetadataFieldDefinitions"
     private static let missingCountScannedKey = "VideoMaster.missingCountScanned"
     private static let missingVideoIdsKey = "VideoMaster.missingVideoIds"
@@ -296,6 +323,24 @@ final class LibraryViewModel {
         }
     }
 
+    var showRecentlyConverted: Bool = true {
+        didSet {
+            UserDefaults.standard.set(showRecentlyConverted, forKey: Self.showRecentlyConvertedKey)
+            resetFilterIfHidden()
+        }
+    }
+
+    // Tracks videos re-encoded in the last 30 days; persisted to UserDefaults as JSON.
+    private struct ConvertedEntry: Codable {
+        var path: String
+        var date: Date
+    }
+    private var recentlyConvertedEntries: [ConvertedEntry] = []
+
+    var isConverting: Bool = false
+    var conversionProgress: String = ""
+    private var conversionQueue: [(video: Video, ffmpegPath: String)] = []
+
     private func resetFilterIfHidden() {
         switch sidebarFilter {
         case .recentlyAdded where !showRecentlyAdded,
@@ -303,7 +348,8 @@ final class LibraryViewModel {
              .topRated where !showTopRated,
              .duplicates where !showDuplicates,
              .corrupt where !showCorrupt,
-             .missing where !showMissing:
+             .missing where !showMissing,
+             .recentlyConverted where !showRecentlyConverted:
             sidebarFilter = .all
         default:
             break
@@ -763,7 +809,15 @@ final class LibraryViewModel {
         if let v = defaults.object(forKey: Self.showTopRatedKey) as? Bool { showTopRated = v }
         if let v = defaults.object(forKey: Self.showDuplicatesKey) as? Bool { showDuplicates = v }
         if let v = defaults.object(forKey: Self.showCorruptKey) as? Bool { showCorrupt = v }
+        if let v = defaults.string(forKey: Self.ffmpegPathKey) { ffmpegUserPath = v }
         if let v = defaults.object(forKey: Self.showMissingKey) as? Bool { showMissing = v }
+        if let v = defaults.object(forKey: Self.showRecentlyConvertedKey) as? Bool { showRecentlyConverted = v }
+        if let data = defaults.data(forKey: Self.recentlyConvertedEntriesKey),
+           let decoded = try? JSONDecoder().decode([ConvertedEntry].self, from: data)
+        {
+            let cutoff = Date().addingTimeInterval(-30 * 24 * 3600)
+            recentlyConvertedEntries = decoded.filter { $0.date >= cutoff }
+        }
         if let v = defaults.object(forKey: Self.missingCountScannedKey) as? Bool { missingCountScanned = v }
         if let ids = defaults.stringArray(forKey: Self.missingVideoIdsKey) { missingVideoIds = Set(ids) }
         if defaults.object(forKey: Self.showThumbnailInDetailKey) != nil {
@@ -925,8 +979,9 @@ final class LibraryViewModel {
 
     // MARK: - Cached Filter/Sort
 
-    private static func isCorrupt(_ video: Video) -> Bool {
+    private static func isCorrupt(_ video: Video, thumbnailsSettled: Bool) -> Bool {
         video.duration == nil && video.width == nil && video.height == nil
+            || (thumbnailsSettled && video.thumbnailPath == nil)
     }
 
     private func recomputeFilteredVideos() {
@@ -942,13 +997,15 @@ final class LibraryViewModel {
             selectedRatingStars: selectedRatingStars,
             tableSortOrder: tableSortOrder,
             excludeCorrupt: excludeCorrupt,
+            thumbnailsSettled: thumbnailsSettled,
             searchText: searchText,
             ftsMatchIds: ftsMatchIds,
             duplicateVideoIds: duplicateVideoIds,
             missingVideoIds: missingVideoIds,
             recentlyAddedDays: recentlyAddedDays,
             recentlyPlayedDays: recentlyPlayedDays,
-            topRatedMinRating: topRatedMinRating
+            topRatedMinRating: topRatedMinRating,
+            recentlyConvertedPaths: Set(recentlyConvertedEntries.map(\.path))
         )
         let repo = collectionRepo
 
@@ -972,6 +1029,7 @@ final class LibraryViewModel {
         let selectedRatingStars: Set<Int>
         let tableSortOrder: [KeyPathComparator<Video>]
         let excludeCorrupt: Bool
+        let thumbnailsSettled: Bool
         let searchText: String
         let ftsMatchIds: Set<String>?
         let duplicateVideoIds: Set<String>
@@ -979,6 +1037,7 @@ final class LibraryViewModel {
         let recentlyAddedDays: Int
         let recentlyPlayedDays: Int
         let topRatedMinRating: Int
+        let recentlyConvertedPaths: Set<String>
     }
 
     /// Multiple star levels are OR’d: video is included if its rating is in the selected set.
@@ -990,6 +1049,7 @@ final class LibraryViewModel {
     private nonisolated static func computeFilteredResult(snapshot: FilterSnapshot, collectionRepo: CollectionRepository) -> (videos: [Video], tagCounts: [Int64: Int]) {
         func isCorrupt(_ video: Video) -> Bool {
             video.duration == nil && video.width == nil && video.height == nil
+                || (snapshot.thumbnailsSettled && video.thumbnailPath == nil)
         }
         var baseResult = snapshot.videos
         let isSearching = !snapshot.searchText.isEmpty
@@ -1018,6 +1078,8 @@ final class LibraryViewModel {
             baseResult = baseResult.filter { isCorrupt($0) }
         case .missing:
             baseResult = baseResult.filter { snapshot.missingVideoIds.contains($0.id) }
+        case .recentlyConverted:
+            baseResult = baseResult.filter { snapshot.recentlyConvertedPaths.contains($0.filePath) }
         case .collection(let collection):
             guard let collectionId = collection.id else {
                 return ([], [:])
@@ -1130,11 +1192,12 @@ final class LibraryViewModel {
         var byRating: [Int: Int] = [:]
         let addedCutoff = Calendar.current.date(byAdding: .day, value: -recentlyAddedDays, to: Date()) ?? Date()
         let playedCutoff = Calendar.current.date(byAdding: .day, value: -recentlyPlayedDays, to: Date()) ?? Date()
+        let convertedPaths = Set(recentlyConvertedEntries.map(\.path))
 
         typealias DupKey = String
         var buckets: [DupKey: [String]] = [:]
         for video in videos {
-            let isCorrupt = Self.isCorrupt(video)
+            let isCorrupt = Self.isCorrupt(video, thumbnailsSettled: thumbnailsSettled)
             if isCorrupt { corrupt += 1 }
             let skip = excludeCorrupt && isCorrupt
             if !skip {
@@ -1158,6 +1221,8 @@ final class LibraryViewModel {
         }
         duplicateVideoIds = dupIds
 
+        let recentlyConverted = videos.filter { convertedPaths.contains($0.filePath) }.count
+
         libraryCounts = LibraryCounts(
             all: allCount,
             recentlyAdded: recentlyAdded,
@@ -1166,6 +1231,7 @@ final class LibraryViewModel {
             duplicates: dupIds.count,
             corrupt: corrupt,
             missing: missingCountScanned ? missingVideoIds.count : 0,
+            recentlyConverted: recentlyConverted,
             byRating: byRating
         )
     }
@@ -1189,7 +1255,7 @@ final class LibraryViewModel {
         var result = videos
         let isCorruptFilter = sidebarFilter == .corrupt
         if excludeCorrupt && !isCorruptFilter && searchText.isEmpty {
-            result = result.filter { !Self.isCorrupt($0) }
+            result = result.filter { !Self.isCorrupt($0, thumbnailsSettled: thumbnailsSettled) }
         }
         if !searchText.isEmpty, let matchIds = ftsMatchIds {
             result = result.filter { matchIds.contains($0.id) }
@@ -1206,7 +1272,7 @@ final class LibraryViewModel {
         case .duplicates:
             result = result.filter { duplicateVideoIds.contains($0.id) }
         case .corrupt:
-            result = result.filter { Self.isCorrupt($0) }
+            result = result.filter { Self.isCorrupt($0, thumbnailsSettled: thumbnailsSettled) }
         case .missing:
             result = result.filter { missingVideoIds.contains($0.id) }
         case .collection(let collection):
@@ -1523,6 +1589,45 @@ final class LibraryViewModel {
 
     /// Sets the `hasSubtitles` flag in-memory and persists to the DB. No-op if the flag already matches,
     /// so repeated calls (e.g. from the detail pane on every selection) are free.
+    /// Re-extracts metadata for a video that appears corrupt. Called when the user views a
+    /// corrupt video in the detail pane — covers files repaired externally (e.g. via ffmpeg)
+    /// that now have valid metadata but whose DB record still shows nil fields.
+    func refreshMetadataIfCorrupt(for video: Video) async {
+        guard isCorrupt(video) else { return }
+        let metadata = await MetadataExtractor().extract(from: video.url)
+        guard metadata.duration != nil || metadata.width != nil else { return }
+        guard let idx = videos.firstIndex(where: { $0.filePath == video.filePath }) else { return }
+        var updated = videos
+        updated[idx].duration = metadata.duration
+        updated[idx].width = metadata.width
+        updated[idx].height = metadata.height
+        if let codec = metadata.codec { updated[idx].codec = codec }
+        if let frameRate = metadata.frameRate { updated[idx].frameRate = frameRate }
+        let updatedVideo = updated[idx]
+        videos = updated
+        try? await videoRepo.update(updatedVideo)
+
+        if updatedVideo.thumbnailPath == nil,
+           let thumbURL = try? await thumbnailService.generateThumbnail(for: updatedVideo) {
+            await setThumbnailPath(videoPath: updatedVideo.filePath, url: thumbURL)
+        }
+    }
+
+    private func isCorrupt(_ video: Video) -> Bool {
+        Self.isCorrupt(video, thumbnailsSettled: thumbnailsSettled)
+    }
+
+    func setThumbnailPath(videoPath: String, url: URL) async {
+        guard let idx = videos.firstIndex(where: { $0.filePath == videoPath }) else { return }
+        var updated = videos
+        updated[idx].thumbnailPath = url.path
+        let dbId = updated[idx].databaseId
+        videos = updated
+        if let dbId {
+            try? await videoRepo.updateThumbnailPath(videoId: dbId, path: url.path)
+        }
+    }
+
     func setHasSubtitles(videoPath: String, hasSubtitles: Bool) async {
         guard let idx = videos.firstIndex(where: { $0.filePath == videoPath }) else { return }
         guard videos[idx].hasSubtitles != hasSubtitles else { return }
@@ -1624,6 +1729,188 @@ final class LibraryViewModel {
             print("Rename failed: \(error)")
             return nil
         }
+    }
+
+    func videoConvertedToMP4(_ video: Video, newPath: String) async {
+        guard let dbId = video.databaseId else { return }
+        let newURL = URL(fileURLWithPath: newPath)
+        let newFileName = newURL.lastPathComponent
+
+        do {
+            try await videoRepo.renameVideo(videoId: dbId, newFilePath: newPath, newFileName: newFileName)
+        } catch {
+            print("videoConvertedToMP4 DB update failed: \(error)")
+            return
+        }
+
+        if selectedVideoIds.contains(video.filePath) {
+            selectedVideoIds.remove(video.filePath)
+            selectedVideoIds.insert(newPath)
+        }
+        if lastSelectedVideoId == video.filePath {
+            lastSelectedVideoId = newPath
+        }
+
+        guard let idx = videos.firstIndex(where: { $0.filePath == video.filePath }) else { return }
+        var updated = videos
+        updated[idx].filePath = newPath
+        updated[idx].fileName = newFileName
+        updated[idx].thumbnailPath = nil
+        if let size = (try? newURL.resourceValues(forKeys: [.fileSizeKey]))?.fileSize {
+            updated[idx].fileSize = Int64(size)
+        }
+
+        let metadata = await MetadataExtractor().extract(from: newURL)
+        if let duration = metadata.duration { updated[idx].duration = duration }
+        if let width = metadata.width { updated[idx].width = width }
+        if let height = metadata.height { updated[idx].height = height }
+        if let codec = metadata.codec { updated[idx].codec = codec }
+        if let frameRate = metadata.frameRate { updated[idx].frameRate = frameRate }
+
+        let updatedVideo = updated[idx]
+        videos = updated
+        try? await videoRepo.update(updatedVideo)
+
+        if let thumbURL = try? await thumbnailService.generateThumbnail(for: updatedVideo) {
+            await setThumbnailPath(videoPath: newPath, url: thumbURL)
+        }
+
+        if selectedVideoIds.contains(newPath) {
+            filmstripRefreshId &+= 1
+        }
+    }
+
+    func reencodeVideo(_ video: Video, ffmpegPath: String) {
+        conversionQueue.append((video: video, ffmpegPath: ffmpegPath))
+        updateConversionProgress()
+        if !isConverting {
+            isConverting = true
+            Task { await drainConversionQueue() }
+        }
+    }
+
+    private func updateConversionProgress() {
+        guard !conversionQueue.isEmpty else { return }
+        let name = conversionQueue[0].video.fileName
+        let remaining = conversionQueue.count - 1
+        conversionProgress = remaining > 0
+            ? "Re-encoding '\(name)'… (\(remaining) remaining)"
+            : "Re-encoding '\(name)'…"
+    }
+
+    private func drainConversionQueue() async {
+        isConverting = true
+        defer {
+            isConverting = false
+            conversionProgress = ""
+        }
+
+        while !conversionQueue.isEmpty {
+            let job = conversionQueue[0]
+            updateConversionProgress()
+            await performReencode(video: job.video, ffmpegPath: job.ffmpegPath)
+            conversionQueue.removeFirst()
+        }
+    }
+
+    private func performReencode(video: Video, ffmpegPath: String) async {
+        let videoURL = URL(fileURLWithPath: video.filePath)
+        let stem = videoURL.deletingPathExtension().lastPathComponent
+        let ext = videoURL.pathExtension
+        let dir = videoURL.deletingLastPathComponent().path
+        let backupName = ext.isEmpty ? "\(stem)_original" : "\(stem)_original.\(ext)"
+        let backupURL = URL(fileURLWithPath: (dir as NSString).appendingPathComponent(backupName))
+        let outputURL = URL(fileURLWithPath: (dir as NSString).appendingPathComponent("\(stem).mp4"))
+        let fm = FileManager.default
+
+        guard !fm.fileExists(atPath: backupURL.path) else {
+            conversionProgress = "Skipped '\(video.fileName)': backup already exists"
+            try? await Task.sleep(for: .seconds(3))
+            return
+        }
+        if outputURL.path != video.filePath, fm.fileExists(atPath: outputURL.path) {
+            conversionProgress = "Skipped '\(video.fileName)': output already exists"
+            try? await Task.sleep(for: .seconds(3))
+            return
+        }
+
+        do {
+            try fm.moveItem(at: videoURL, to: backupURL)
+        } catch {
+            conversionProgress = "Failed to rename '\(video.fileName)': \(error.localizedDescription)"
+            try? await Task.sleep(for: .seconds(4))
+            return
+        }
+
+        let duration = video.duration
+        let name = video.fileName
+        let progressPipe = Pipe()
+
+        // Read ffmpeg's -progress output and update the status bar with a percentage.
+        // Falls back to a plain spinner message when duration is unknown.
+        let progressTask = Task.detached(priority: .utility) { [weak self] in
+            guard let self else { return }
+            let handle = progressPipe.fileHandleForReading
+            var buffer = ""
+            while true {
+                let data = handle.availableData
+                guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { break }
+                buffer += chunk
+                var lines = buffer.components(separatedBy: "\n")
+                buffer = lines.removeLast()
+                for line in lines {
+                    guard line.hasPrefix("out_time_ms="),
+                          let us = Double(line.dropFirst("out_time_ms=".count)),
+                          let dur = duration, dur > 0
+                    else { continue }
+                    let pct = min(99, Int(us / (dur * 1_000_000) * 100))
+                    await MainActor.run { [weak self] in
+                        self?.conversionProgress = "Re-encoding '\(name)'… \(pct)%"
+                    }
+                }
+            }
+        }
+
+        let exitCode = await Task.detached(priority: .userInitiated) {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: ffmpegPath)
+            proc.arguments = ["-i", backupURL.path, "-c:v", "libx264", "-c:a", "aac",
+                              "-movflags", "+faststart", "-y", "-progress", "pipe:1", outputURL.path]
+            proc.standardOutput = progressPipe
+            proc.standardError = FileHandle.nullDevice
+            return await withCheckedContinuation { continuation in
+                proc.terminationHandler = { p in continuation.resume(returning: p.terminationStatus) }
+                guard (try? proc.run()) != nil else {
+                    continuation.resume(returning: Int32(-1))
+                    return
+                }
+            }
+        }.value
+
+        // Wait for the progress reader to drain the pipe before continuing.
+        await progressTask.value
+
+        if exitCode == 0 {
+            try? fm.trashItem(at: backupURL, resultingItemURL: nil)
+            await videoConvertedToMP4(video, newPath: outputURL.path)
+            addRecentlyConverted(path: outputURL.path)
+        } else {
+            // Restore original
+            try? fm.moveItem(at: backupURL, to: videoURL)
+            conversionProgress = "Re-encoding failed for '\(video.fileName)'"
+            try? await Task.sleep(for: .seconds(4))
+        }
+    }
+
+    private func addRecentlyConverted(path: String) {
+        let cutoff = Date().addingTimeInterval(-30 * 24 * 3600)
+        recentlyConvertedEntries = recentlyConvertedEntries.filter { $0.date >= cutoff }
+        recentlyConvertedEntries.append(ConvertedEntry(path: path, date: Date()))
+        if let data = try? JSONEncoder().encode(recentlyConvertedEntries) {
+            UserDefaults.standard.set(data, forKey: Self.recentlyConvertedEntriesKey)
+        }
+        updateLibraryCounts()
+        recomputeFilteredVideos()
     }
 
     func refreshMissingCount() async {
@@ -1896,7 +2183,7 @@ final class LibraryViewModel {
     }
 
     func refreshCollectionCounts() async {
-        let baseVideos = excludeCorrupt ? videos.filter { !Self.isCorrupt($0) } : videos
+        let baseVideos = excludeCorrupt ? videos.filter { !Self.isCorrupt($0, thumbnailsSettled: thumbnailsSettled) } : videos
         let currentTags = tagsByVideoId
         let allRules = cachedCollectionRules
         var counts: [Int64: Int] = [:]
@@ -1926,6 +2213,19 @@ final class LibraryViewModel {
 
     private func refreshTagsByVideoId() async {
         tagsByVideoId = (try? await tagRepo.fetchAllVideoTags()) ?? [:]
+    }
+
+    private func startThumbnailSettlingTask() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            while self.thumbnailService.hasPendingThumbnails {
+                try? await Task.sleep(for: .milliseconds(200))
+            }
+            guard !self.thumbnailsSettled else { return }
+            self.thumbnailsSettled = true
+            self.recomputeFilteredVideos()
+            self.updateLibraryCounts()
+        }
     }
 
     private func refreshAfterScan() async {

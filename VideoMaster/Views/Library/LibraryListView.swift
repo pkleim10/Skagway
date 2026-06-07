@@ -27,6 +27,10 @@ struct TableScrollHelper: NSViewRepresentable {
         return view
     }
 
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.cancelPending()
+    }
+
     func updateNSView(_ nsView: NSView, context: Context) {
         context.coordinator.cancelPending()
         guard let row = scrollToRow, row >= 0 else { return }
@@ -223,6 +227,16 @@ struct LibraryListView: View {
                         viewModel.renamingVideoId = video.id
                     }
                 }
+                Button("Re-encode to MP4\u{2026}") {
+                    if let ffmpeg = ffmpegPath {
+                        let selected = viewModel.filteredVideos.filter { ids.contains($0.id) }
+                        for v in selected {
+                            viewModel.reencodeVideo(v, ffmpegPath: ffmpeg)
+                        }
+                    }
+                }
+                .disabled(ffmpegPath == nil)
+                .help(ffmpegPath == nil ? "Requires ffmpeg — configure the path in Settings \u{2192} Tools" : "")
                 Divider()
                 Button("Modify Filmstrip\u{2026}") {
                     filmstripVideo = video
@@ -440,7 +454,9 @@ struct LibraryListView: View {
     private func nameRowView(for video: Video) -> some View {
         HStack(spacing: 8) {
             AsyncThumbnailView(
-                filePath: video.filePath, thumbnailService: thumbnailService
+                filePath: video.filePath,
+                thumbnailService: thumbnailService,
+                cacheVersion: video.thumbnailPath
             )
             .frame(width: 56, height: 36)
             .clipShape(RoundedRectangle(cornerRadius: 4))
@@ -503,6 +519,8 @@ struct LibraryListView: View {
             }
         }
     }
+
+    private var ffmpegPath: String? { viewModel.resolvedFFmpegPath }
 
     private func commitRename(_ video: Video) {
         let newName = viewModel.renameText.trimmingCharacters(in: .whitespaces)

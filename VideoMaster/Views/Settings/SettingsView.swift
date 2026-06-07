@@ -1,5 +1,6 @@
 import GRDB
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @Bindable var appState: AppState
@@ -30,6 +31,11 @@ struct SettingsView: View {
                 FileExtSettingsView()
                     .tabItem {
                         Label("File Ext", systemImage: "doc.badge.gearshape")
+                    }
+
+                ToolsSettingsView(viewModel: vm)
+                    .tabItem {
+                        Label("Tools", systemImage: "wrench.and.screwdriver")
                     }
 
                 CustomMetadataSettingsView(viewModel: vm)
@@ -96,6 +102,8 @@ struct LibrarySettingsView: View {
                 filterRow(title: "Corrupt", isOn: $viewModel.showCorrupt)
 
                 filterRow(title: "Missing", isOn: $viewModel.showMissing)
+
+                filterRow(title: "Recently Converted", isOn: $viewModel.showRecentlyConverted)
             }
 
             Section {
@@ -240,6 +248,63 @@ struct VideoSettingsView: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(value.wrappedValue >= range.upperBound)
+            }
+        }
+    }
+}
+
+struct ToolsSettingsView: View {
+    @Bindable var viewModel: LibraryViewModel
+    @State private var showingFilePicker = false
+
+    var body: some View {
+        Form {
+            Section {
+                HStack(spacing: 8) {
+                    if let resolved = viewModel.resolvedFFmpegPath {
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                        Text(resolved)
+                            .font(.callout.monospaced())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        if viewModel.ffmpegUserPath.isEmpty {
+                            Text("auto-discovered")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                    } else {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+                        Text(viewModel.ffmpegUserPath.isEmpty ? "Not found at standard paths" : "Not found at configured path")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                HStack {
+                    TextField("Custom path to ffmpeg binary", text: $viewModel.ffmpegUserPath)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.callout.monospaced())
+                    Button("Choose\u{2026}") { showingFilePicker = true }
+                    if !viewModel.ffmpegUserPath.isEmpty {
+                        Button("Clear") { viewModel.ffmpegUserPath = "" }
+                    }
+                }
+            } header: {
+                Text("FFmpeg")
+            } footer: {
+                Text("FFmpeg is used to repair videos that won\u{2019}t play in VideoMaster\u{2019}s built-in player (\u{201C}Fix for Built-in Player\u{201D} in the video context menu). VideoMaster auto-discovers ffmpeg at standard Homebrew and system paths. Set a custom path if your ffmpeg is installed elsewhere.")
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+        .fileImporter(
+            isPresented: $showingFilePicker,
+            allowedContentTypes: [.unixExecutable, .item],
+            allowsMultipleSelection: false
+        ) { result in
+            if case .success(let urls) = result, let url = urls.first {
+                viewModel.ffmpegUserPath = url.path
             }
         }
     }
