@@ -130,6 +130,9 @@ final class LibraryViewModel {
     var filmstripRefreshId: Int = 0
     var isPlayingInline: Bool = false {
         didSet {
+            // Overlay playback never freezes/resizes the browser, so there's no layout to flush or scroll
+            // to re-anchor on exit — skip all of this (that's what preserves the grid position in overlay mode).
+            guard !inlineOverlayActive else { return }
             // Leaving playback: restore list `Table` column widths from saved JSON *before* flushing live state.
             // If we `updateCurrentLayoutFromLive()` first, SwiftUI may have already reset `columnCustomization`
             // to defaults — that snapshot would overwrite `browsingLayout` and defeat re-apply.
@@ -249,6 +252,8 @@ final class LibraryViewModel {
     private static let lastAppliedFilmstripColumnsKey = "VideoMaster.lastAppliedFilmstripColumns"
     private static let surpriseMeAutoPlaysKey = "VideoMaster.surpriseMeAutoPlays"
     private static let playInlineStartsFullscreenKey = "VideoMaster.playInlineStartsFullscreen"
+    private static let playInlineInOverlayKey = "VideoMaster.playInlineInOverlay"
+    private static let overlayPlayerWidthKey = "VideoMaster.overlayPlayerWidth"
     private static let fadeResumeBannerAutomaticallyKey = "VideoMaster.fadeResumeBannerAutomatically"
     private static let resumeBannerFadeDelaySecondsKey = "VideoMaster.resumeBannerFadeDelaySeconds"
     private static let recentlyAddedDaysKey = "VideoMaster.recentlyAddedDays"
@@ -395,6 +400,56 @@ final class LibraryViewModel {
     var playInlineStartsFullscreen: Bool = false {
         didSet {
             UserDefaults.standard.set(playInlineStartsFullscreen, forKey: Self.playInlineStartsFullscreenKey)
+        }
+    }
+
+    /// When true (and not fullscreen-start), inline playback floats as an overlay panel pinned to the trailing
+    /// edge with a draggable splitter, leaving the grid/list/detail untouched (no freeze/resize → no scroll loss).
+    var playInlineInOverlay: Bool = false {
+        didSet {
+            UserDefaults.standard.set(playInlineInOverlay, forKey: Self.playInlineInOverlayKey)
+        }
+    }
+
+    /// Single source of truth for "play in the floating overlay". Fullscreen-start takes precedence.
+    var inlineOverlayActive: Bool { playInlineInOverlay && !playInlineStartsFullscreen }
+
+    /// The three mutually-exclusive inline-playback modes, derived from the two booleans above. Surfaced as a
+    /// single segmented control in the toolbar + ⌥⌘1/2/3 menu commands.
+    var inlinePlaybackMode: InlinePlaybackMode {
+        if playInlineStartsFullscreen { return .fullScreen }
+        if playInlineInOverlay { return .overlay }
+        return .detailPane
+    }
+
+    /// Set the playback mode coherently across the two booleans. If a video is currently playing, the player
+    /// is relocated into the new mode (stop → restart, resuming from the saved position) — the clean teardown
+    /// before the new host mounts avoids two players running at once.
+    func setInlinePlaybackMode(_ mode: InlinePlaybackMode) {
+        guard mode != inlinePlaybackMode else { return }
+        let wasPlaying = isPlayingInline
+        if wasPlaying { isPlayingInline = false }
+        switch mode {
+        case .detailPane:
+            playInlineStartsFullscreen = false
+            playInlineInOverlay = false
+        case .overlay:
+            playInlineStartsFullscreen = false
+            playInlineInOverlay = true
+        case .fullScreen:
+            playInlineStartsFullscreen = true
+        }
+        if wasPlaying {
+            DispatchQueue.main.async { self.isPlayingInline = true }
+        }
+    }
+
+    /// Persisted width (points) of the overlay player panel; driven by the overlay's drag splitter.
+    var overlayPlayerWidth: CGFloat = 480 {
+        didSet {
+            let clamped = max(240, overlayPlayerWidth)
+            if clamped != overlayPlayerWidth { overlayPlayerWidth = clamped; return }
+            UserDefaults.standard.set(Double(clamped), forKey: Self.overlayPlayerWidthKey)
         }
     }
 
@@ -630,7 +685,8 @@ final class LibraryViewModel {
 
     /// Layout to use for the current mode. Playback uses browsing until user customizes during playback.
     var effectiveLayout: LayoutParams {
-        if isPlayingInline {
+        // Overlay playback must NOT swap to the playback layout — the browser/detail widths stay put.
+        if isPlayingInline, !inlineOverlayActive {
             return playbackLayout ?? browsingLayout
         }
         return browsingLayout
@@ -801,6 +857,12 @@ final class LibraryViewModel {
         surpriseMeAutoPlays = defaults.object(forKey: Self.surpriseMeAutoPlaysKey) as? Bool ?? true
         if defaults.object(forKey: Self.playInlineStartsFullscreenKey) != nil {
             playInlineStartsFullscreen = defaults.bool(forKey: Self.playInlineStartsFullscreenKey)
+        }
+        if defaults.object(forKey: Self.playInlineInOverlayKey) != nil {
+            playInlineInOverlay = defaults.bool(forKey: Self.playInlineInOverlayKey)
+        }
+        if let w = defaults.object(forKey: Self.overlayPlayerWidthKey) as? Double, w > 0 {
+            overlayPlayerWidth = CGFloat(w)
         }
         if defaults.object(forKey: Self.fadeResumeBannerAutomaticallyKey) != nil {
             fadeResumeBannerAutomatically = defaults.bool(forKey: Self.fadeResumeBannerAutomaticallyKey)

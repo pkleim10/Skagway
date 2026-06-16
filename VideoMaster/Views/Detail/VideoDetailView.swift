@@ -42,6 +42,9 @@ struct VideoDetailView: View {
     /// Tracks detail column size for auto-adjust splitter (thumbnail/filmstrip vs metadata).
     @State private var detailPaneSize: CGSize = .zero
     private var effectiveHeight: CGFloat { viewModel.effectiveDetailHeight }
+    /// True only when the player should render *in the detail pane*. In overlay mode the detail pane keeps
+    /// showing the static thumbnail/filmstrip while the floating overlay hosts the player.
+    private var detailShowsPlayer: Bool { viewModel.isPlayingInline && !viewModel.inlineOverlayActive }
 
     var body: some View {
         GeometryReader { geo in
@@ -52,7 +55,7 @@ struct VideoDetailView: View {
 
             VStack(spacing: 0) {
                 VStack(spacing: 0) {
-                    if !viewModel.isPlayingInline, (detailThumbnailLo != nil || detailThumbnailHi != nil || filmstrip != nil) {
+                    if !detailShowsPlayer, (detailThumbnailLo != nil || detailThumbnailHi != nil || filmstrip != nil) {
                         Picker("", selection: $viewModel.showThumbnailInDetail) {
                             Text("Thumbnail").tag(true)
                             Text("Filmstrip").tag(false)
@@ -257,7 +260,7 @@ struct VideoDetailView: View {
         let detailStill = detailThumbnailHi ?? detailThumbnailLo
 
         return ZStack {
-                if viewModel.isPlayingInline, let player = inlinePlayer {
+                if detailShowsPlayer, let player = inlinePlayer {
                     if fullscreenInlineController != nil {
                         fullscreenPlaybackPlaceholder
                             .aspectRatio(16.0 / 9.0, contentMode: .fit)
@@ -316,6 +319,9 @@ struct VideoDetailView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: maxHeight)
         .onChange(of: viewModel.isPlayingInline) { _, isPlaying in
+            // In overlay mode the floating overlay owns the player; the detail pane stays inert and must not
+            // start a second player or consume `pendingFilmstripSeekSeconds` (the overlay reads it).
+            guard !viewModel.inlineOverlayActive else { return }
             if isPlaying {
                 if inlinePlayer == nil {
                     let seek = viewModel.pendingFilmstripSeekSeconds ?? 0
@@ -1303,11 +1309,11 @@ struct VideoDetailView: View {
         let minThumb: CGFloat = 100
 
         let filmstripEffective = filmstripSizingImage ?? filmstrip
-        let hasMediaChrome = !viewModel.isPlayingInline
+        let hasMediaChrome = !detailShowsPlayer
             && (detailThumbnailLo != nil || detailThumbnailHi != nil || filmstripEffective != nil)
         let showHint = !viewModel.showThumbnailInDetail && filmstripEffective != nil
         let chrome = previewColumnChromeHeight(
-            isPlayingInline: viewModel.isPlayingInline,
+            isPlayingInline: detailShowsPlayer,
             hasMediaChrome: hasMediaChrome,
             showFilmstripHint: showHint
         )
@@ -1338,7 +1344,7 @@ struct VideoDetailView: View {
 
     private func fittedMediaHeight(contentWidth: CGFloat, filmstripOverride: NSImage? = nil) -> CGFloat {
         let w = max(1, contentWidth)
-        if viewModel.isPlayingInline {
+        if detailShowsPlayer {
             return w * 9 / 16
         }
         let img: NSImage?
@@ -1497,12 +1503,13 @@ struct MetadataRow: View {
 
 struct FloatingPlayerView: NSViewRepresentable {
     let player: AVPlayer
+    var showsFullscreenButton: Bool = true
 
     func makeNSView(context: Context) -> AVPlayerView {
         let view = AVPlayerView()
         view.player = player
         view.controlsStyle = .floating
-        view.showsFullScreenToggleButton = true
+        view.showsFullScreenToggleButton = showsFullscreenButton
         return view
     }
 

@@ -180,8 +180,11 @@ struct VideoSettingsView: View {
 
             Section {
                 Toggle("Start inline playback in full screen", isOn: $viewModel.playInlineStartsFullscreen)
+                Toggle("Play inline video in a floating overlay", isOn: $viewModel.playInlineInOverlay)
+                    .disabled(viewModel.playInlineStartsFullscreen)
+                    .opacity(viewModel.playInlineStartsFullscreen ? 0.45 : 1)
             } footer: {
-                Text("When enabled, starting playback from the detail preview (Play Video inline, or a filmstrip frame) opens a dedicated player window and enters full screen. Close that window to stop. The Play Video button that opens your default external app is unchanged.")
+                Text("When enabled, starting playback from the detail preview (Play Video inline, or a filmstrip frame) opens a dedicated player window and enters full screen. Close that window to stop. The Play Video button that opens your default external app is unchanged.\n\nThe floating overlay plays the video in a panel pinned to the right with a draggable width splitter, leaving the grid/list scroll position untouched. Full-screen takes precedence, so the overlay has no effect while full-screen is on.")
             }
 
             Section {

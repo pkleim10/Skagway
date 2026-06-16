@@ -25,6 +25,12 @@ private struct LibraryContentView: View {
     @State private var keyDownMonitor: Any?
     @State private var showListColumnsSheet = false
 
+    /// The video shown in the detail pane / overlay (primary selection). Shared by `detailContent` and the overlay.
+    private var selectedVideo: Video? {
+        guard let id = vm.lastSelectedVideoId ?? vm.selectedVideoIds.first else { return nil }
+        return vm.filteredVideos.first(where: { $0.id == id })
+    }
+
     private var navigationTitle: String {
         let name = DatabaseExportImport.activeLibraryDisplayName
         if name.isEmpty || name == "VideoMaster" { return "VideoMaster" }
@@ -62,7 +68,7 @@ private struct LibraryContentView: View {
                 detailWidth: browsingSplitDetailWidth,
                 contentID: "browserShell",
                 detailID: detailID,
-                freezeContent: vm.isPlayingInline,
+                freezeContent: vm.isPlayingInline && !vm.inlineOverlayActive,
                 onSizesChanged: { browserW, detailW in
                     vm.updateCurrentLayoutWithSizes(sidebarWidth: nil, contentWidth: browserW, detailWidth: detailW)
                 },
@@ -84,6 +90,16 @@ private struct LibraryContentView: View {
                 },
                 detail: { detailContent }
             )
+            .overlay {
+                // Floating overlay player: covers only its trailing panel, leaving the browser/detail beneath
+                // untouched (no freeze/resize → grid scroll preserved). Shown only in overlay playback mode.
+                if vm.inlineOverlayActive, vm.isPlayingInline, let video = selectedVideo {
+                    GeometryReader { geo in
+                        OverlayPlayerPanel(video: video, viewModel: vm, totalWidth: geo.size.width)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                    }
+                }
+            }
             .navigationTitle(navigationTitle)
 
             statusBar(vm: vm)
@@ -260,6 +276,23 @@ private struct LibraryContentView: View {
                         }
                         .disabled(vm.filteredVideos.isEmpty)
                         .help("Random video: filmstrip in detail first, then scroll list/grid to the selection")
+
+                        Picker("Playback Mode", selection: Binding(
+                            get: { vm.inlinePlaybackMode },
+                            set: { vm.setInlinePlaybackMode($0) }
+                        )) {
+                            Label("Detail Pane", systemImage: "rectangle.righthalf.inset.filled")
+                                .tag(InlinePlaybackMode.detailPane)
+                                .help("Play inline in the detail pane (⌥⌘1)")
+                            Label("Overlay", systemImage: "pip")
+                                .tag(InlinePlaybackMode.overlay)
+                                .help("Play in a floating overlay panel (⌥⌘2)")
+                            Label("Full Screen", systemImage: "arrow.up.left.and.arrow.down.right")
+                                .tag(InlinePlaybackMode.fullScreen)
+                                .help("Play in a full-screen window (⌥⌘3)")
+                        }
+                        .pickerStyle(.segmented)
+                        .labelStyle(.iconOnly)
                     }
                 }
                 .sheet(isPresented: $showListColumnsSheet) {
@@ -311,9 +344,7 @@ private struct LibraryContentView: View {
     @ViewBuilder
     private var detailContent: some View {
         Group {
-            if let selectedId = vm.lastSelectedVideoId ?? vm.selectedVideoIds.first,
-               let video = vm.filteredVideos.first(where: { $0.id == selectedId })
-            {
+            if let video = selectedVideo {
                 VideoDetailView(video: video, viewModel: vm, thumbnailService: thumbService)
             } else {
                 Text("Select a video")
@@ -466,5 +497,67 @@ private struct LibraryContentView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(.bar)
+    }
+}
+
+/// Trailing floating player panel + its left-edge resize splitter. The drag updates **local** state and only
+/// commits to `viewModel.overlayPlayerWidth` on release — so dragging never mutates the view model per frame
+/// (which would re-render the whole content view / split view and cause flicker).
+private struct OverlayPlayerPanel: View {
+    let video: Video
+    @Bindable var viewModel: LibraryViewModel
+    let totalWidth: CGFloat
+
+    /// Live width while dragging; `nil` when not dragging (panel uses the persisted model width).
+    @State private var dragWidth: CGFloat?
+    @State private var dragStartWidth: CGFloat?
+
+    private var maxWidth: CGFloat { max(240, totalWidth - 160) }
+    private var width: CGFloat { min(max(240, dragWidth ?? viewModel.overlayPlayerWidth), maxWidth) }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            splitter
+            OverlayInlinePlayerView(video: video, viewModel: viewModel)
+                .frame(width: width)
+        }
+        .frame(maxHeight: .infinity)
+        // Solid opaque background (not `.regularMaterial`) and no drop shadow: both re-rasterize on every
+        // width change and were the main source of drag jitter. The splitter's 1px line gives separation.
+        .background(Color(nsColor: .windowBackgroundColor))
+        .onChange(of: totalWidth) { _, w in
+            // Persisted width can exceed a shrunken window — clamp it (infrequent, not per-frame).
+            let m = max(240, w - 160)
+            if viewModel.overlayPlayerWidth > m { viewModel.overlayPlayerWidth = m }
+        }
+    }
+
+    private var splitter: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.001))
+            .frame(width: 8)
+            .frame(maxHeight: .infinity)
+            .overlay(Rectangle().fill(Color(nsColor: .separatorColor)).frame(width: 1))
+            .contentShape(Rectangle())
+            .onHover { hovering in
+                if hovering { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+            }
+            .gesture(
+                // `.global` space: the splitter view itself moves left as the panel widens, so a `.local`
+                // translation is measured against a moving origin — the divider drifts from the cursor and
+                // oscillates (jitter). Global space gives a true, stable mouse delta.
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { value in
+                        let start = dragStartWidth ?? viewModel.overlayPlayerWidth
+                        if dragStartWidth == nil { dragStartWidth = start }
+                        // translation is cumulative from drag start; drag left → wider player.
+                        dragWidth = min(max(240, start - value.translation.width), maxWidth)
+                    }
+                    .onEnded { _ in
+                        if let w = dragWidth { viewModel.overlayPlayerWidth = w }  // single commit + persist
+                        dragWidth = nil
+                        dragStartWidth = nil
+                    }
+            )
     }
 }
