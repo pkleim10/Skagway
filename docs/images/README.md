@@ -1,6 +1,8 @@
-# User guide screenshots
+# User guide screenshots (aspirational)
 
-These images are referenced from [../USER_GUIDE.md](../USER_GUIDE.md). Until you add real captures, the guide uses [placeholder.svg](placeholder.svg) so links stay valid.
+The main user guide (`../USER_GUIDE.md`) is currently cleared / on hold. A full production user guide will be written closer to release.
+
+These images and the shot list below are preserved for when the guide is revived. Until then, the guide itself uses minimal placeholder text.
 
 ## How to capture
 

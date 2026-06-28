@@ -68,7 +68,7 @@ private struct LibraryContentView: View {
                 detailWidth: browsingSplitDetailWidth,
                 contentID: "browserShell",
                 detailID: detailID,
-                freezeContent: vm.isPlayingInline && !vm.inlineOverlayActive,
+                freezeContent: vm.inlinePlaybackReshapesBrowser,
                 onSizesChanged: { browserW, detailW in
                     vm.updateCurrentLayoutWithSizes(sidebarWidth: nil, contentWidth: browserW, detailWidth: detailW)
                 },
@@ -177,7 +177,6 @@ private struct LibraryContentView: View {
             }
 
             SortMenuButton(viewModel: vm)
-                .labelStyle(.iconOnly)
                 .buttonStyle(.bordered)
                 .fixedSize()
 

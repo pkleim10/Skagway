@@ -67,11 +67,37 @@ struct ScrollCommandHandler: NSViewRepresentable {
             // variance), then center it. Clamped to the scrollable range.
             let rowTop = (CGFloat(index) / CGFloat(max(1, total))) * docHeight
             y = min(maxY, max(minY, rowTop - visibleH / 2))
+        case .retile:
+            // Keep the current offset; the nudge-and-restore below forces a re-tile in place.
+            break
         }
 
         let target = NSPoint(x: clip.bounds.origin.x, y: y)
         clip.scroll(to: target)
         scrollView.reflectScrolledClipView(clip)
+
+        // A `.toRow` re-anchor (detail-pane playback exit) or `.retile` (fullscreen exit) often lands on the
+        // offset the clip already held, so no bounds-changed fires — and an `NSScrollView` that was frozen
+        // or occluded by the fullscreen player never re-tiles, leaving the `LazyVGrid` showing blank cells
+        // until the user scrolls. Force a 1pt nudge-and-restore across two runloop ticks so each step posts
+        // a bounds-changed notification and the grid re-instantiates its visible cells. Net visible position
+        // is unchanged (the bump is sub-row, so the re-tiled region matches the target).
+        switch kind {
+        case .toRow, .retile:
+            let bump = NSPoint(x: target.x, y: target.y > minY ? target.y - 1 : target.y + 1)
+            DispatchQueue.main.async { [weak scrollView, weak clip] in
+                guard let scrollView, let clip else { return }
+                clip.scroll(to: bump)
+                scrollView.reflectScrolledClipView(clip)
+                DispatchQueue.main.async { [weak scrollView, weak clip] in
+                    guard let scrollView, let clip else { return }
+                    clip.scroll(to: target)
+                    scrollView.reflectScrolledClipView(clip)
+                }
+            }
+        default:
+            break
+        }
     }
 
     // MARK: - Locating the scroll view

@@ -319,16 +319,20 @@ struct VideoDetailView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: maxHeight)
         .onChange(of: viewModel.isPlayingInline) { _, isPlaying in
-            // In overlay mode the floating overlay owns the player; the detail pane stays inert and must not
-            // start a second player or consume `pendingFilmstripSeekSeconds` (the overlay reads it).
-            guard !viewModel.inlineOverlayActive else { return }
             if isPlaying {
+                // In overlay mode the floating overlay owns the player; the detail pane stays inert and must
+                // not start a second player or consume `pendingFilmstripSeekSeconds` (the overlay reads it).
+                guard !viewModel.inlineOverlayActive else { return }
                 if inlinePlayer == nil {
                     let seek = viewModel.pendingFilmstripSeekSeconds ?? 0
                     viewModel.pendingFilmstripSeekSeconds = nil
                     startInlinePlayback(at: seek)
                 }
             } else {
+                // Always tear down a player/window this view owns — even when the mode has already flipped to
+                // overlay. A mode switch sets `isPlayingInline = false` *after* flipping the mode booleans, so
+                // guarding the stop on `!inlineOverlayActive` would skip teardown and leave the full-screen
+                // window open on full → overlay.
                 viewModel.pendingFilmstripSeekSeconds = nil
                 stopInlinePlayback()
             }

@@ -20,6 +20,8 @@ This document is an **exhaustive** pass over what makes **library grid** mode ex
 
 ## 2. Data flow: what invalidates the grid?
 
+Core performance techniques are summarized concisely in `AGENTS.md` ("Performance first for large libraries"). This document provides the detailed diagnosis, measurements, and trade-offs.
+
 ### 2.1 `LibraryViewModel` (`@Observable`)
 
 - **`filteredVideos` / `filteredVideosVersion`** — `applyFilteredVideos` bumps **version** only when the **set** of `video.id` (file paths) in the filtered list **changes** (add/remove/rename path). **Pure sort/reorder** of the same rows does **not** bump. (Older docs incorrectly tied bumps to `databaseId` **order**.)

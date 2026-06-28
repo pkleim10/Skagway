@@ -24,6 +24,17 @@ final class ClippingContainer: NSView {
         hosted.frame = NSRect(x: 0, y: 0, width: w, height: bounds.height)
     }
 
+    /// While frozen, snap the hosted view's width to the container's current width so its content (e.g. the
+    /// grid) reflows to fill the new size. Used after a debounced splitter drag during detail-pane playback,
+    /// where live reflow on every drag frame would be expensive — the view stays frozen at the new width.
+    func reflowToCurrentWidth() {
+        guard isFrozen, let hosted = subviews.first else { return }
+        let w = bounds.width
+        guard w > 0, abs(hosted.frame.width - w) > 0.5 else { return }
+        hosted.frame = NSRect(x: 0, y: 0, width: w, height: bounds.height)
+        hosted.layoutSubtreeIfNeeded()
+    }
+
     func unfreeze() {
         guard isFrozen, let hosted = subviews.first else { return }
         isFrozen = false

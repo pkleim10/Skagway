@@ -177,6 +177,9 @@ struct ResizableBrowserDetailSplitView<Content: View, Detail: View>: NSViewRepre
         /// After first `setPosition` from saved layout; until then, ignore `splitViewDidResizeSubviews` so default 50/50 layout doesn't persist over loaded `LayoutParams`.
         private var hasAppliedInitialBrowserWidth = false
         var browsingDividerPosition: CGFloat?
+        /// Debounces the frozen-grid reflow so it runs once the user stops dragging the divider during
+        /// detail-pane playback, not on every drag frame.
+        private var frozenReflowWork: DispatchWorkItem?
         var playbackDividerPositions: (browser: CGFloat, detail: CGFloat)? = {
             let defaults = UserDefaults.standard
             let b = defaults.double(forKey: "playbackDividerSidebar")
@@ -195,6 +198,11 @@ struct ResizableBrowserDetailSplitView<Content: View, Detail: View>: NSViewRepre
                 playbackDividerPositions = (browserW, detailW)
                 UserDefaults.standard.set(Double(browserW), forKey: "playbackDividerSidebar")
                 UserDefaults.standard.set(Double(detailW), forKey: "playbackDividerContent")
+                // Reflow the clipped grid to the new browser width once the drag settles.
+                frozenReflowWork?.cancel()
+                let work = DispatchWorkItem { [weak self] in self?.contentContainer?.reflowToCurrentWidth() }
+                frozenReflowWork = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: work)
                 return
             }
             guard hasAppliedInitialBrowserWidth else { return }

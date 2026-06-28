@@ -31,7 +31,7 @@ AI would translate to `CollectionRule` attributes and values.
 
 ### 4. Video Notes / Descriptions
 
-IMPROVEMENTS.md mentions a notes field. AI could:
+A notes / long description field has been discussed as a future feature. AI could:
 - Suggest notes from filenames and metadata
 - Summarize content from thumbnails or keyframes
 - Make notes searchable and usable in collections

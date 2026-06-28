@@ -1,18 +1,21 @@
-# VideoMaster — Claude Instructions
+# VideoMaster — Claude / Cursor Instructions
 
-## Building and deploying
+See the following foundation documents for how to work on this project:
 
-After every code change, run the build-and-install script:
+- **[AGENTS.md](./AGENTS.md)** — Primary agent contract (read this first)
+- **[SKILLS.md](./SKILLS.md)** — Skills and subagent usage
+- **[ROADMAP.md](./ROADMAP.md)** — High-level direction
+
+## Quick Reference: Building & Deploying
+
+After **every** code change, run:
 
 ```bash
 bash scripts/build_and_install.sh
 ```
 
-This script:
-1. Bumps `CURRENT_PROJECT_VERSION` in `project.yml`
-2. Regenerates the Xcode project via `xcodegen`
-3. Builds a Release build
-4. Installs the app to `/Applications/VideoMaster.app`
-5. Cleans up the temp build log
+This script handles build number bump, `xcodegen`, Release build, install to `/Applications`, and cleanup.
 
-After the script completes, announce the new build number to the user (printed on the last line of script output, e.g. `✓ VideoMaster 0.8.1 (282) [Release]`).
+Always announce the resulting version (e.g. `✓ VideoMaster 0.13.0 (375) [Release]`).
+
+For full release process (patch/minor/major), see `.cursor/rules/release-workflow.mdc` and the Release Commands section of `.cursor/rules/build-deploy.mdc`.

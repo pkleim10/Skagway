@@ -130,9 +130,21 @@ final class LibraryViewModel {
     var filmstripRefreshId: Int = 0
     var isPlayingInline: Bool = false {
         didSet {
-            // Overlay playback never freezes/resizes the browser, so there's no layout to flush or scroll
-            // to re-anchor on exit — skip all of this (that's what preserves the grid position in overlay mode).
-            guard !inlineOverlayActive else { return }
+            // Only detail-pane playback freezes/resizes the browser, so only it has layout to flush and a
+            // scroll position to re-anchor on exit. Overlay floats above the browser and fullscreen plays in
+            // a separate window — both leave the grid/list exactly as the user left it.
+            guard inlinePlaybackMode == .detailPane else {
+                // Fullscreen covers the main window with a borderless edge-to-edge window. On exit the
+                // revealed grid can show stale/blank cells until it re-tiles, so nudge it in place (no
+                // reposition) to force a repaint. Overlay never occludes, so it needs nothing.
+                if inlinePlaybackMode == .fullScreen, oldValue, !isPlayingInline {
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(100))
+                        issueScrollCommand(.retile)
+                    }
+                }
+                return
+            }
             // Leaving playback: restore list `Table` column widths from saved JSON *before* flushing live state.
             // If we `updateCurrentLayoutFromLive()` first, SwiftUI may have already reset `columnCustomization`
             // to defaults — that snapshot would overwrite `browsingLayout` and defeat re-apply.
@@ -173,6 +185,9 @@ final class LibraryViewModel {
             /// Jump so row `index` of `total` rows is centered — used to restore the selection on a
             /// List→Grid switch without SwiftUI instantiating every intermediate cell (the ~6s freeze).
             case toRow(index: Int, total: Int)
+            /// Force the scroll view to re-tile its visible cells *without* changing position — repaints a
+            /// grid/list revealed after the edge-to-edge fullscreen player closes (occlusion can blank cells).
+            case retile
         }
         let token: Int
         let kind: Kind
@@ -421,6 +436,11 @@ final class LibraryViewModel {
         if playInlineInOverlay { return .overlay }
         return .detailPane
     }
+
+    /// True only while detail-pane playback is reshaping the browser column (freeze + divider snap + scroll
+    /// re-anchor on exit). Overlay floats above the browser and fullscreen plays in a separate window, so
+    /// both leave the browser exactly as the user left it — no layout swap, no scroll loss.
+    var inlinePlaybackReshapesBrowser: Bool { isPlayingInline && inlinePlaybackMode == .detailPane }
 
     /// Set the playback mode coherently across the two booleans. If a video is currently playing, the player
     /// is relocated into the new mode (stop → restart, resuming from the saved position) — the clean teardown
@@ -685,8 +705,9 @@ final class LibraryViewModel {
 
     /// Layout to use for the current mode. Playback uses browsing until user customizes during playback.
     var effectiveLayout: LayoutParams {
-        // Overlay playback must NOT swap to the playback layout — the browser/detail widths stay put.
-        if isPlayingInline, !inlineOverlayActive {
+        // Only detail-pane playback swaps to the playback layout. Overlay and fullscreen keep the
+        // browser/detail widths exactly as the user left them.
+        if inlinePlaybackReshapesBrowser {
             return playbackLayout ?? browsingLayout
         }
         return browsingLayout
@@ -751,14 +772,11 @@ final class LibraryViewModel {
     /// Re-applies list `Table` column widths after inline playback (SwiftUI can reset widths when the browser column unfreezes).
     func reapplyListColumnCustomizationAfterPlaybackExit() {
         guard viewMode == .list else { return }
-        let blob: Data
-        if let p = playbackLayout, let d = p.columnCustomizationData, !d.isEmpty {
-            blob = d
-        } else if let d = browsingLayout.columnCustomizationData, !d.isEmpty {
-            blob = d
-        } else {
-            return
-        }
+        // Restore the *browsing* column layout. Dragging the splitter during detail-pane playback reflows the
+        // list to the (narrower) playback width, and SwiftUI writes those auto-fit widths into
+        // `playbackLayout`'s column data — they must not leak back out on exit. `browsingLayout` still holds
+        // the user's pre-playback column setup, which is the layout to come home to.
+        guard let blob = browsingLayout.columnCustomizationData, !blob.isEmpty else { return }
         guard let saved = try? JSONDecoder().decode(TableColumnCustomization<Video>.self, from: blob) else { return }
         _applyingLayout = true
         columnCustomization = saved

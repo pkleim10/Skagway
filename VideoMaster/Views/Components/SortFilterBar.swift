@@ -34,7 +34,13 @@ struct SortMenuButton: View {
                 }
             }
         } label: {
-            Label("Sort", systemImage: "arrow.up.arrow.down")
+            // Show the active sort field + direction so it's identifiable in Grid view, where there
+            // are no column headers (unlike List view's `Table`).
+            Label {
+                Text(currentSort.displayName)
+            } icon: {
+                Image(systemName: isAscending ? "arrow.up" : "arrow.down")
+            }
         }
         .help("Sort videos")
     }
