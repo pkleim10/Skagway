@@ -31,6 +31,10 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.14.1 (378) - 2026-06-27
+
+- videomaster-playback-test pass: reviewed full checklist against implementation; fixed list view not receiving explicit centered scroll re-anchor after leaving detail-pane playback (now sets scrollToVideoId for both grid and list on exit).
+
 ## 0.14.0 (376) - 2026-06-27
 
 - Foundation and agent workflow release:
