@@ -142,34 +142,14 @@ final class LibraryViewModel {
     var filmstripRefreshId: Int = 0
     var isPlayingInline: Bool = false {
         didSet {
-            // Only detail-pane playback freezes/resizes the browser, so only it has layout to flush and a
-            // scroll position to re-anchor on exit. Overlay floats above the browser and fullscreen plays in
-            // a separate window — both leave the grid/list exactly as the user left it.
-            guard inlinePlaybackMode == .detailPane else {
-                // Fullscreen covers the main window with a borderless edge-to-edge window. On exit the
-                // revealed grid can show stale/blank cells until it re-tiles, so nudge it in place (no
-                // reposition) to force a repaint. Overlay never occludes, so it needs nothing.
-                if inlinePlaybackMode == .fullScreen, oldValue, !isPlayingInline {
-                    Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(100))
-                        issueScrollCommand(.retile)
-                    }
-                }
-                return
-            }
-            // Leaving playback: restore list `Table` column widths from saved JSON *before* flushing live state.
-            // If we `updateCurrentLayoutFromLive()` first, SwiftUI may have already reset `columnCustomization`
-            // to defaults — that snapshot would overwrite `browsingLayout` and defeat re-apply.
-            if oldValue, !isPlayingInline {
-                reapplyListColumnCustomizationAfterPlaybackExit()
-                if viewMode != .list {
-                    updateCurrentLayoutFromLive()
-                }
-                // Re-anchor selection after leaving detail-pane playback.
-                // Grid: prevents blank cells / lost scroll (lazy layout).
-                // List: ensures the played row is scrolled into view and preferably centered.
-                if let id = lastSelectedVideoId ?? selectedVideoIds.first {
-                    scrollToVideoId = id
+            // Playback no longer reshapes the browser (Wall + Inspector layout): detail-pane plays inside
+            // the fixed inspector hero and overlay floats above, so neither moves the wall. The one thing
+            // still needed is a repaint after fullscreen: the borderless edge-to-edge window occludes the
+            // grid, and revealed cells can show stale/blank until they re-tile, so nudge them in place.
+            if inlinePlaybackMode == .fullScreen, oldValue, !isPlayingInline {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(100))
+                    issueScrollCommand(.retile)
                 }
             }
         }
@@ -272,7 +252,6 @@ final class LibraryViewModel {
     /// Legacy Int padding stepper; migrated once to boolean toggle.
     private static let legacyAutoAdjustVideoPanePaddingKey = "VideoMaster.autoAdjustVideoPanePadding"
     private static let browsingLayoutKey = "VideoMaster.browsingLayout"
-    private static let playbackLayoutKey = "VideoMaster.playbackLayout"
     private static let filmstripRowsKey = "VideoMaster.filmstripRows"
     private static let filmstripColumnsKey = "VideoMaster.filmstripColumns"
     private static let lastAppliedFilmstripRowsKey = "VideoMaster.lastAppliedFilmstripRows"
@@ -448,11 +427,6 @@ final class LibraryViewModel {
         if playInlineInOverlay { return .overlay }
         return .detailPane
     }
-
-    /// True only while detail-pane playback is reshaping the browser column (freeze + divider snap + scroll
-    /// re-anchor on exit). Overlay floats above the browser and fullscreen plays in a separate window, so
-    /// both leave the browser exactly as the user left it — no layout swap, no scroll loss.
-    var inlinePlaybackReshapesBrowser: Bool { isPlayingInline && inlinePlaybackMode == .detailPane }
 
     /// Set the playback mode coherently across the two booleans. If a video is currently playing, the player
     /// is relocated into the new mode (stop → restart, resuming from the saved position) — the clean teardown
@@ -706,24 +680,14 @@ final class LibraryViewModel {
     // MARK: - Layout (browsing vs playback)
 
     var browsingLayout: LayoutParams = .browsingDefaults() {
-        didSet { saveLayout(.browsing) }
-    }
-
-    var playbackLayout: LayoutParams? = nil {
-        didSet { saveLayout(.playback) }
+        didSet { saveLayout() }
     }
 
     private var _applyingLayout = false
 
-    /// Layout to use for the current mode. Playback uses browsing until user customizes during playback.
-    var effectiveLayout: LayoutParams {
-        // Only detail-pane playback swaps to the playback layout. Overlay and fullscreen keep the
-        // browser/detail widths exactly as the user left them.
-        if inlinePlaybackReshapesBrowser {
-            return playbackLayout ?? browsingLayout
-        }
-        return browsingLayout
-    }
+    /// The single live layout. Playback no longer reshapes the browser (Wall + Inspector layout), so
+    /// browsing and playback share one layout.
+    var effectiveLayout: LayoutParams { browsingLayout }
 
     var effectiveDetailHeight: CGFloat { CGFloat(effectiveLayout.detailVideoHeight) }
     var effectiveDetailWidth: CGFloat { CGFloat(effectiveLayout.detailColumnWidth(for: viewMode)) }
@@ -737,19 +701,13 @@ final class LibraryViewModel {
         }
     }
 
-    private enum LayoutMode { case browsing, playback }
     private var layoutSaveTask: DispatchWorkItem?
 
-    private func saveLayout(_ mode: LayoutMode) {
+    private func saveLayout() {
         layoutSaveTask?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            let layout: LayoutParams
-            switch mode {
-            case .browsing: layout = self.browsingLayout
-            case .playback: guard let p = self.playbackLayout else { return }; layout = p
-            }
-            Self.encodeLayoutToUserDefaults(layout, mode: mode)
+            Self.encodeLayoutToUserDefaults(self.browsingLayout)
         }
         layoutSaveTask = work
         // Next run loop coalesces rapid updates; no delay so quit-after-drag still persists.
@@ -757,11 +715,10 @@ final class LibraryViewModel {
     }
 
     /// Writes layout JSON immediately (used when split views report sizes; does not rely on `didSet` / debounce).
-    private static func encodeLayoutToUserDefaults(_ layout: LayoutParams, mode: LayoutMode) {
+    private static func encodeLayoutToUserDefaults(_ layout: LayoutParams) {
         let safe = layout.sanitized()
         guard let data = try? JSONEncoder().encode(safe) else { return }
-        let key = mode == .browsing ? browsingLayoutKey : playbackLayoutKey
-        UserDefaults.standard.set(data, forKey: key)
+        UserDefaults.standard.set(data, forKey: browsingLayoutKey)
     }
 
     /// Apply a layout to the live UI properties. Call when switching modes.
@@ -781,21 +738,6 @@ final class LibraryViewModel {
         }
     }
 
-    /// Re-applies list `Table` column widths after inline playback (SwiftUI can reset widths when the browser column unfreezes).
-    func reapplyListColumnCustomizationAfterPlaybackExit() {
-        guard viewMode == .list else { return }
-        // Restore the *browsing* column layout. Dragging the splitter during detail-pane playback reflows the
-        // list to the (narrower) playback width, and SwiftUI writes those auto-fit widths into
-        // `playbackLayout`'s column data — they must not leak back out on exit. `browsingLayout` still holds
-        // the user's pre-playback column setup, which is the layout to come home to.
-        guard let blob = browsingLayout.columnCustomizationData, !blob.isEmpty else { return }
-        guard let saved = try? JSONDecoder().decode(TableColumnCustomization<Video>.self, from: blob) else { return }
-        _applyingLayout = true
-        columnCustomization = saved
-        _applyingLayout = false
-        updateCurrentLayoutFromLive()
-    }
-
     /// Persist current live values (view mode, grid size, sidebar, columns) to the active mode's layout.
     func updateCurrentLayoutFromLive() {
         let base = effectiveLayout
@@ -813,12 +755,7 @@ final class LibraryViewModel {
             viewMode: viewMode.rawValue,
             gridSize: gridSize.rawValue
         )
-        let safe = layout.sanitized()
-        if isPlayingInline {
-            playbackLayout = safe
-        } else {
-            browsingLayout = safe
-        }
+        browsingLayout = layout.sanitized()
     }
 
     /// Update layout with new size values from resize gestures. Call when user drags a divider.
@@ -855,14 +792,9 @@ final class LibraryViewModel {
         }
         if let h = detailVideoHeight { updated.detailVideoHeight = Double(h) }
         let fixed = updated.sanitized()
-        if isPlayingInline {
-            playbackLayout = fixed
-            Self.encodeLayoutToUserDefaults(fixed, mode: .playback)
-        } else {
-            browsingLayout = fixed
-            // Always persist split sizes immediately (Observable may coalesce equal structs; didSet save is async).
-            Self.encodeLayoutToUserDefaults(fixed, mode: .browsing)
-        }
+        browsingLayout = fixed
+        // Always persist split sizes immediately (Observable may coalesce equal structs; didSet save is async).
+        Self.encodeLayoutToUserDefaults(fixed)
     }
 
     func savePreferences() {
@@ -1001,24 +933,6 @@ final class LibraryViewModel {
             if let sizeRaw = defaults.string(forKey: Self.gridSizeKey),
                let _ = GridSize(rawValue: sizeRaw) { migrated.gridSize = sizeRaw }
             browsingLayout = migrated.sanitized()
-        }
-        if let data = defaults.data(forKey: Self.playbackLayoutKey),
-           let layout = try? JSONDecoder().decode(LayoutParams.self, from: data)
-        {
-            playbackLayout = layout.sanitized()
-        } else {
-            // Migrate playback from legacy when-playing keys
-            let h = defaults.object(forKey: "VideoMaster.detailHeightWhenPlaying") as? Double
-            let w = defaults.object(forKey: "VideoMaster.detailWidthWhenPlaying") as? Double
-            if h != nil || w != nil {
-                var p = LayoutParams.from(playback: browsingLayout)
-                if let h = h, h > 0 { p.detailVideoHeight = h }
-                if let w = w, w > 0 {
-                    p.detailWidthGrid = w
-                    p.detailWidthList = w
-                }
-                playbackLayout = p.sanitized()
-            }
         }
         applyLayout(browsingLayout)
     }

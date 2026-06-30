@@ -231,7 +231,8 @@ private struct LibraryContentView: View {
                 detailWidth: browsingSplitDetailWidth,
                 contentID: "curatedWall",
                 detailID: detailID,
-                freezeContent: vm.inlinePlaybackReshapesBrowser,
+                // Playback no longer reshapes the browser, so the wall never needs freezing during play.
+                freezeContent: false,
                 onSizesChanged: { browserW, detailW in
                     vm.updateCurrentLayoutWithSizes(sidebarWidth: nil, contentWidth: browserW, detailWidth: detailW)
                 },
