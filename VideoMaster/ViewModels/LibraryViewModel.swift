@@ -268,6 +268,7 @@ final class LibraryViewModel {
     private static let playerFloatingWidthKey = "VideoMaster.playerFloatingWidth"
     private static let playerFloatingHeightKey = "VideoMaster.playerFloatingHeight"
     private static let playerStartPreferenceKey = "VideoMaster.playerStartPreference"
+    private static let playerSizeIsCompactKey = "VideoMaster.playerSizeIsCompact"
     private static let fadeResumeBannerAutomaticallyKey = "VideoMaster.fadeResumeBannerAutomatically"
     private static let resumeBannerFadeDelaySecondsKey = "VideoMaster.resumeBannerFadeDelaySeconds"
     private static let recentlyAddedDaysKey = "VideoMaster.recentlyAddedDays"
@@ -482,10 +483,15 @@ final class LibraryViewModel {
     /// True while the player is in true (borderless, edge-to-edge) full-screen.
     var isPlayerFullScreen: Bool = false
 
-    /// Set on playback start so the panel snaps to the compact (inspector) footprint on its first
-    /// appearance; cleared after applying. Transient — not persisted, and not re-applied on the
-    /// full-screen round-trip.
-    @ObservationIgnored var pendingApplyCompactSize: Bool = false
+    /// Sticky "compact" mode: while true the player's size *is* the live inspector still/filmstrip
+    /// footprint (so it follows the wall/inspector splitter). Cleared when the user picks an explicit
+    /// size (S/M/L preset or a manual resize). Persisted so it survives across launches.
+    var playerSizeIsCompact: Bool = false {
+        didSet {
+            guard playerSizeIsCompact != oldValue else { return }
+            UserDefaults.standard.set(playerSizeIsCompact, forKey: Self.playerSizeIsCompactKey)
+        }
+    }
 
     /// Preferred size the player opens at when playback starts.
     var playerStartPreference: PlayerStartPreference = .lastSize {
@@ -869,6 +875,9 @@ final class LibraryViewModel {
         if let raw = defaults.string(forKey: Self.playerStartPreferenceKey),
            let pref = PlayerStartPreference(rawValue: raw) {
             playerStartPreference = pref
+        }
+        if defaults.object(forKey: Self.playerSizeIsCompactKey) != nil {
+            playerSizeIsCompact = defaults.bool(forKey: Self.playerSizeIsCompactKey)
         }
         if defaults.object(forKey: Self.fadeResumeBannerAutomaticallyKey) != nil {
             fadeResumeBannerAutomatically = defaults.bool(forKey: Self.fadeResumeBannerAutomaticallyKey)

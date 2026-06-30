@@ -266,11 +266,11 @@ private struct LibraryContentView: View {
                     let seek = vm.pendingFilmstripSeekSeconds ?? 0
                     vm.pendingFilmstripSeekSeconds = nil
                     vm.playback.start(video: v, at: seek)
-                    // Apply the starting-size preference. `.lastSize` keeps the persisted size as-is;
-                    // `.compact` is applied by the panel on appear (it knows the inspector footprint).
+                    // Apply the starting-size preference. `.lastSize` keeps whatever the player was
+                    // last left at (including sticky compact mode); `.compact` re-enables compact.
                     switch vm.playerStartPreference {
                     case .fullScreen: vm.isPlayerFullScreen = true
-                    case .compact: vm.pendingApplyCompactSize = true
+                    case .compact: vm.playerSizeIsCompact = true
                     case .lastSize: break
                     }
                 } else {

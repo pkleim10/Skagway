@@ -37,6 +37,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
   - **True full-screen carry-across**: going full-screen moves the *same* player into a borderless edge-to-edge window (no restart; position + subtitles preserved). Esc stops playback and closes; the bottom-right button exits back to the windowed player still playing.
   - The inspector hero is now still/filmstrip only; the player floats above it. Filmstrip click and hero tap start playback carrying the clicked seek time. Removed the obsolete inspector "overlay" action button.
   - **Settings → Playback**: "Player opens at" preference — Compact / Full screen / Last used size.
+  - **Compact is a sticky mode**: while active, the player's size *is* the live inspector still/filmstrip footprint, so it follows the wall/inspector splitter in lockstep (and stays current whether or not the player is visible). Picking S/M/L or drag-resizing exits compact mode; the mode persists across launches.
   - Restart-from-beginning is the ⌘⌥R menu command (Shift+Space proved unreliable on Space in this path).
   - Still to come: removing the old three-mode machinery + dead `VideoDetailView`.
 

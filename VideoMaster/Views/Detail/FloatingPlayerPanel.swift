@@ -41,7 +41,13 @@ struct FloatingPlayerPanel: View {
                height: min(max(s.height, minSize.height), maxSize.height))
     }
 
-    private var size: CGSize { clamp(dragSize ?? viewModel.playerFloatingSize) }
+    private var size: CGSize {
+        // While dragging, use the live drag size. In sticky compact mode the size *is* the inspector
+        // footprint (recomputed from the splitter, so it follows it). Otherwise the persisted free size.
+        if let dragSize { return dragSize }
+        if viewModel.playerSizeIsCompact { return compactSize }
+        return clamp(viewModel.playerFloatingSize)
+    }
 
     var body: some View {
         OverlayInlinePlayerView(video: video, viewModel: viewModel)
@@ -55,21 +61,13 @@ struct FloatingPlayerPanel: View {
             .overlay(alignment: .bottomLeading) { resizeHandle }
             .shadow(color: .black.opacity(0.45), radius: 18, x: 0, y: 8)
             .padding(outerPadding)
-            .onAppear {
-                // Apply the "compact" start preference here (the panel knows the inspector footprint).
-                // Gated on the flag so it fires only on playback start, not on the full-screen round-trip.
-                if viewModel.pendingApplyCompactSize {
-                    viewModel.pendingApplyCompactSize = false
-                    viewModel.playerFloatingSize = compactSize
-                }
-            }
     }
 
-    // Compact (snap to inspector footprint) + size presets + full-screen.
+    // Compact (snap + track inspector footprint) + size presets + full-screen.
     private var presets: some View {
         HStack(spacing: 4) {
-            iconButton("rectangle", help: "Compact (fit to inspector)") {
-                viewModel.playerFloatingSize = compactSize
+            iconButton("rectangle", help: "Compact (follows the inspector width)") {
+                viewModel.playerSizeIsCompact = true
             }
             presetButton("S", fraction: 0.45)
             presetButton("M", fraction: 0.66)
@@ -98,6 +96,7 @@ struct FloatingPlayerPanel: View {
             let w = (available.width - outerPadding * 2) * fraction
             // ~16:9 video plus the compact header strip.
             let h = w * 9.0 / 16.0 + 28
+            viewModel.playerSizeIsCompact = false   // explicit size exits sticky compact mode
             viewModel.playerFloatingSize = clamp(CGSize(width: w, height: h))
         }
         .font(.caption2.weight(.semibold))
@@ -121,8 +120,13 @@ struct FloatingPlayerPanel: View {
                 // sub-pixel thrash of the live-resizing player layer.
                 DragGesture(minimumDistance: 1, coordinateSpace: .global)
                     .onChanged { value in
+                        if dragStartSize == nil {
+                            // Start from the current effective size (compact footprint or free size)
+                            // and leave sticky compact mode — this becomes a manual size.
+                            dragStartSize = size
+                            viewModel.playerSizeIsCompact = false
+                        }
                         let base = dragStartSize ?? viewModel.playerFloatingSize
-                        if dragStartSize == nil { dragStartSize = base }
                         // Top-right anchored: drag the handle left to widen, down to grow taller.
                         let proposed = CGSize(width: (base.width - value.translation.width).rounded(),
                                               height: (base.height + value.translation.height).rounded())
