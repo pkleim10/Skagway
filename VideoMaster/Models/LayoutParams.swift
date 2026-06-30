@@ -18,8 +18,9 @@ struct LayoutParams: Equatable {
     var gridSize: String
 
     static let defaultSidebarWidth: Double = 220
-    static let defaultContentWidth: Double = 480
-    static let defaultDetailWidth: Double = 480
+    // Curated Wall bias: give the browsing wall more room for elegant ~5-column gallery.
+    static let defaultContentWidth: Double = 620
+    static let defaultDetailWidth: Double = 420
     /// Default height for list/grid above the filter strip (left column vertical split).
     static let defaultBrowserTopPaneHeight: Double = 360
     static let defaultDetailVideoHeight: Double = 336

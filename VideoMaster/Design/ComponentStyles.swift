@@ -123,6 +123,46 @@ extension View {
             )
     }
 
+    /// Elegant gallery-style card for the Curated Wall browsing surface.
+    /// Lighter visual weight than the regular grid cell, more breathing room, soft selection.
+    func appWallCard(isSelected: Bool, isHovering: Bool) -> some View {
+        let base = self
+            .background(
+                isSelected
+                    ? Color.appAccent.opacity(0.08)
+                    : (isHovering ? Color.appSurface.opacity(0.85) : Color.appSurface.opacity(0.6))
+            )
+            .clipShape(RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                    .stroke(
+                        isSelected ? Color.appAccent.opacity(0.55) : Color.appDivider.opacity(isHovering ? 0.5 : 0.25),
+                        lineWidth: isSelected ? 1.5 : 1
+                    )
+            )
+        return base
+    }
+
+    /// Container treatment for the Curated Wall Inspector panel.
+    func appInspectorPanel() -> some View {
+        self
+            .background(Material.appSubtleGlass)
+            .background(Color.appSurface.opacity(0.7))
+            .clipShape(RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous))
+            .appElevation(.card)
+            .overlay(
+                RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
+                    .stroke(Color.appAccent.opacity(0.10), lineWidth: 1)
+            )
+    }
+
+    /// Section header treatment inside the inspector (Rating, Tags, Notes, etc.).
+    func appInspectorSectionHeader() -> some View {
+        self
+            .font(.headline)
+            .foregroundStyle(Color.appAccent)
+    }
+
     /// Optional blue gradient overlay treatment (use sparingly in grid for perf).
     func appBlueGradientOverlay(opacity: Double = 0.15) -> some View {
         self.overlay(

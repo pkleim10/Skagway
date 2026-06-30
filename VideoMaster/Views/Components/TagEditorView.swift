@@ -50,6 +50,8 @@ struct TagToggleChip: View {
                     .font(.caption)
                     .fontWeight(isActive ? .semibold : .regular)
                     .foregroundStyle(isActive ? Color.white : Color.appTextPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)

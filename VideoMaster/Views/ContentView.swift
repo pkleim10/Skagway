@@ -28,6 +28,15 @@ private struct LibraryContentView: View {
     @State private var showListColumnsSheet = false
     @FocusState private var isSearchFocused: Bool
 
+    /// Local presentation flag for the filters drawer (discrete).
+    @State private var isFiltersDrawerOpen = false
+
+    /// Interpolated 0...1 value that drives smooth height/offset animations for the drawer well.
+    /// Using a CGFloat animated via withAnimation gives the view modifiers interpolated values
+    /// each frame, so the drawer grows its height gradually instead of appearing full-size instantly,
+    /// and the grid/list below is pushed at a matching rate.
+    @State private var drawerReveal: CGFloat = 0
+
     /// The video shown in the detail pane / overlay (primary selection). Shared by `detailContent` and the overlay.
     private var selectedVideo: Video? {
         guard let id = vm.lastSelectedVideoId ?? vm.selectedVideoIds.first else { return nil }
@@ -61,37 +70,179 @@ private struct LibraryContentView: View {
         CGFloat(vm.browsingLayout.browserTopPaneHeight(for: vm.viewMode))
     }
 
+    /// Duration for the Curated Wall top filters drawer slide animation (open and close).
+    /// A deliberate, visible slide — was previously too fast at 0.22s.
+    private static let drawerAnimationDuration: Double = 0.38
+
+    /// Reusable styled search field (cinematic blue focus ring, clear affordance).
+    /// Used both in the regular nav bar and inline in the Curated Wall thin header.
+    private var searchField: some View {
+        HStack(spacing: AppSpacing.xs) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(Color.appTextTertiary)
+                .font(.callout)
+            TextField("Search videos", text: $vm.searchText)
+                .textFieldStyle(.plain)
+                .foregroundStyle(Color.appTextPrimary)
+                .tint(Color.appAccent)
+                .focused($isSearchFocused)
+            if !vm.searchText.isEmpty {
+                Button {
+                    vm.searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(Color.appTextTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, AppSpacing.sm)
+        .padding(.vertical, 4)
+        .background(Color.appSurface.opacity(0.65))
+        .clipShape(RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                .stroke(isSearchFocused ? Color.appAccent.opacity(0.55) : Color.appAccent.opacity(0.18), lineWidth: isSearchFocused ? 1.5 : 1)
+        )
+        .frame(minWidth: 160, idealWidth: 220)
+    }
+
+    /// Thin header bar for Curated Wall: List/Wall toggle + inline search + count + Filters toggle.
+    /// Matches the layout in the wireframe mock (search is inline in the same row as the mode selector and filter button).
+    /// The same button opens *and* closes the top drawer. Icon and help update with state.
+    private var curatedHeaderBar: some View {
+        HStack(spacing: 8) {
+            AppSegmentedControl(
+                selection: Binding(
+                    get: { vm.viewMode },
+                    set: { newValue in
+                        vm.viewMode = newValue
+                        vm.savePreferences()
+                    }
+                ),
+                items: [ViewMode.list, .grid]
+            ) { mode in
+                switch mode {
+                case .list: Label("List", systemImage: "list.bullet")
+                case .grid: Label("Wall", systemImage: "square.grid.2x2")
+                }
+            }
+            .controlSize(.small)
+
+            // Search is placed inline here (after the mode picker, before right-aligned actions)
+            // to match the Curated Wall wireframe mockup.
+            searchField
+
+            Spacer()
+
+            // Video count (light)
+            Text("\(vm.filteredVideos.count) videos")
+                .font(.system(size: 10))
+                .foregroundStyle(Color.appTextTertiary)
+                .monospacedDigit()
+                .padding(.trailing, 4)
+
+            // The single toggle for the top filters drawer.
+            // Closed -> filter icon; Open -> close (X) icon. Always live filters, no Apply step.
+            Button {
+                // Just flip the model flag. The .onChange below will drive the slide animation
+                // (offset + height) with the proper duration and a clean transaction.
+                vm.isCuratedWallFiltersDrawerOpen.toggle()
+            } label: {
+                if vm.isCuratedWallFiltersDrawerOpen {
+                    Image(systemName: "xmark.circle")
+                } else {
+                    Image(systemName: vm.hasActiveFilters ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                }
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.appTextSecondary)
+            .help(vm.isCuratedWallFiltersDrawerOpen
+                  ? "Close filters (⌘⇧F)"
+                  : "Show filters (⌘⇧F)")
+            .keyboardShortcut("f", modifiers: [.command, .shift])
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 3)
+        .background(Color.appSurface.opacity(0.35))
+    }
+
+    /// The full browsing surface for the Curated Wall: header bar + optional top drawer + optional active pills + grid/list.
+    /// Replaces the previous vertical split + bottom filter strip for this variant.
+    private var wallBrowserPane: some View {
+        VStack(spacing: 0) {
+            curatedHeaderBar
+
+            // Drawer well — the expanding slot directly under the thin header.
+            // Goal: a clean, "wow" slide where the filter panel drops down from under the header
+            // while smoothly pushing the grid/list below. No full pane flash, no "appears then pushes".
+            //
+            // How:
+            // - The drawer is *always* laid out at its full height (stable layout, no mid-animation reflow of its sections/grids).
+            // - We slide it into view with a changing offset: starts fully above the well, moves downward as the well opens.
+            // - The well's own height grows from 0→320; because it's in the VStack, this reserves space and pushes the wall content down in lockstep.
+            // - `.clipped()` hides the portion that is still "above" the visible well rect.
+            // - Everything is driven from the single interpolated `drawerReveal` (0...1) so the visual slide and the layout push are perfectly synchronized.
+            let reveal = drawerReveal
+            let fullH: CGFloat = 320
+            let shownH = fullH * reveal
+
+            ZStack(alignment: .top) {
+                CuratedWallFiltersDrawer(viewModel: vm)
+                    .frame(height: fullH, alignment: .top)   // full layout (no squish/reflow)
+                    .offset(y: shownH - fullH)               // -fullH (above, hidden) → 0 (fully visible in well)
+                    .opacity(reveal)
+            }
+            .frame(height: shownH, alignment: .top)
+            .clipped()
+            .zIndex(1)   // ensure the sliding drawer draws above the grid/list during the push (prevents any "behind" flash)
+            .animation(.easeInOut(duration: Self.drawerAnimationDuration), value: reveal)
+
+            // Pills live in their own slot and only when the drawer is fully closed.
+            // Use reveal so pills don't pop in while the drawer is still sliding away.
+            if reveal < 0.001 && vm.hasActiveFilters {
+                ActiveFilterPills(viewModel: vm)
+                    .transition(.opacity)
+            }
+
+            if vm.viewMode == .grid {
+                CuratedWallGrid(viewModel: vm, thumbnailService: thumbService)
+            } else {
+                LibraryListView(
+                    viewModel: vm,
+                    thumbnailService: thumbService,
+                    scrollPositionRow: $listScrollPositionRow
+                )
+            }
+        }
+        // Animate the pane layout (grid/list position) in response to the reveal factor.
+        // This makes the wall content rise/fall smoothly as the well above it changes height.
+        .animation(.easeInOut(duration: Self.drawerAnimationDuration), value: drawerReveal)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            // Browser column = list/grid + bottom filter columns; detail = right pane.
-            // Persists via `LayoutParams` (content/detail widths + `browserTopPaneHeight{Grid,List}`).
+            // Curated Wall layout (bold dedicated implementation)
+            // Left: elegant gallery "Wall"  |  Right: focused Inspector
+            // Matches the refined mockups as closely as we can get.
             ResizableBrowserDetailSplitView(
                 layoutModeKey: vm.viewMode.rawValue,
                 contentWidth: browsingSplitContentWidth,
                 detailWidth: browsingSplitDetailWidth,
-                contentID: "browserShell",
+                contentID: "curatedWall",
                 detailID: detailID,
                 freezeContent: vm.inlinePlaybackReshapesBrowser,
                 onSizesChanged: { browserW, detailW in
                     vm.updateCurrentLayoutWithSizes(sidebarWidth: nil, contentWidth: browserW, detailWidth: detailW)
                 },
                 content: {
-                    ResizableVerticalSplitView(
-                        layoutModeKey: vm.viewMode.rawValue,
-                        topPaneHeight: browsingSplitTopPaneHeight,
-                        topID: vm.viewMode.rawValue,
-                        bottomID: filterStripHostID,
-                        expandFilterStrip: vm.showFilterStrip,
-                        onTopHeightChanged: { h in
-                            vm.updateCurrentLayoutWithSizes(browserTopPaneHeight: h)
-                        },
-                        top: { libraryContent },
-                        bottom: {
-                            BottomFilterColumnsView(viewModel: vm)
-                        }
-                    )
+                    // Curated Wall uses a top-descending live filters drawer instead of a persistent bottom strip.
+                    // Drawer always starts closed; toggle via button or ⌘⇧F. Changes are live.
+                    wallBrowserPane
                 },
-                detail: { detailContent }
+                detail: {
+                    CuratedWallInspector(video: selectedVideo, viewModel: vm, thumbnailService: thumbService)
+                }
             )
             .overlay {
                 // Floating overlay player: covers only its trailing panel, leaving the browser/detail beneath
@@ -105,9 +256,25 @@ private struct LibraryContentView: View {
             }
             .navigationTitle(navigationTitle)
 
-            statusBar(vm: vm)
+            // Hidden for Curated Wall to keep the gallery + inspector clean (per mock aesthetic)
+            // statusBar(vm: vm)
         }
-        .task { vm.startObserving() }
+        .task {
+            vm.startObserving()
+            // Curated Wall: always start with the top filters drawer closed (per spec).
+            // Drawer state is intentionally not persisted. Set both directly (no animation on init).
+            vm.isCuratedWallFiltersDrawerOpen = false
+            isFiltersDrawerOpen = false
+            drawerReveal = 0
+        }
+        .onChange(of: vm.isCuratedWallFiltersDrawerOpen) { _, newValue in
+            // Animate the reveal factor. The well and drawer heights are driven from this CGFloat,
+            // so we get smooth per-frame interpolated sizes instead of a full-height pop followed by a push.
+            withAnimation(.easeInOut(duration: Self.drawerAnimationDuration)) {
+                isFiltersDrawerOpen = newValue
+                drawerReveal = newValue ? 1 : 0
+            }
+        }
         .onAppear {
             guard keyDownMonitor == nil else { return }
             let lvm = vm
@@ -186,35 +353,8 @@ private struct LibraryContentView: View {
                 .appNavBarButton()
                 .fixedSize()
 
-            // Custom search field (replaces stock .searchable for full Cinematic Blue styling)
-            HStack(spacing: AppSpacing.xs) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(Color.appTextTertiary)
-                    .font(.callout)
-                TextField("Search videos", text: $vm.searchText)
-                    .textFieldStyle(.plain)
-                    .foregroundStyle(Color.appTextPrimary)
-                    .tint(Color.appAccent)
-                    .focused($isSearchFocused)
-                if !vm.searchText.isEmpty {
-                    Button {
-                        vm.searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(Color.appTextTertiary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, AppSpacing.sm)
-            .padding(.vertical, 4)
-            .background(Color.appSurface.opacity(0.65))
-            .clipShape(RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                    .stroke(isSearchFocused ? Color.appAccent.opacity(0.55) : Color.appAccent.opacity(0.18), lineWidth: isSearchFocused ? 1.5 : 1)
-            )
-            .frame(minWidth: 160, idealWidth: 220)
+            // Reusable search (styled once, used here and inline in the Curated Wall header)
+            searchField
 
             Spacer()
 
@@ -389,9 +529,11 @@ private struct LibraryContentView: View {
                 }
                 .frame(minWidth: 80)
                 .contextMenu {
-                    Button(vm.showFilterStrip ? "Collapse Filter Strip" : "Expand Filter Strip") {
-                        vm.showFilterStrip.toggle()
+                    Button(vm.isCuratedWallFiltersDrawerOpen ? "Close Filters" : "Open Filters") {
+                        // Model flip only; .onChange drives the animated slide.
+                        vm.isCuratedWallFiltersDrawerOpen.toggle()
                     }
+                    .keyboardShortcut("f", modifiers: [.command, .shift])
                 }
     }
 
@@ -495,6 +637,17 @@ private struct LibraryContentView: View {
             }
             return nil
         }
+
+        // ⌘⇧F — toggle the Curated Wall top filters drawer (live filters, always starts closed).
+        // This is a fallback in addition to the .keyboardShortcut on the button.
+        if event.modifierFlags.contains([.command, .shift]), event.keyCode == 3 /* 'f' */ {
+            // Just set the flag; the onChange handler will start the slide animation with the right duration.
+            DispatchQueue.main.async {
+                lvm.isCuratedWallFiltersDrawerOpen.toggle()
+            }
+            return nil
+        }
+
         // Grid ↑/↓ selection is handled by `LibraryGridView` (`.focusable` + `.onKeyPress`) so keys reach
         // the same SwiftUI focus system as the scroll view; local monitors are unreliable here.
         return event

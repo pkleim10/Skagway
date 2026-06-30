@@ -29,6 +29,11 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ---
 
+## Unreleased
+
+- Curated Wall filters drawer: arranged the filter cards (Smart Libraries · Collections · Rating + Duration · Tags) so they **reflow responsively and pack column-major**, preserving reading order as the wall narrows — 4-across when wide, collapsing to 3 columns (`[Smart+Collections] [Rating+Duration] [Tags]`), then 2, then a single stacked column. Each column sizes to its widest card and cards fill their column width (no shrinkwrapping), so the drawer stays readable at any pane width instead of squishing.
+- Curated Wall: removed the redundant in-wall header strip (its "Search wall" field and video count duplicated the search + count already in the thin capability bar above). The wall surface now begins directly with the gallery grid.
+
 ## 0.15.0 (build 410) - 2026-06-28
 
 - UI (floating overlay player): Made the overlay player panel much more "intentional" as a first-class cinematic object.
@@ -209,8 +214,6 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
   - Left blue accent bars added to all section headers (Details, Custom, Rating, Tags).
   - Metadata rows made more scannable (uppercase labels, medium weight values).
   - Build 385.
-
-## Unreleased
 
 ## 0.14.1 (378) - 2026-06-27
 

@@ -82,6 +82,18 @@ final class LibraryViewModel {
     var selectedRatingStars: Set<Int> = [] {
         didSet { recomputeFilteredVideos() }
     }
+
+    /// Duration range filter (in seconds). nil means no bound. Live updates wall.
+    var minDurationSeconds: Double? = nil {
+        didSet { recomputeFilteredVideos() }
+    }
+    var maxDurationSeconds: Double? = nil {
+        didSet { recomputeFilteredVideos() }
+    }
+
+    /// Controls the top-descending filters drawer for the Curated Wall variant.
+    /// Always forced closed on appearance (not persisted). Toggle via header button or ⌘⇧F.
+    var isCuratedWallFiltersDrawerOpen: Bool = false
     var ffmpegUserPath: String = "" {
         didSet { UserDefaults.standard.set(ffmpegUserPath, forKey: Self.ffmpegPathKey) }
     }
@@ -1113,7 +1125,9 @@ final class LibraryViewModel {
             recentlyAddedDays: recentlyAddedDays,
             recentlyPlayedDays: recentlyPlayedDays,
             topRatedMinRating: topRatedMinRating,
-            recentlyConvertedDates: recentlyConvertedEntries.reduce(into: [:]) { dict, e in dict[e.path] = e.date }
+            recentlyConvertedDates: recentlyConvertedEntries.reduce(into: [:]) { dict, e in dict[e.path] = e.date },
+            minDurationSeconds: minDurationSeconds,
+            maxDurationSeconds: maxDurationSeconds
         )
         let repo = collectionRepo
 
@@ -1146,6 +1160,8 @@ final class LibraryViewModel {
         let recentlyPlayedDays: Int
         let topRatedMinRating: Int
         let recentlyConvertedDates: [String: Date]
+        let minDurationSeconds: Double?
+        let maxDurationSeconds: Double?
     }
 
     /// Multiple star levels are OR’d: video is included if its rating is in the selected set.
@@ -1246,6 +1262,14 @@ final class LibraryViewModel {
         }
 
         baseResult = Self.applyRatingFilter(selectedStars: snapshot.selectedRatingStars, base: baseResult)
+
+        // Duration range (seconds). Applied after rating for consistency with other independent filters.
+        if let minD = snapshot.minDurationSeconds {
+            baseResult = baseResult.filter { ($0.duration ?? 0) >= minD }
+        }
+        if let maxD = snapshot.maxDurationSeconds {
+            baseResult = baseResult.filter { ($0.duration ?? 0) <= maxD }
+        }
 
         let tagCounts = computeTagCounts(snapshot: snapshot, baseVideos: baseResult)
 
@@ -1441,6 +1465,14 @@ final class LibraryViewModel {
             break
         }
         result = Self.applyRatingFilter(selectedStars: selectedRatingStars, base: result)
+
+        if let minD = minDurationSeconds {
+            result = result.filter { ($0.duration ?? 0) >= minD }
+        }
+        if let maxD = maxDurationSeconds {
+            result = result.filter { ($0.duration ?? 0) <= maxD }
+        }
+
         return result
     }
 
@@ -2315,15 +2347,42 @@ final class LibraryViewModel {
         !selectedRatingStars.isEmpty
     }
 
+    /// True if any non-search filter is active (sidebar/collection, tags, rating, or duration).
+    /// Used for badge on Filters button and for showing the pills row.
+    var hasActiveFilters: Bool {
+        if case .collection = sidebarFilter { return true }
+        if sidebarFilter != nil && sidebarFilter != .all { return true }
+        if !selectedTagIds.isEmpty { return true }
+        if !selectedRatingStars.isEmpty { return true }
+        if minDurationSeconds != nil || maxDurationSeconds != nil { return true }
+        return false
+    }
+
     /// Clears the per-star rating filter (filter strip → Rating).
     func clearRatingFilter() {
         selectedRatingStars = []
+    }
+
+    func clearDurationFilter() {
+        minDurationSeconds = nil
+        maxDurationSeconds = nil
     }
 
     /// Clears tag filters and the per-star rating filter (View menu **⌘⌥C**).
     func clearFilters() {
         clearTagFilters()
         clearRatingFilter()
+        clearDurationFilter()
+        // Note: we intentionally do not reset sidebarFilter here; caller can do if desired.
+    }
+
+    /// Resets all filters (sidebar to All, tags, rating, duration). Useful for "Clear all" in drawer.
+    func resetAllFilters() {
+        sidebarFilter = .all
+        selectedTagIds = []
+        selectedRatingStars = []
+        minDurationSeconds = nil
+        maxDurationSeconds = nil
     }
 
     func deleteTag(_ tag: Tag) async {
