@@ -355,7 +355,7 @@ struct CuratedWallInspector: View {
                 LazyVGrid(columns: tagColumns, alignment: .leading, spacing: 4) {
                     ForEach(sorted) { tag in
                         let applied = isTagAppliedToSelection(tag)
-                        Button {
+                        InspectorTagChip(tag: tag, applied: applied) {
                             Task {
                                 if applied {
                                     await viewModel.removeTag(tag, fromVideos: selectedIds)
@@ -364,21 +364,7 @@ struct CuratedWallInspector: View {
                                 }
                                 // re-render will pick up via tagsForVideos
                             }
-                        } label: {
-                            Text(tag.name)
-                                .font(.caption)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(applied ? Color.appAccent.opacity(0.18) : Color.appSurface.opacity(0.65))
-                                .overlay(
-                                    Capsule().stroke(applied ? Color.appAccent.opacity(0.5) : Color.clear, lineWidth: 1)
-                                )
-                                .clipShape(Capsule())
                         }
-                        .buttonStyle(.plain)
-                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
@@ -438,5 +424,77 @@ struct CuratedWallInspector: View {
                 .foregroundStyle(Color.appTextSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// A tag chip in the inspector's Tags section. Preserves the existing capsule appearance and,
+/// like the filters-drawer chip, reveals the full tag name in a small popover on hover — but
+/// only when the name is actually truncated, so it never just duplicates a name that fits.
+private struct InspectorTagChip: View {
+    let tag: Tag
+    let applied: Bool
+    let onToggle: () -> Void
+
+    @State private var isHovering = false
+    @State private var visibleTextWidth: CGFloat = 0
+    @State private var fullTextWidth: CGFloat = 0
+
+    private var isTruncated: Bool {
+        fullTextWidth > visibleTextWidth + 1
+    }
+
+    var body: some View {
+        Button(action: onToggle) {
+            Text(tag.name)
+                .font(.caption)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                // Measure rendered width vs. the full intrinsic width to detect truncation.
+                .background(widthReader($visibleTextWidth))
+                .background(
+                    Text(tag.name)
+                        .font(.caption)
+                        .fixedSize()
+                        .hidden()
+                        .background(widthReader($fullTextWidth))
+                )
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(applied ? Color.appAccent.opacity(0.18) : Color.appSurface.opacity(0.65))
+                .overlay(
+                    Capsule().stroke(applied ? Color.appAccent.opacity(0.5) : Color.clear, lineWidth: 1)
+                )
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onHover { hovering in
+            isHovering = hovering
+        }
+        .popover(
+            isPresented: Binding(
+                get: { isHovering && isTruncated },
+                set: { newValue in if !newValue { isHovering = false } }
+            ),
+            arrowEdge: .top
+        ) {
+            Text(tag.name)
+                .font(.caption)
+                .foregroundStyle(Color.appTextPrimary)
+                .fixedSize()
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+        }
+    }
+
+    /// Reports the rendered width of the view it backs into `width` (kept current on resize).
+    private func widthReader(_ width: Binding<CGFloat>) -> some View {
+        GeometryReader { proxy in
+            Color.clear
+                .onAppear { width.wrappedValue = proxy.size.width }
+                .onChange(of: proxy.size.width) { _, newValue in
+                    width.wrappedValue = newValue
+                }
+        }
     }
 }

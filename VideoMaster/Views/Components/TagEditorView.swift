@@ -39,8 +39,16 @@ struct TagToggleChip: View {
     let onToggle: (_ isAdding: Bool) -> Void
 
     // Tag chips truncate to a single line, so hovering reveals the full name in a small
-    // popover that escapes the tag card / drawer clipping bounds.
+    // popover that escapes the tag card / drawer clipping bounds. The popover is only offered
+    // when the name is actually truncated (see `isTruncated`), so it never just duplicates a
+    // name that already fits.
     @State private var isHovering = false
+    @State private var visibleTextWidth: CGFloat = 0
+    @State private var fullTextWidth: CGFloat = 0
+
+    private var isTruncated: Bool {
+        fullTextWidth > visibleTextWidth + 1
+    }
 
     var body: some View {
         Button {
@@ -56,6 +64,17 @@ struct TagToggleChip: View {
                     .foregroundStyle(isActive ? Color.white : Color.appTextPrimary)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    // Measure the rendered (constrained) width...
+                    .background(widthReader($visibleTextWidth))
+                    // ...against the full intrinsic width of an identical hidden copy.
+                    .background(
+                        Text(tag.name)
+                            .font(.caption)
+                            .fontWeight(isActive ? .semibold : .regular)
+                            .fixedSize()
+                            .hidden()
+                            .background(widthReader($fullTextWidth))
+                    )
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -66,7 +85,13 @@ struct TagToggleChip: View {
         .onHover { hovering in
             isHovering = hovering
         }
-        .popover(isPresented: $isHovering, arrowEdge: .top) {
+        .popover(
+            isPresented: Binding(
+                get: { isHovering && isTruncated },
+                set: { newValue in if !newValue { isHovering = false } }
+            ),
+            arrowEdge: .top
+        ) {
             // Compact, pill-height overlay showing the complete (untruncated) tag name.
             Text(tag.name)
                 .font(.caption)
@@ -74,6 +99,17 @@ struct TagToggleChip: View {
                 .fixedSize()
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
+        }
+    }
+
+    /// Reports the rendered width of the view it backs into `width` (kept current on resize).
+    private func widthReader(_ width: Binding<CGFloat>) -> some View {
+        GeometryReader { proxy in
+            Color.clear
+                .onAppear { width.wrappedValue = proxy.size.width }
+                .onChange(of: proxy.size.width) { _, newValue in
+                    width.wrappedValue = newValue
+                }
         }
     }
 }
