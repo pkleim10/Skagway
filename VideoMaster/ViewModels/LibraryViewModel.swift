@@ -140,6 +140,11 @@ final class LibraryViewModel {
     }
     var lastSelectedVideoId: String?
     var filmstripRefreshId: Int = 0
+
+    /// The single shared inline-playback engine. One player instance backs every playback host
+    /// (detail-pane hero, overlay panel, full-screen window) so behavior is identical across modes.
+    @ObservationIgnored private(set) lazy var playback = InlinePlaybackController(viewModel: self)
+
     var isPlayingInline: Bool = false {
         didSet {
             // Playback no longer reshapes the browser (Wall + Inspector layout): detail-pane plays inside
