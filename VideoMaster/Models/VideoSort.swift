@@ -57,11 +57,6 @@ enum ViewMode: String, CaseIterable {
     case grid, list
 }
 
-/// How inline playback opens. Mutually exclusive; surfaced as a 3-way control in the toolbar + ⌥⌘1/2/3.
-enum InlinePlaybackMode: CaseIterable {
-    case detailPane, overlay, fullScreen
-}
-
 enum GridSize: String, CaseIterable {
     case small, medium, large
 

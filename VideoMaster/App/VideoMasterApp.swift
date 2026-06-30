@@ -47,24 +47,6 @@ struct VideoMasterApp: App {
 
                 Divider()
 
-                Button("Play in Detail Pane") {
-                    appState.libraryViewModel?.setInlinePlaybackMode(.detailPane)
-                }
-                .keyboardShortcut("1", modifiers: [.command, .option])
-                .disabled(!appState.hasLibrary)
-
-                Button("Play in Overlay") {
-                    appState.libraryViewModel?.setInlinePlaybackMode(.overlay)
-                }
-                .keyboardShortcut("2", modifiers: [.command, .option])
-                .disabled(!appState.hasLibrary)
-
-                Button("Play in Full Screen") {
-                    appState.libraryViewModel?.setInlinePlaybackMode(.fullScreen)
-                }
-                .keyboardShortcut("3", modifiers: [.command, .option])
-                .disabled(!appState.hasLibrary)
-
                 Button("Restart from Beginning") {
                     appState.libraryViewModel?.playback.restartFromBeginning()
                 }

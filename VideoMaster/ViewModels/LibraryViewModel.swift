@@ -141,29 +141,16 @@ final class LibraryViewModel {
     var lastSelectedVideoId: String?
     var filmstripRefreshId: Int = 0
 
-    /// The single shared inline-playback engine. One player instance backs every playback host
-    /// (detail-pane hero, overlay panel, full-screen window) so behavior is identical across modes.
+    /// The single shared inline-playback engine. One player instance backs the resizable player
+    /// surface (in-window panel and the borderless full-screen window).
     @ObservationIgnored private(set) lazy var playback = InlinePlaybackController(viewModel: self)
 
-    var isPlayingInline: Bool = false {
-        didSet {
-            // Playback no longer reshapes the browser (Wall + Inspector layout): detail-pane plays inside
-            // the fixed inspector hero and overlay floats above, so neither moves the wall. The one thing
-            // still needed is a repaint after fullscreen: the borderless edge-to-edge window occludes the
-            // grid, and revealed cells can show stale/blank until they re-tile, so nudge them in place.
-            if inlinePlaybackMode == .fullScreen, oldValue, !isPlayingInline {
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(100))
-                    issueScrollCommand(.retile)
-                }
-            }
-        }
-    }
+    /// True while a video is playing in the resizable player. The player never reshapes the wall, so
+    /// this no longer needs a didSet (the full-screen-exit grid repaint lives in ContentView).
+    var isPlayingInline: Bool = false
     /// Set before `isPlayingInline = true` on filmstrip tap; consumed when creating the inline player (Space leaves nil → start at 0).
     var pendingFilmstripSeekSeconds: Double?
     var pendingAutoPlay: Bool = false
-    var inlinePlayPauseToggle: Int = 0
-    var inlineRestartFromBeginning: Int = 0
     var isEditingText: Bool = false
     var renamingVideoId: String?
     var renameText: String = ""
@@ -262,9 +249,6 @@ final class LibraryViewModel {
     private static let lastAppliedFilmstripRowsKey = "VideoMaster.lastAppliedFilmstripRows"
     private static let lastAppliedFilmstripColumnsKey = "VideoMaster.lastAppliedFilmstripColumns"
     private static let surpriseMeAutoPlaysKey = "VideoMaster.surpriseMeAutoPlays"
-    private static let playInlineStartsFullscreenKey = "VideoMaster.playInlineStartsFullscreen"
-    private static let playInlineInOverlayKey = "VideoMaster.playInlineInOverlay"
-    private static let overlayPlayerWidthKey = "VideoMaster.overlayPlayerWidth"
     private static let playerFloatingWidthKey = "VideoMaster.playerFloatingWidth"
     private static let playerFloatingHeightKey = "VideoMaster.playerFloatingHeight"
     private static let playerStartPreferenceKey = "VideoMaster.playerStartPreference"
@@ -408,63 +392,6 @@ final class LibraryViewModel {
     var surpriseMeAutoPlays: Bool = true {
         didSet {
             UserDefaults.standard.set(surpriseMeAutoPlays, forKey: Self.surpriseMeAutoPlaysKey)
-        }
-    }
-
-    /// When true, inline playback (detail pane / filmstrip) opens in a separate window and enters full screen immediately. Does not affect "Play Video" opening the default external app.
-    var playInlineStartsFullscreen: Bool = false {
-        didSet {
-            UserDefaults.standard.set(playInlineStartsFullscreen, forKey: Self.playInlineStartsFullscreenKey)
-        }
-    }
-
-    /// When true (and not fullscreen-start), inline playback floats as an overlay panel pinned to the trailing
-    /// edge with a draggable splitter, leaving the grid/list/detail untouched (no freeze/resize → no scroll loss).
-    var playInlineInOverlay: Bool = false {
-        didSet {
-            UserDefaults.standard.set(playInlineInOverlay, forKey: Self.playInlineInOverlayKey)
-        }
-    }
-
-    /// Single source of truth for "play in the floating overlay". Fullscreen-start takes precedence.
-    var inlineOverlayActive: Bool { playInlineInOverlay && !playInlineStartsFullscreen }
-
-    /// The three mutually-exclusive inline-playback modes, derived from the two booleans above. Surfaced as a
-    /// single segmented control in the toolbar + ⌥⌘1/2/3 menu commands.
-    var inlinePlaybackMode: InlinePlaybackMode {
-        if playInlineStartsFullscreen { return .fullScreen }
-        if playInlineInOverlay { return .overlay }
-        return .detailPane
-    }
-
-    /// Set the playback mode coherently across the two booleans. If a video is currently playing, the player
-    /// is relocated into the new mode (stop → restart, resuming from the saved position) — the clean teardown
-    /// before the new host mounts avoids two players running at once.
-    func setInlinePlaybackMode(_ mode: InlinePlaybackMode) {
-        guard mode != inlinePlaybackMode else { return }
-        let wasPlaying = isPlayingInline
-        if wasPlaying { isPlayingInline = false }
-        switch mode {
-        case .detailPane:
-            playInlineStartsFullscreen = false
-            playInlineInOverlay = false
-        case .overlay:
-            playInlineStartsFullscreen = false
-            playInlineInOverlay = true
-        case .fullScreen:
-            playInlineStartsFullscreen = true
-        }
-        if wasPlaying {
-            DispatchQueue.main.async { self.isPlayingInline = true }
-        }
-    }
-
-    /// Persisted width (points) of the overlay player panel; driven by the overlay's drag splitter.
-    var overlayPlayerWidth: CGFloat = 480 {
-        didSet {
-            let clamped = max(240, overlayPlayerWidth)
-            if clamped != overlayPlayerWidth { overlayPlayerWidth = clamped; return }
-            UserDefaults.standard.set(Double(clamped), forKey: Self.overlayPlayerWidthKey)
         }
     }
 
@@ -859,15 +786,6 @@ final class LibraryViewModel {
         excludeCorrupt = defaults.bool(forKey: Self.excludeCorruptKey)
         confirmDeletions = defaults.object(forKey: Self.confirmDeletionsKey) as? Bool ?? true
         surpriseMeAutoPlays = defaults.object(forKey: Self.surpriseMeAutoPlaysKey) as? Bool ?? true
-        if defaults.object(forKey: Self.playInlineStartsFullscreenKey) != nil {
-            playInlineStartsFullscreen = defaults.bool(forKey: Self.playInlineStartsFullscreenKey)
-        }
-        if defaults.object(forKey: Self.playInlineInOverlayKey) != nil {
-            playInlineInOverlay = defaults.bool(forKey: Self.playInlineInOverlayKey)
-        }
-        if let w = defaults.object(forKey: Self.overlayPlayerWidthKey) as? Double, w > 0 {
-            overlayPlayerWidth = CGFloat(w)
-        }
         if let w = defaults.object(forKey: Self.playerFloatingWidthKey) as? Double, w > 0,
            let h = defaults.object(forKey: Self.playerFloatingHeightKey) as? Double, h > 0 {
             playerFloatingSize = CGSize(width: w, height: h)

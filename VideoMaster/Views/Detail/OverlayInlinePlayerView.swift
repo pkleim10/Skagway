@@ -2,13 +2,10 @@ import AVKit
 import AppKit
 import SwiftUI
 
-/// Self-contained inline player for the floating **overlay** mode (`viewModel.inlineOverlayActive`).
-///
-/// It mirrors `VideoDetailView`'s inline player — resume position, sidecar subtitles, resume banner, error
-/// overlay, and the Space/Shift-Space control counters — but deliberately omits the fullscreen-window
-/// routing: fullscreen-start takes precedence over overlay, so this view is only ever mounted when fullscreen
-/// is off. It owns its own `AVPlayer` and `SubtitleTrack`, and the browser/detail layout underneath is never
-/// resized or frozen, so the grid/list scroll position is preserved across playback.
+/// Renders the shared `InlinePlaybackController` player — the player view, sidecar-subtitle overlay,
+/// resume banner, error overlay, and a compact header. A pure renderer: lifecycle (start/stop) is
+/// driven from `ContentView` via `isPlayingInline`. Hosted by `FloatingPlayerPanel` (the in-window
+/// resizable surface); the same player carries into the borderless full-screen window.
 struct OverlayInlinePlayerView: View {
     let video: Video
     @Bindable var viewModel: LibraryViewModel
