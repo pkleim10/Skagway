@@ -101,14 +101,21 @@ struct CuratedWallFiltersDrawer: View {
         let groups = distribute(count: count, into: chosen)
 
         return HStack(alignment: .top, spacing: spacing) {
-            ForEach(Array(groups.enumerated()), id: \.offset) { _, idxs in
+            ForEach(Array(groups.enumerated()), id: \.offset) { offset, idxs in
                 let columnWidth = idxs.map { unitWidths[$0] }.max() ?? 0
+                // The last column always stretches to fill the remaining width so its cards
+                // reach the drawer's right edge instead of leaving a gap beside them.
+                let isLastColumn = offset == groups.count - 1
                 VStack(spacing: spacing) {
                     ForEach(idxs, id: \.self) { i in
                         unitView(i)
                     }
                 }
-                .frame(width: columnWidth)
+                .frame(
+                    minWidth: columnWidth,
+                    maxWidth: isLastColumn ? .infinity : columnWidth,
+                    alignment: .leading
+                )
             }
         }
     }

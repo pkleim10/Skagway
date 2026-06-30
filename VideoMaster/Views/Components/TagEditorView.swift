@@ -38,6 +38,10 @@ struct TagToggleChip: View {
     let isActive: Bool
     let onToggle: (_ isAdding: Bool) -> Void
 
+    // Tag chips truncate to a single line, so hovering reveals the full name in a small
+    // popover that escapes the tag card / drawer clipping bounds.
+    @State private var isHovering = false
+
     var body: some View {
         Button {
             onToggle(!isActive)
@@ -59,6 +63,18 @@ struct TagToggleChip: View {
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovering = hovering
+        }
+        .popover(isPresented: $isHovering, arrowEdge: .top) {
+            // Compact, pill-height overlay showing the complete (untruncated) tag name.
+            Text(tag.name)
+                .font(.caption)
+                .foregroundStyle(Color.appTextPrimary)
+                .fixedSize()
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+        }
     }
 }
 
