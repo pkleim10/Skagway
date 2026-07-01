@@ -100,7 +100,7 @@ struct CuratedWallCard: View {
         .padding(8)
         .background(
             isSelected
-                ? Color.appAccent.opacity(0.07)
+                ? Color(red: 12 / 255, green: 20 / 255, blue: 30 / 255)   // #0C141E
                 : (isHovering ? Color.appSurface.opacity(0.6) : Color.clear)
         )
         .clipShape(RoundedRectangle(cornerRadius: corner + 2, style: .continuous))

@@ -58,7 +58,7 @@ struct CuratedWallGrid: View {
             .padding(outerPadding)
         }
         .scrollIndicators(.visible)
-        .background(Color.appBackground.opacity(0.4))
+        .background(Color(red: 3 / 255, green: 13 / 255, blue: 23 / 255))   // #030D17
     }
 
     private func handleSelection(_ video: Video) {

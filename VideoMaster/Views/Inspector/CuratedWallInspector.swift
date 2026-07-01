@@ -45,9 +45,6 @@ struct CuratedWallInspector: View {
 
                             // Notes — tall first-class editor
                             notesBlock()
-
-                            // Footer
-                            footer(for: v)
                         }
                         .padding(14)
                     }
@@ -56,7 +53,13 @@ struct CuratedWallInspector: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .appInspectorPanel()
+            // Solid inspector background (exact RGB) instead of the translucent panel material.
+            .background(Self.inspectorBackground)
+            .clipShape(RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
+                    .stroke(Color.appAccent.opacity(0.10), lineWidth: 1)
+            )
         }
         .frame(minWidth: 300)
         .onAppear { loadNotes() }
@@ -66,6 +69,9 @@ struct CuratedWallInspector: View {
             loadNotes()
             hero = nil
             filmstrip = nil
+            // The unassigned-tags "blind" is transient — collapse it on each new selection.
+            showUnassigned = false
+            newTagText = ""
         }
         .onChange(of: notes) { _, val in
             UserDefaults.standard.set(val, forKey: notesKey)
@@ -218,16 +224,26 @@ struct CuratedWallInspector: View {
                 .foregroundStyle(Color.appTextPrimary)
                 .lineLimit(2)
 
+            // File path (folder icon + path) — click to reveal in Finder. Doubles as the Finder action.
+            Button {
+                NSWorkspace.shared.selectFile(v.filePath, inFileViewerRootedAtPath: "")
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "folder")
+                    Text(v.filePath)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .font(.caption2)
+                .foregroundStyle(Color.appTextTertiary)
+            }
+            .buttonStyle(.plain)
+            .help("Reveal in Finder")
+
             HStack(spacing: 14) {
                 Button { viewModel.isPlayingInline = true } label: {
-                    Image(systemName: "play.fill")
+                    Label("Play", systemImage: "play.fill")
                 }.buttonStyle(.plain).foregroundStyle(Color.appAccent)
-
-                Button {
-                    NSWorkspace.shared.selectFile(v.filePath, inFileViewerRootedAtPath: "")
-                } label: {
-                    Image(systemName: "folder")
-                }.buttonStyle(.plain)
 
                 Spacer()
             }
@@ -235,20 +251,59 @@ struct CuratedWallInspector: View {
         }
     }
 
-    // MARK: - Compact facts
+    // MARK: - Compact facts (bordered 3-column table, per the mock)
+
+    static let inspectorBackground = Color(red: 10 / 255, green: 21 / 255, blue: 35 / 255)
+    private static let factCellBackground = Color(red: 16 / 255, green: 30 / 255, blue: 45 / 255)
+    private static let factLineColor = Color(red: 25 / 255, green: 36 / 255, blue: 50 / 255)
 
     private func factsRow(for v: Video) -> some View {
-        let parts = [
-            v.resolutionLabel ?? "—",
-            v.formattedDuration ?? "—",
-            v.formattedFileSize
-        ]
-        return HStack(spacing: 8) {
-            ForEach(parts, id: \.self) { t in
-                Text(t).font(.caption2).foregroundStyle(Color.appTextSecondary)
-            }
+        let resFps: String = {
+            let res = v.resolutionLabel ?? v.resolution ?? "—"
+            if let fr = v.frameRate, fr > 0 { return "\(res) \(Int(fr.rounded()))fps" }
+            return res
+        }()
+        let dateStr = v.dateAdded.formatted(date: .numeric, time: .omitted)
+        let plays = v.playCount == 1 ? "1 play" : "\(v.playCount) plays"
+
+        return VStack(spacing: 0) {
+            factGridRow([resFps, v.formattedDuration ?? "—", v.formattedFileSize])
+            hLine()
+            factGridRow([v.codec ?? "—", dateStr, plays])
+            hLine()
+            factCell("Subtitle: \(v.hasSubtitles ? "Yes" : "No")")
+        }
+        .background(Self.factCellBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(Self.factLineColor, lineWidth: 1)
+        )
+    }
+
+    private func factGridRow(_ values: [String]) -> some View {
+        HStack(spacing: 0) {
+            factCell(values[0])
+            vLine()
+            factCell(values[1])
+            vLine()
+            factCell(values[2])
         }
     }
+
+    private func factCell(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2)
+            .foregroundStyle(Color.appTextSecondary)
+            .monospacedDigit()
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+    }
+
+    private func vLine() -> some View { Rectangle().fill(Self.factLineColor).frame(width: 1) }
+    private func hLine() -> some View { Rectangle().fill(Self.factLineColor).frame(height: 1) }
 
     // MARK: - Rating
 
@@ -294,61 +349,130 @@ struct CuratedWallInspector: View {
         notes = UserDefaults.standard.string(forKey: notesKey) ?? ""
     }
 
-    // MARK: - Tags (restored capability)
+    // MARK: - Tags — two lists: assigned, plus (behind a "blind") the unassigned tags.
     private func tagsBlock() -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let all = viewModel.tags.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        let assigned = all.filter { isTagAppliedToSelection($0) }
+        let unassigned = all.filter { !isTagAppliedToSelection($0) }
+
+        return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Rectangle().fill(Color.appAccent).frame(width: 3, height: 12).cornerRadius(2)
                 Text("Tags").font(.caption.weight(.semibold)).foregroundStyle(Color.appAccent)
                 Spacer()
             }
 
-            let sorted = viewModel.tags.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-            if sorted.isEmpty {
-                Text("No tags defined yet.")
+            // List 1 — tags on this video; tap a chip to unassign it. Packed flow (not a grid).
+            if assigned.isEmpty {
+                Text("Select a tag from the list below to assign it to this video")
                     .font(.caption2)
                     .foregroundStyle(Color.appTextTertiary)
             } else {
-                // 6-column grid for scannability. Long names truncate with ellipsis.
-                // Appearance (capsule, colors, padding) is preserved.
-                // Columns stretch to full width; content left-aligned within each column.
-                let tagColumns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 6)
-                LazyVGrid(columns: tagColumns, alignment: .leading, spacing: 4) {
-                    ForEach(sorted) { tag in
-                        let applied = isTagAppliedToSelection(tag)
-                        InspectorTagChip(tag: tag, applied: applied) {
-                            Task {
-                                if applied {
-                                    await viewModel.removeTag(tag, fromVideos: selectedIds)
-                                } else {
-                                    await viewModel.addTag(tag.name, toVideos: selectedIds)
-                                }
-                                // re-render will pick up via tagsForVideos
-                            }
+                FlowLayout(spacing: 4) {
+                    ForEach(assigned) { tag in
+                        InspectorTagChip(tag: tag, applied: true, fillWidth: false) {
+                            Task { await viewModel.removeTag(tag, fromVideos: selectedIds) }
                         }
                     }
                 }
             }
 
-            // Quick add new tag (text field inline)
-            HStack(spacing: 4) {
-                TextField("New tag", text: $newTagText)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 10))
-                    .onSubmit { createAndApplyNewTag() }
-                Button {
-                    createAndApplyNewTag()
-                } label: {
-                    Image(systemName: "plus.circle")
+            // The "blind" that reveals the unassigned list.
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { showUnassigned.toggle() }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: showUnassigned ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                    Text("Add tags (\(unassigned.count))").font(.caption2.weight(.medium))
+                    Spacer()
                 }
-                .disabled(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .buttonStyle(.plain)
+                .foregroundStyle(Color.appAccent)
             }
-            .padding(.top, 2)
+            .buttonStyle(.plain)
+            .padding(.top, 10)
+
+            if showUnassigned {
+                // New tag — creates it and assigns it to the current selection.
+                HStack(spacing: 4) {
+                    TextField("New tag", text: $newTagText)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 10))
+                        .onSubmit { createAndApplyNewTag() }
+                    Button { createAndApplyNewTag() } label: { Image(systemName: "plus.circle") }
+                        .disabled(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .buttonStyle(.plain)
+                }
+
+                // List 2 — unassigned tags; tap to assign, right-click to rename/delete.
+                if unassigned.isEmpty {
+                    Text("Every tag is already assigned to this video.")
+                        .font(.caption2)
+                        .foregroundStyle(Color.appTextTertiary)
+                } else {
+                    tagChipGrid(unassigned, applied: false, withMenu: true)
+                }
+            }
+        }
+        .alert("Rename Tag",
+               isPresented: Binding(get: { tagPendingRename != nil },
+                                    set: { if !$0 { tagPendingRename = nil } })) {
+            TextField("Tag name", text: $renameText)
+            Button("Rename") {
+                if let tag = tagPendingRename {
+                    let name = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !name.isEmpty { Task { await viewModel.renameTag(tag, to: name) } }
+                }
+                tagPendingRename = nil
+            }
+            Button("Cancel", role: .cancel) { tagPendingRename = nil }
+        }
+        .alert("Delete tag \u{201C}\(tagPendingDelete?.name ?? "")\u{201D}?",
+               isPresented: Binding(get: { tagPendingDelete != nil },
+                                    set: { if !$0 { tagPendingDelete = nil } })) {
+            Button("Delete", role: .destructive) {
+                if let tag = tagPendingDelete { Task { await viewModel.deleteTag(tag) } }
+                tagPendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { tagPendingDelete = nil }
+        } message: {
+            Text("This removes the tag from your library and unassigns it from every video. This can\u{2019}t be undone.")
+        }
+    }
+
+    /// A flexible grid of tag chips. `applied` sets the tap action (unassign vs assign) and styling;
+    /// `withMenu` adds the rename/delete context menu (used on the unassigned list only).
+    private func tagChipGrid(_ tags: [Tag], applied: Bool, withMenu: Bool) -> some View {
+        let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 6)
+        return LazyVGrid(columns: columns, alignment: .leading, spacing: 4) {
+            ForEach(tags) { tag in
+                let chip = InspectorTagChip(tag: tag, applied: applied) {
+                    Task {
+                        if applied {
+                            await viewModel.removeTag(tag, fromVideos: selectedIds)
+                        } else {
+                            await viewModel.addTag(tag.name, toVideos: selectedIds)
+                        }
+                    }
+                }
+                if withMenu {
+                    chip.contextMenu {
+                        Button("Rename\u{2026}") { renameText = tag.name; tagPendingRename = tag }
+                        Divider()
+                        Button("Delete Tag", role: .destructive) { tagPendingDelete = tag }
+                    }
+                } else {
+                    chip
+                }
+            }
         }
     }
 
     @State private var newTagText: String = ""
+    @State private var showUnassigned = false
+    @State private var tagPendingDelete: Tag?
+    @State private var tagPendingRename: Tag?
+    @State private var renameText: String = ""
 
     private func isTagAppliedToSelection(_ tag: Tag) -> Bool {
         let applied = viewModel.tagsForVideos(selectedIds)
@@ -366,14 +490,6 @@ struct CuratedWallInspector: View {
     }
 
     // MARK: - Footer
-
-    private func footer(for v: Video) -> some View {
-        Text(v.filePath)
-            .font(.system(size: 9))
-            .foregroundStyle(Color.appTextTertiary)
-            .lineLimit(1)
-            .truncationMode(.middle)
-    }
 
     private var emptyState: some View {
         VStack(spacing: 6) {
@@ -394,6 +510,8 @@ struct CuratedWallInspector: View {
 private struct InspectorTagChip: View {
     let tag: Tag
     let applied: Bool
+    /// Fill the container width (grid cells) vs. hug the content (packed flow layout).
+    var fillWidth: Bool = true
     let onToggle: () -> Void
 
     @State private var isHovering = false
@@ -428,7 +546,7 @@ private struct InspectorTagChip: View {
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: fillWidth ? .infinity : nil, alignment: .leading)
         .onHover { hovering in
             isHovering = hovering
         }

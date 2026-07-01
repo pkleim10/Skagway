@@ -31,10 +31,15 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.16.0 (build 520) - 2026-07-01
+
 - Curated Wall cleanup:
   - Grid now shows the native scroll indicator for all macOS "Show scroll bars" settings, including the legacy space-reserving scroller ("Always" / mouse attached). Fixed by dropping the `GeometryReader` around the grid (which suppressed the legacy scroller) in favor of flexible columns — same 5-column layout, visually identical.
   - Restored **Import New** and **Surprise Me** as left-cluster icon buttons in the header (they were dropped with the old nav bar). Import New shows live scan progress in the header status ("Importing 12/340"). Surprise Me's auto-play was re-wired (its `pendingAutoPlay` consumer had been deleted with the legacy detail view).
   - "Player opens at → Last used size" now remembers **full-screen** (persisted `playerLastWasFullScreen`): entering full-screen sets it; only an explicit windowed choice (compact / S-M-L / drag) clears it, so stopping from full-screen still reopens full-screen.
+  - **Inspector tag management redesigned** into two lists: assigned tags (top, tap to unassign) and — behind a collapsible "Add tags" blind — the unassigned tags (tap to assign; right-click to Rename… or Delete Tag with confirmation). New Tag lives in the blind and auto-assigns. Deleting removes the tag from the library and every video. Assigned tags run in a packed flow; the blind is transient (collapses per selection). Closes the "no way to delete a tag" gap.
+  - **Inspector detail polish** toward the mockups: title + clickable file-path line (folder icon → reveal in Finder, replacing the separate Finder button); Play/Finder... labels on action buttons; a compact **facts table** (resolution+fps · duration · size / codec · date · plays / subtitles) rendered as a bordered grid with cell separators; removed the redundant path footer below Notes.
+  - **Exact colors**: inspector background `#0A1523`, facts table cell `#101E2D` with `#19242F` border/separators; Wall grid background `#030D17`, selected card background `#0C141E`.
 
 - Playback redesign (in progress): unifying the three playback modes into one resizable player surface backed by a single shared `InlinePlaybackController` (resume load/save, sidecar subtitles, error handling, recordPlay, play-pause/restart).
   - Introduced the shared engine and a single `FloatingPlayerPanel` host: one player anchored top-right, shown whenever playback is active, with subtitles, resume banner, and error handling in one place.
