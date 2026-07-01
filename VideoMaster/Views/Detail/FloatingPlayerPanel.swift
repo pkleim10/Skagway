@@ -68,6 +68,7 @@ struct FloatingPlayerPanel: View {
         HStack(spacing: 4) {
             iconButton("rectangle", help: "Compact (follows the inspector width)") {
                 viewModel.playerSizeIsCompact = true
+                viewModel.playerLastWasFullScreen = false   // windowed choice
             }
             presetButton("S", fraction: 0.45)
             presetButton("M", fraction: 0.66)
@@ -97,6 +98,7 @@ struct FloatingPlayerPanel: View {
             // ~16:9 video plus the compact header strip.
             let h = w * 9.0 / 16.0 + 28
             viewModel.playerSizeIsCompact = false   // explicit size exits sticky compact mode
+            viewModel.playerLastWasFullScreen = false   // windowed choice
             viewModel.playerFloatingSize = clamp(CGSize(width: w, height: h))
         }
         .font(.caption2.weight(.semibold))
@@ -122,9 +124,10 @@ struct FloatingPlayerPanel: View {
                     .onChanged { value in
                         if dragStartSize == nil {
                             // Start from the current effective size (compact footprint or free size)
-                            // and leave sticky compact mode — this becomes a manual size.
+                            // and leave sticky compact mode — this becomes a manual (windowed) size.
                             dragStartSize = size
                             viewModel.playerSizeIsCompact = false
+                            viewModel.playerLastWasFullScreen = false
                         }
                         let base = dragStartSize ?? viewModel.playerFloatingSize
                         // Top-right anchored: drag the handle left to widen, down to grow taller.

@@ -302,7 +302,7 @@ private struct LibraryContentView: View {
                     switch vm.playerStartPreference {
                     case .fullScreen: vm.isPlayerFullScreen = true
                     case .compact: vm.playerSizeIsCompact = true
-                    case .lastSize: break
+                    case .lastSize: if vm.playerLastWasFullScreen { vm.isPlayerFullScreen = true }
                     }
                 } else {
                     vm.isPlayerFullScreen = false
