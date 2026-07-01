@@ -1,7 +1,21 @@
 # Curated Wall — Cleanup Plan
 
 **Branch:** `feature/curated-wall` (build ~504)
-**Status:** Analysis complete. Awaiting go-ahead to implement item by item.
+**Status:** In progress.
+
+## Progress
+- ✅ **1. Grid scrollbar** — native scroller shown for all "Show scroll bars" settings (dropped the GeometryReader → flexible columns). `02015b0`
+- ✅ **2. Import** — Import New restored as a left-cluster header icon + live scan progress in the header status. `3f0af5c`
+- ✅ **3. Surprise Me** — restored as a header icon (✨, ⌘⇧S); re-wired auto-play. `3f0af5c`
+- ⬜ 4. Fonts & sizing (design polish)
+- ⬜ 5. Top video details (design polish)
+- ⬜ 6. First-play/select delay (investigate — see the 720px per-card preview note; measure first)
+- ⬜ 7. Full-screen "last used size" (persist a "was full-screen" flag)
+- ⬜ 8. Delete a tag (context menu on chips)
+- ⬜ **NEW follow-up:** `CuratedWallGrid` has **no scroll-to-selection infrastructure** (only the list view does) — surfaced via Surprise Me (a picked card off-screen in Wall mode isn't scrolled into view). Broader than Surprise Me; add `ScrollViewReader` + scroll-to for the Wall grid.
+
+---
+
 
 The Curated Wall redesign deleted the legacy nav bar / bottom filter strip, which dropped several **affordances** whose underlying functions still exist in `LibraryViewModel`. Most "was present in main" items are re-surfacing UI, not rebuilding logic. Grouped below by type.
 
