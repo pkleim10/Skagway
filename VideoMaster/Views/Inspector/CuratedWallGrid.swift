@@ -19,54 +19,46 @@ struct CuratedWallGrid: View {
     private let outerPadding: CGFloat = 18
 
     var body: some View {
-        GeometryReader { geo in
-            let totalW = max(300, geo.size.width - (outerPadding * 2))
-            let itemW = (totalW - CGFloat(targetColumns - 1) * spacing) / CGFloat(targetColumns)
-
-            VStack(spacing: 0) {
-                // No in-wall header: search, count, List/Wall toggle, and filters access all
-                // live in the thin capability bar above (`curatedHeaderBar` in ContentView),
-                // so the wall surface stays as clean as the mock.
-                ScrollView(.vertical) {
-                    LazyVGrid(
-                        columns: Array(repeating: GridItem(.fixed(itemW), spacing: spacing), count: targetColumns),
-                        spacing: spacing
-                    ) {
-                        ForEach(viewModel.filteredVideos) { video in
-                            // Use dedicated elegant card (no inline rename in wall MVP for visual cleanliness)
-                            CuratedWallCard(
-                                video: video,
-                                isSelected: viewModel.selectedVideoIds.contains(video.id),
-                                thumbnailService: thumbnailService
-                            )
-                            .contentShape(Rectangle())
-                            .onTapGesture(count: 2) {
-                                play(video)
-                            }
-                            .onTapGesture {
-                                handleSelection(video)
-                            }
-                            .contextMenu {
-                                Button("Play in External Player") { play(video) }
-                                Button("Show in Finder") {
-                                    NSWorkspace.shared.selectFile(video.filePath, inFileViewerRootedAtPath: "")
-                                }
-                                Divider()
-                                Button("Delete") {
-                                    viewModel.pendingDeleteIds = [video.id]
-                                    viewModel.showDeleteConfirmation = true
-                                }
-                            }
+        // Flexible columns (5 equal, filling the width) instead of GeometryReader-computed fixed
+        // widths — visually identical, but dropping the GeometryReader lets SwiftUI show the native
+        // scroller reliably, including the legacy (space-reserving) style used when the system is set
+        // to "Always" or a mouse is attached. Search/count/toggle/filters live in the thin bar above.
+        ScrollView(.vertical) {
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: targetColumns),
+                spacing: spacing
+            ) {
+                ForEach(viewModel.filteredVideos) { video in
+                    // Use dedicated elegant card (no inline rename in wall MVP for visual cleanliness)
+                    CuratedWallCard(
+                        video: video,
+                        isSelected: viewModel.selectedVideoIds.contains(video.id),
+                        thumbnailService: thumbnailService
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) {
+                        play(video)
+                    }
+                    .onTapGesture {
+                        handleSelection(video)
+                    }
+                    .contextMenu {
+                        Button("Play in External Player") { play(video) }
+                        Button("Show in Finder") {
+                            NSWorkspace.shared.selectFile(video.filePath, inFileViewerRootedAtPath: "")
+                        }
+                        Divider()
+                        Button("Delete") {
+                            viewModel.pendingDeleteIds = [video.id]
+                            viewModel.showDeleteConfirmation = true
                         }
                     }
-                    .padding(outerPadding)
                 }
-                // Native overlay scroller that respects the macOS "Show scroll bars" system setting
-                // (matches Finder/Photos), rather than the default which can suppress it here.
-                .scrollIndicators(.visible)
             }
-            .background(Color.appBackground.opacity(0.4))
+            .padding(outerPadding)
         }
+        .scrollIndicators(.visible)
+        .background(Color.appBackground.opacity(0.4))
     }
 
     private func handleSelection(_ video: Video) {
