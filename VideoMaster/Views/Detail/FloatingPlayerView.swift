@@ -34,12 +34,13 @@ struct FloatingPlayerView: NSViewRepresentable {
         view.controlsStyle = .floating
         view.showsFullScreenToggleButton = showsFullscreenButton
         view.onRestartFromBeginning = onRestartFromBeginning
-        // Grab keyboard focus once inserted so Space / Shift+Space reach the player.
+        // Take keyboard focus once inserted so Space / Shift+Space reach the player. We deliberately
+        // take it even from a focused text field (e.g. the search field, which SwiftUI makes first
+        // responder on launch) — otherwise Space stays with that field and never pauses the video
+        // until the user clicks the player's transport controls.
         DispatchQueue.main.async { [weak view] in
             guard let view, let window = view.window else { return }
-            if !(window.firstResponder is NSText) {
-                window.makeFirstResponder(view)
-            }
+            window.makeFirstResponder(view)
         }
         return view
     }

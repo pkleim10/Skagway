@@ -313,6 +313,13 @@ private struct LibraryContentView: View {
             vm.isCuratedWallFiltersDrawerOpen = false
             isFiltersDrawerOpen = false
             drawerReveal = 0
+            // On launch the window makes the search field the first responder, so Space would type
+            // into it instead of starting playback. Clear that unintended focus once the window has
+            // settled, so Space starts playback until the user deliberately clicks the search field.
+            try? await Task.sleep(for: .milliseconds(120))
+            if let window = NSApp.keyWindow, window.firstResponder is NSText {
+                window.makeFirstResponder(nil)
+            }
         }
         .onChange(of: vm.isCuratedWallFiltersDrawerOpen) { _, newValue in
             // Animate the reveal factor. The well and drawer heights are driven from this CGFloat,
