@@ -107,8 +107,43 @@ private struct LibraryContentView: View {
     /// Thin header bar for Curated Wall: List/Wall toggle + inline search + count + Filters toggle.
     /// Matches the layout in the wireframe mock (search is inline in the same row as the mode selector and filter button).
     /// The same button opens *and* closes the top drawer. Icon and help update with state.
+    /// Header status: video count normally, live import progress while scanning, or a transient
+    /// scan message (e.g. "No new files found" / "No data sources — add a folder first").
+    private var headerStatusText: String {
+        if vm.isScanning {
+            if vm.scanTotal > 0 { return "Importing \(vm.scanCurrent)/\(vm.scanTotal)" }
+            return vm.scanProgress.isEmpty ? "Importing…" : vm.scanProgress
+        }
+        if !vm.scanProgress.isEmpty { return vm.scanProgress }
+        return "\(vm.filteredVideos.count) videos"
+    }
+
     private var curatedHeaderBar: some View {
         HStack(spacing: 8) {
+            // Library actions (left cluster).
+            Button {
+                Task { await vm.importNew() }
+            } label: {
+                Image(systemName: "arrow.down.circle")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.appTextSecondary)
+            .disabled(vm.isScanning)
+            .help("Import New — scan your folders for newly added video files")
+
+            Button {
+                vm.surpriseMePickRandom()
+            } label: {
+                Image(systemName: "sparkles")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.appTextSecondary)
+            .disabled(vm.filteredVideos.isEmpty)
+            .help("Surprise Me — pick a random video (auto-plays if enabled in Settings)")
+            .keyboardShortcut("s", modifiers: [.command, .shift])
+
+            Divider().frame(height: 16)
+
             AppSegmentedControl(
                 selection: Binding(
                     get: { vm.viewMode },
@@ -132,8 +167,8 @@ private struct LibraryContentView: View {
 
             Spacer()
 
-            // Video count (light)
-            Text("\(vm.filteredVideos.count) videos")
+            // Video count (light) — replaced by scan progress while importing.
+            Text(headerStatusText)
                 .font(.system(size: 10))
                 .foregroundStyle(Color.appTextTertiary)
                 .monospacedDigit()
@@ -272,6 +307,18 @@ private struct LibraryContentView: View {
                 } else {
                     vm.isPlayerFullScreen = false
                     vm.playback.stop()
+                }
+            }
+            // Surprise Me auto-play: `surpriseMePickRandom()` selects a random video and (if enabled)
+            // raises this flag *in the same batch* as the selection change. The selection change also
+            // fires the inspector's "video changed → stop playback" handler, so we defer starting to
+            // the next runloop — otherwise that stop would immediately cancel the just-started play.
+            .onChange(of: vm.pendingAutoPlay) { _, shouldPlay in
+                guard shouldPlay else { return }
+                vm.pendingAutoPlay = false
+                DispatchQueue.main.async {
+                    vm.pendingFilmstripSeekSeconds = nil
+                    vm.isPlayingInline = true
                 }
             }
             // Enter/leave true full-screen by moving the *same* player into a borderless window.

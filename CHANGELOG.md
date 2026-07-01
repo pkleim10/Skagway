@@ -33,6 +33,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 - Curated Wall cleanup:
   - Grid now shows the native scroll indicator for all macOS "Show scroll bars" settings, including the legacy space-reserving scroller ("Always" / mouse attached). Fixed by dropping the `GeometryReader` around the grid (which suppressed the legacy scroller) in favor of flexible columns — same 5-column layout, visually identical.
+  - Restored **Import New** and **Surprise Me** as left-cluster icon buttons in the header (they were dropped with the old nav bar). Import New shows live scan progress in the header status ("Importing 12/340"). Surprise Me's auto-play was re-wired (its `pendingAutoPlay` consumer had been deleted with the legacy detail view).
 
 - Playback redesign (in progress): unifying the three playback modes into one resizable player surface backed by a single shared `InlinePlaybackController` (resume load/save, sidecar subtitles, error handling, recordPlay, play-pause/restart).
   - Introduced the shared engine and a single `FloatingPlayerPanel` host: one player anchored top-right, shown whenever playback is active, with subtitles, resume banner, and error handling in one place.
