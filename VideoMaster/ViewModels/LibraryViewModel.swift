@@ -267,7 +267,6 @@ final class LibraryViewModel {
     private static let showMissingKey = "VideoMaster.showMissing"
     private static let showRecentlyConvertedKey = "VideoMaster.showRecentlyConverted"
     private static let recentlyConvertedEntriesKey = "VideoMaster.recentlyConvertedEntries"
-    private static let showFilterStripKey = "VideoMaster.showFilterStrip"
     private static let ffmpegPathKey = "VideoMaster.ffmpegPath"
     private static let customMetadataFieldDefinitionsKey = "VideoMaster.customMetadataFieldDefinitions"
     private static let missingCountScannedKey = "VideoMaster.missingCountScanned"
@@ -502,13 +501,6 @@ final class LibraryViewModel {
         }
     }
 
-    /// When false, the bottom filter strip collapses to zero height (splitter remains); saved splitter height is unchanged. Expand/collapse from the View menu (⌘⌥B), context menu, or the list/grid or filter strip.
-    var showFilterStrip: Bool = true {
-        didSet {
-            UserDefaults.standard.set(showFilterStrip, forKey: Self.showFilterStripKey)
-        }
-    }
-
     /// Schema for per-video custom metadata (Settings UI only until values are wired in the library UI).
     var customMetadataFieldDefinitions: [CustomMetadataFieldDefinition] = [] {
         didSet {
@@ -600,7 +592,7 @@ final class LibraryViewModel {
     }
 
     private func refreshListCustomMetadataCacheIfNeeded() async {
-        guard !listColumnPreferences.visibleCustomFieldIDs.isEmpty else {
+        guard !customMetadataFieldDefinitions.isEmpty else {
             listCustomMetadataByVideoId = [:]
             return
         }
@@ -626,7 +618,7 @@ final class LibraryViewModel {
     }
 
     private func mergeListCustomMetadataCache(videoId: Int64, fieldId: UUID, value: String) {
-        guard listColumnPreferences.visibleCustomFieldIDs.contains(fieldId) else { return }
+        guard customMetadataFieldDefinitions.contains(where: { $0.id == fieldId }) else { return }
         var inner = listCustomMetadataByVideoId[videoId] ?? [:]
         inner[fieldId] = value
         listCustomMetadataByVideoId[videoId] = inner
@@ -876,9 +868,6 @@ final class LibraryViewModel {
             autoAdjustVideoPane = pad > 0
             defaults.removeObject(forKey: Self.legacyAutoAdjustVideoPanePaddingKey)
             defaults.set(autoAdjustVideoPane, forKey: Self.autoAdjustVideoPaneKey)
-        }
-        if defaults.object(forKey: Self.showFilterStripKey) != nil {
-            showFilterStrip = defaults.bool(forKey: Self.showFilterStripKey)
         }
         if let data = defaults.data(forKey: Self.customMetadataFieldDefinitionsKey),
            let decoded = try? JSONDecoder().decode([CustomMetadataFieldDefinition].self, from: data)

@@ -42,18 +42,8 @@ struct CuratedWallCard: View {
                     .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: corner, style: .continuous)
-                            .stroke(isSelected ? Color.appAccent.opacity(0.65) : Color.appDivider.opacity(isHovering ? 0.45 : 0.18),
-                                    lineWidth: isSelected ? 2 : 1)
+                            .stroke(Color.appDivider.opacity(isHovering ? 0.45 : 0.18), lineWidth: 1)
                     )
-
-                // Selection checkmark inside the image (per mock treatment)
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color.appAccent)
-                        .background(Circle().fill(Color.black.opacity(0.5)))
-                        .padding(6)
-                }
 
                 if let dur = video.formattedDuration {
                     Text(dur)
@@ -64,6 +54,16 @@ struct CuratedWallCard: View {
                         .background(Color.black.opacity(0.55))
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                        .padding(6)
+                }
+            }
+            // Selection checkmark — white check in a blue circle, upper-left corner.
+            .overlay(alignment: .topLeading) {
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, Color.appAccent)
                         .padding(6)
                 }
             }
@@ -104,6 +104,11 @@ struct CuratedWallCard: View {
                 : (isHovering ? Color.appSurface.opacity(0.6) : Color.clear)
         )
         .clipShape(RoundedRectangle(cornerRadius: corner + 2, style: .continuous))
+        // Blue selection border around the whole card (not just the thumbnail).
+        .overlay(
+            RoundedRectangle(cornerRadius: corner + 2, style: .continuous)
+                .stroke(isSelected ? Color.appAccent : Color.clear, lineWidth: 2)
+        )
         .onHover { hovering in
             isHovering = hovering
         }

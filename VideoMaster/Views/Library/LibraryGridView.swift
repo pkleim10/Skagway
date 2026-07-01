@@ -300,6 +300,16 @@ struct LibraryGridView: View {
             viewModel.renameText = video.fileName
             viewModel.renamingVideoId = video.id
         }
+        Button("Re-encode to MP4\u{2026}") {
+            if let ffmpeg = viewModel.resolvedFFmpegPath {
+                let ids = viewModel.selectedVideoIds.contains(video.id)
+                    ? viewModel.selectedVideoIds : [video.id]
+                let selected = viewModel.filteredVideos.filter { ids.contains($0.id) }
+                for v in selected { viewModel.reencodeVideo(v, ffmpegPath: ffmpeg) }
+            }
+        }
+        .disabled(viewModel.resolvedFFmpegPath == nil)
+        .help(viewModel.resolvedFFmpegPath == nil ? "Requires ffmpeg — configure the path in Settings \u{2192} Tools" : "")
         Button("Move Files\u{2026}") {
             let panel = NSOpenPanel()
             panel.canChooseDirectories = true

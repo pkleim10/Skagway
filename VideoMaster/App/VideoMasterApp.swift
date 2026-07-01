@@ -17,6 +17,22 @@ struct VideoMasterApp: App {
         .defaultSize(width: 1200, height: 800)
         .commands {
             CommandGroup(after: .sidebar) {
+                Button("List View") {
+                    appState.libraryViewModel?.viewMode = .list
+                    appState.libraryViewModel?.savePreferences()
+                }
+                .keyboardShortcut("1", modifiers: .command)
+                .disabled(!appState.hasLibrary)
+
+                Button("Wall View") {
+                    appState.libraryViewModel?.viewMode = .grid
+                    appState.libraryViewModel?.savePreferences()
+                }
+                .keyboardShortcut("2", modifiers: .command)
+                .disabled(!appState.hasLibrary)
+
+                Divider()
+
                 Button("Surprise Me!") {
                     appState.libraryViewModel?.surpriseMePickRandom()
                 }
@@ -35,14 +51,6 @@ struct VideoMasterApp: App {
                     appState.libraryViewModel?.showThumbnailInDetail.toggle()
                 }
                 .keyboardShortcut("t", modifiers: [.command, .option])
-                .disabled(!appState.hasLibrary)
-
-                Button {
-                    appState.libraryViewModel?.showFilterStrip.toggle()
-                } label: {
-                    Text((appState.libraryViewModel?.showFilterStrip ?? true) ? "Collapse Filter Strip" : "Expand Filter Strip")
-                }
-                .keyboardShortcut("f", modifiers: [.command, .option])
                 .disabled(!appState.hasLibrary)
 
                 Divider()
@@ -94,6 +102,12 @@ struct VideoMasterApp: App {
                 .keyboardShortcut("o", modifiers: [.command, .shift])
                 .disabled(!appState.hasLibrary)
 
+                Button("Import New") {
+                    Task { await appState.libraryViewModel?.importNew() }
+                }
+                .keyboardShortcut("i", modifiers: .command)
+                .disabled(!appState.hasLibrary || (appState.libraryViewModel?.isScanning ?? false))
+
                 Button("Scan for Subtitles") {
                     Task { await appState.libraryViewModel?.scanForSubtitles() }
                 }
@@ -120,6 +134,7 @@ struct VideoMasterApp: App {
                     else { return }
                     NSWorkspace.shared.selectFile(video.filePath, inFileViewerRootedAtPath: "")
                 }
+                .keyboardShortcut("f", modifiers: [.command, .option])
                 .disabled(appState.libraryViewModel?.selectedVideoIds.first == nil)
 
                 if let vm = appState.libraryViewModel,

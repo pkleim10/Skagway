@@ -115,7 +115,49 @@ private struct LibraryContentView: View {
             return vm.scanProgress.isEmpty ? "Importing…" : vm.scanProgress
         }
         if !vm.scanProgress.isEmpty { return vm.scanProgress }
-        return "\(vm.filteredVideos.count) videos"
+        let total = "\(vm.filteredVideos.count) videos"
+        let sel = vm.selectedVideoIds.count
+        return sel > 1 ? "\(total), \(sel) selected" : total
+    }
+
+    private var sortCluster: some View {
+        let currentSort = VideoSort.from(keyPath: vm.tableSortOrder.first?.keyPath ?? \Video.dateAdded)
+        let isAscending = vm.tableSortOrder.first?.order == .forward
+
+        return HStack(spacing: 4) {
+            Menu {
+                ForEach(VideoSort.allCases) { sort in
+                    Button {
+                        vm.tableSortOrder = sort.comparators(ascending: isAscending)
+                        vm.savePreferences()
+                    } label: {
+                        if sort == currentSort {
+                            Label(sort.displayName, systemImage: "checkmark")
+                        } else {
+                            Text(sort.displayName)
+                        }
+                    }
+                }
+            } label: {
+                Text("Sort: \(currentSort.displayName)")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.appTextSecondary)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+
+            Button {
+                vm.tableSortOrder = currentSort.comparators(ascending: !isAscending)
+                vm.savePreferences()
+            } label: {
+                Image(systemName: isAscending ? "arrow.up" : "arrow.down")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Color.appTextSecondary)
+            }
+            .buttonStyle(.plain)
+            .help(isAscending ? "Ascending — click for descending" : "Descending — click for ascending")
+        }
     }
 
     private var curatedHeaderBar: some View {
@@ -129,7 +171,8 @@ private struct LibraryContentView: View {
             .buttonStyle(.plain)
             .foregroundStyle(Color.appTextSecondary)
             .disabled(vm.isScanning)
-            .help("Import New — scan your folders for newly added video files")
+            .help("Import New — scan your folders for newly added video files (⌘I)")
+            .keyboardShortcut("i", modifiers: .command)
 
             Button {
                 vm.surpriseMePickRandom()
@@ -160,6 +203,12 @@ private struct LibraryContentView: View {
                 }
             }
             .controlSize(.small)
+
+            Divider().frame(height: 16)
+
+            sortCluster
+
+            Divider().frame(height: 16)
 
             // Search is placed inline here (after the mode picker, before right-aligned actions)
             // to match the Curated Wall wireframe mockup.

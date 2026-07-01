@@ -16,8 +16,9 @@ struct CuratedWallInspector: View {
 
     @State private var hero: NSImage?
     @State private var filmstrip: NSImage?
-    @State private var notes: String = ""
-    private var notesKey: String { "CuratedWall.notes.\(video?.filePath ?? "none")" }
+    @State private var customFieldValues: [UUID: String] = [:]
+    @State private var customFieldMixed: Set<UUID> = []
+    @FocusState private var focusedCustomFieldId: UUID?
 
 
     var body: some View {
@@ -27,7 +28,7 @@ struct CuratedWallInspector: View {
             VStack(spacing: 0) {
                 if let v = video {
                     ScrollView(.vertical, showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 22) {
                             // Medium hero (the visual weight from the mock)
                             heroView(for: v, height: heroH)
 
@@ -43,8 +44,11 @@ struct CuratedWallInspector: View {
                             // Tags (restored)
                             tagsBlock()
 
-                            // Notes — tall first-class editor
-                            notesBlock()
+                            // Custom metadata fields (if any defined)
+                            if !viewModel.customMetadataFieldDefinitions.isEmpty {
+                                customMetadataBlock()
+                            }
+
                         }
                         .padding(14)
                     }
@@ -62,19 +66,21 @@ struct CuratedWallInspector: View {
             )
         }
         .frame(minWidth: 300)
-        .onAppear { loadNotes() }
+        .onAppear { loadCustomFieldValues() }
         .onChange(of: video?.filePath) { _, _ in
             // Selection changed: stop any in-progress playback and refresh hero assets.
             if viewModel.isPlayingInline { viewModel.isPlayingInline = false }
-            loadNotes()
+            loadCustomFieldValues()
             hero = nil
             filmstrip = nil
             // The unassigned-tags "blind" is transient — collapse it on each new selection.
             showUnassigned = false
             newTagText = ""
         }
-        .onChange(of: notes) { _, val in
-            UserDefaults.standard.set(val, forKey: notesKey)
+        .onChange(of: viewModel.selectedVideoIds) { _, _ in loadCustomFieldValues() }
+        .onChange(of: focusedCustomFieldId) { old, _ in
+            guard let fieldId = old, let value = customFieldValues[fieldId] else { return }
+            Task { await viewModel.persistCustomMetadata(fieldId: fieldId, value: value, forVideoPaths: selectedIds) }
         }
         .onChange(of: viewModel.showThumbnailInDetail) { _, _ in
             filmstrip = nil
@@ -219,35 +225,41 @@ struct CuratedWallInspector: View {
 
     private func titleAndActions(for v: Video) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(v.fileName)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color.appTextPrimary)
-                .lineLimit(2)
+            if selectedIds.count > 1 {
+                Text("\(selectedIds.count) Videos Selected")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.appTextPrimary)
+            } else {
+                Text(v.fileName)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.appTextPrimary)
+                    .lineLimit(2)
 
-            // File path (folder icon + path) — click to reveal in Finder. Doubles as the Finder action.
-            Button {
-                NSWorkspace.shared.selectFile(v.filePath, inFileViewerRootedAtPath: "")
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "folder")
-                    Text(v.filePath)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                // File path (folder icon + path) — click to reveal in Finder.
+                Button {
+                    NSWorkspace.shared.selectFile(v.filePath, inFileViewerRootedAtPath: "")
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "folder")
+                        Text(v.filePath)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(Color.appTextTertiary)
                 }
-                .font(.caption2)
-                .foregroundStyle(Color.appTextTertiary)
-            }
-            .buttonStyle(.plain)
-            .help("Reveal in Finder")
+                .buttonStyle(.plain)
+                .help("Reveal in Finder")
 
-            HStack(spacing: 14) {
-                Button { viewModel.isPlayingInline = true } label: {
-                    Label("Play", systemImage: "play.fill")
-                }.buttonStyle(.plain).foregroundStyle(Color.appAccent)
+                HStack(spacing: 14) {
+                    Button { viewModel.isPlayingInline = true } label: {
+                        Label("Play", systemImage: "play.fill")
+                    }.buttonStyle(.plain).foregroundStyle(Color.appAccent)
 
-                Spacer()
+                    Spacer()
+                }
+                .font(.callout)
             }
-            .font(.callout)
         }
     }
 
@@ -256,22 +268,77 @@ struct CuratedWallInspector: View {
     static let inspectorBackground = Color(red: 10 / 255, green: 21 / 255, blue: 35 / 255)
     private static let factCellBackground = Color(red: 16 / 255, green: 30 / 255, blue: 45 / 255)
     private static let factLineColor = Color(red: 25 / 255, green: 36 / 255, blue: 50 / 255)
+    // Shared inset field chrome (New Tag + Notes): #15212E fill with a recessed "3D" bezel.
+    private static let fieldBackground = Color(red: 21 / 255, green: 33 / 255, blue: 46 / 255)
 
-    private func factsRow(for v: Video) -> some View {
-        let resFps: String = {
+    private func insetFieldBackground(cornerRadius: CGFloat) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        return shape
+            .fill(Self.fieldBackground)
+            // Top-down inner shadow → recessed look.
+            .overlay(
+                shape
+                    .stroke(Color.black.opacity(0.55), lineWidth: 2)
+                    .blur(radius: 2)
+                    .mask(shape.fill(LinearGradient(colors: [.black, .clear],
+                                                    startPoint: .top, endPoint: .bottom)))
+            )
+            // Faint upper light edge to complete the bezel.
+            .overlay(shape.stroke(Color.white.opacity(0.05), lineWidth: 1))
+    }
+
+    // MARK: - Common-fact helpers (multi-select)
+
+    private func commonString(_ values: [String?]) -> String {
+        guard let first = values.first, values.allSatisfy({ $0 == first }) else { return "—" }
+        return first ?? "—"
+    }
+
+    private func commonResFps(in videos: [Video]) -> String {
+        guard videos.count > 1 else {
+            let v = videos[0]
             let res = v.resolutionLabel ?? v.resolution ?? "—"
             if let fr = v.frameRate, fr > 0 { return "\(res) \(Int(fr.rounded()))fps" }
             return res
-        }()
-        let dateStr = v.dateAdded.formatted(date: .numeric, time: .omitted)
-        let plays = v.playCount == 1 ? "1 play" : "\(v.playCount) plays"
+        }
+        let resVals = videos.map { $0.resolutionLabel ?? $0.resolution }
+        guard let first = resVals.first, resVals.allSatisfy({ $0 == first }), let res = first else { return "—" }
+        let fpsVals = videos.map(\.frameRate)
+        if let fps = fpsVals[0], fps > 0, fpsVals.allSatisfy({ $0 == fps }) {
+            return "\(res) \(Int(fps.rounded()))fps"
+        }
+        return res
+    }
+
+    private func commonDate(_ values: [Date]) -> String {
+        let days = values.map { Calendar.current.startOfDay(for: $0) }
+        guard let first = days.first, days.allSatisfy({ $0 == first }) else { return "—" }
+        return first.formatted(date: .numeric, time: .omitted)
+    }
+
+    private func factsRow(for v: Video) -> some View {
+        let videos: [Video] = selectedIds.count > 1
+            ? viewModel.filteredVideos.filter { selectedIds.contains($0.id) }
+            : [v]
+        let multi = videos.count > 1
+
+        let resFps    = commonResFps(in: videos)
+        let duration  = commonString(videos.map(\.formattedDuration))
+        let fileSize  = multi ? "—" : v.formattedFileSize
+        let codec     = commonString(videos.map(\.codec))
+        let dateStr   = commonDate(videos.map(\.dateAdded))
+        let plays     = multi ? "—" : (v.playCount == 1 ? "1 play" : "\(v.playCount) plays")
+        let subtitles = videos.map(\.hasSubtitles)
+        let subLabel  = (subtitles.allSatisfy { $0 == subtitles[0] })
+            ? "Subtitle: \(subtitles[0] ? "Yes" : "No")"
+            : "Subtitle: —"
 
         return VStack(spacing: 0) {
-            factGridRow([resFps, v.formattedDuration ?? "—", v.formattedFileSize])
+            factGridRow([resFps, duration, fileSize])
             hLine()
-            factGridRow([v.codec ?? "—", dateStr, plays])
+            factGridRow([codec, dateStr, plays])
             hLine()
-            factCell("Subtitle: \(v.hasSubtitles ? "Yes" : "No")")
+            factCell(subLabel)
         }
         .background(Self.factCellBackground)
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -311,7 +378,7 @@ struct CuratedWallInspector: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Rectangle().fill(Color.appAccent).frame(width: 3, height: 12).cornerRadius(2)
-                Text("Rating").font(.caption.weight(.semibold)).foregroundStyle(Color.appAccent)
+                Text("RATING").font(.caption.weight(.semibold)).tracking(0.5).foregroundStyle(Color.appAccent)
             }
             RatingView(rating: currentRating(for: ids), size: 18) { r in
                 viewModel.applyRating(to: ids, rating: r)
@@ -326,27 +393,100 @@ struct CuratedWallInspector: View {
         return video?.rating ?? 0
     }
 
-    // MARK: - Notes (tall editor)
+    // MARK: - Custom Metadata
 
-    private func notesBlock() -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Rectangle().fill(Color.appAccent).frame(width: 3, height: 12).cornerRadius(2)
-                Text("Notes").font(.caption.weight(.semibold)).foregroundStyle(Color.appAccent)
-                Spacer()
-                Text("\(notes.count)").font(.caption2).foregroundStyle(Color.appTextTertiary)
+    private func loadCustomFieldValues() {
+        let defs = viewModel.customMetadataFieldDefinitions
+        customFieldMixed = []
+        customFieldValues = [:]
+        guard !defs.isEmpty else { return }
+
+        if selectedIds.count == 1, let dbId = video?.databaseId {
+            for field in defs {
+                customFieldValues[field.id] = viewModel.listCustomMetadataByVideoId[dbId]?[field.id] ?? ""
             }
-            TextEditor(text: $notes)
-                .font(.system(size: 12))
-                .frame(minHeight: 90)
-                .scrollContentBackground(.hidden)
-                .background(Color.appSurface.opacity(0.5))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+        } else if selectedIds.count > 1 {
+            let sel = viewModel.filteredVideos.filter { selectedIds.contains($0.id) }
+            for field in defs {
+                let vals = sel.map { v -> String? in
+                    guard let id = v.databaseId else { return nil }
+                    return viewModel.listCustomMetadataByVideoId[id]?[field.id]
+                }
+                if let first = vals.first, vals.allSatisfy({ $0 == first }) {
+                    customFieldValues[field.id] = first ?? ""
+                } else {
+                    customFieldMixed.insert(field.id)
+                    customFieldValues[field.id] = ""
+                }
+            }
         }
     }
 
-    private func loadNotes() {
-        notes = UserDefaults.standard.string(forKey: notesKey) ?? ""
+    private func customMetadataBlock() -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Rectangle().fill(Color.appAccent).frame(width: 3, height: 12).cornerRadius(2)
+                Text("CUSTOM").font(.caption.weight(.semibold)).tracking(0.5).foregroundStyle(Color.appAccent)
+            }
+            ForEach(viewModel.customMetadataFieldDefinitions) { field in
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(field.name)
+                        .font(.caption2)
+                        .foregroundStyle(Color.appTextTertiary)
+                    customFieldEditor(for: field)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func customFieldEditor(for field: CustomMetadataFieldDefinition) -> some View {
+        let isMixed = customFieldMixed.contains(field.id)
+        let binding = Binding<String>(
+            get: { customFieldValues[field.id] ?? "" },
+            set: { customFieldValues[field.id] = $0; customFieldMixed.remove(field.id) }
+        )
+        let placeholder = isMixed ? "Multiple values" : field.name
+
+        switch field.valueType {
+        case .string, .number:
+            TextField(placeholder, text: binding)
+                .textFieldStyle(.plain)
+                .font(.system(size: 11))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .background(insetFieldBackground(cornerRadius: 6))
+                .focused($focusedCustomFieldId, equals: field.id)
+        case .text:
+            TabbableTextEditor(text: binding) {
+                // Advance to next custom field, or clear focus if last.
+                let defs = viewModel.customMetadataFieldDefinitions
+                if let idx = defs.firstIndex(where: { $0.id == field.id }), idx + 1 < defs.count {
+                    focusedCustomFieldId = defs[idx + 1].id
+                } else {
+                    focusedCustomFieldId = nil
+                }
+            }
+            .frame(minHeight: 56)
+            .padding(6)
+            .background(insetFieldBackground(cornerRadius: 8))
+            .focused($focusedCustomFieldId, equals: field.id)
+        case .date, .dateTime:
+            let fmt = ISO8601DateFormatter()
+            let dateBinding = Binding<Date>(
+                get: { fmt.date(from: customFieldValues[field.id] ?? "") ?? Date() },
+                set: { newDate in
+                    let s = fmt.string(from: newDate)
+                    customFieldValues[field.id] = s
+                    customFieldMixed.remove(field.id)
+                    Task { await viewModel.persistCustomMetadata(fieldId: field.id, value: s, forVideoPaths: selectedIds) }
+                }
+            )
+            DatePicker("", selection: dateBinding,
+                       displayedComponents: field.valueType == .dateTime ? [.date, .hourAndMinute] : .date)
+                .datePickerStyle(.compact)
+                .labelsHidden()
+        }
     }
 
     // MARK: - Tags — two lists: assigned, plus (behind a "blind") the unassigned tags.
@@ -358,7 +498,7 @@ struct CuratedWallInspector: View {
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Rectangle().fill(Color.appAccent).frame(width: 3, height: 12).cornerRadius(2)
-                Text("Tags").font(.caption.weight(.semibold)).foregroundStyle(Color.appAccent)
+                Text("TAGS").font(.caption.weight(.semibold)).tracking(0.5).foregroundStyle(Color.appAccent)
                 Spacer()
             }
 
@@ -396,8 +536,11 @@ struct CuratedWallInspector: View {
                 // New tag — creates it and assigns it to the current selection.
                 HStack(spacing: 4) {
                     TextField("New tag", text: $newTagText)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.plain)
                         .font(.system(size: 10))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 4)
+                        .background(insetFieldBackground(cornerRadius: 6))
                         .onSubmit { createAndApplyNewTag() }
                     Button { createAndApplyNewTag() } label: { Image(systemName: "plus.circle") }
                         .disabled(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -574,6 +717,59 @@ private struct InspectorTagChip: View {
                 .onChange(of: proxy.size.width) { _, newValue in
                     width.wrappedValue = newValue
                 }
+        }
+    }
+}
+
+/// NSTextView wrapper that intercepts Tab to advance focus instead of inserting a tab character.
+private struct TabbableTextEditor: NSViewRepresentable {
+    @Binding var text: String
+    var fontSize: CGFloat = 11
+    var onTab: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text, onTab: onTab) }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSTextView.scrollableTextView()
+        let tv = scrollView.documentView as! NSTextView
+        tv.delegate = context.coordinator
+        tv.isRichText = false
+        tv.isAutomaticQuoteSubstitutionEnabled = false
+        tv.font = .systemFont(ofSize: fontSize)
+        tv.backgroundColor = .clear
+        tv.drawsBackground = false
+        tv.textContainerInset = .zero
+        scrollView.backgroundColor = .clear
+        scrollView.drawsBackground = false
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        let tv = scrollView.documentView as! NSTextView
+        context.coordinator.onTab = onTab
+        if tv.string != text { tv.string = text }
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        @Binding var text: String
+        var onTab: () -> Void
+
+        init(text: Binding<String>, onTab: @escaping () -> Void) {
+            _text = text
+            self.onTab = onTab
+        }
+
+        func textDidChange(_ notification: Notification) {
+            guard let tv = notification.object as? NSTextView else { return }
+            text = tv.string
+        }
+
+        func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            if commandSelector == #selector(NSResponder.insertTab(_:)) {
+                onTab()
+                return true
+            }
+            return false
         }
     }
 }

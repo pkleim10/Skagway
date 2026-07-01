@@ -109,7 +109,7 @@ struct FloatingPlayerPanel: View {
     }
 
     private var resizeHandle: some View {
-        Image(systemName: "arrow.up.right.and.arrow.down.left")
+        Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
             .font(.system(size: 11, weight: .bold))
             .foregroundStyle(Color.appTextSecondary)
             .padding(6)

@@ -8,6 +8,8 @@ struct CuratedWallFiltersDrawer: View {
 
     @State private var tagSearch: String = ""
     @State private var hoverRating: Int?
+    @State private var showNewCollectionSheet = false
+    @State private var editingCollection: VideoCollection?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -41,6 +43,20 @@ struct CuratedWallFiltersDrawer: View {
                 .frame(height: 1),
             alignment: .bottom
         )
+        .sheet(isPresented: $showNewCollectionSheet) {
+            CollectionEditorView(
+                dbPool: viewModel.dbPool,
+                collection: nil,
+                onSave: { Task { await viewModel.loadCollections() } }
+            )
+        }
+        .sheet(item: $editingCollection) { collection in
+            CollectionEditorView(
+                dbPool: viewModel.dbPool,
+                collection: collection,
+                onSave: { Task { await viewModel.loadCollections() } }
+            )
+        }
     }
 
     // MARK: - Responsive column packing
@@ -260,21 +276,38 @@ struct CuratedWallFiltersDrawer: View {
                             )
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            Button("Edit Collection\u{2026}") { editingCollection = collection }
+                            Divider()
+                            Button("Delete Collection", role: .destructive) {
+                                Task { await viewModel.deleteCollection(collection) }
+                            }
+                        }
                     }
                 }
 
-                // Quick clear for the collection filter (kept local to the card for convenience)
-                Button {
-                    if case .collection = viewModel.sidebarFilter {
-                        viewModel.sidebarFilter = .all
+                HStack(spacing: 12) {
+                    // Add a new (smart) collection.
+                    Button { showNewCollectionSheet = true } label: {
+                        Label("New Collection", systemImage: "plus")
+                            .font(.caption)
                     }
-                } label: {
-                    Label("Clear collection filter", systemImage: "xmark")
-                        .font(.caption)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.appAccent)
+
+                    // Quick clear for the collection filter (kept local to the card for convenience)
+                    Button {
+                        if case .collection = viewModel.sidebarFilter {
+                            viewModel.sidebarFilter = .all
+                        }
+                    } label: {
+                        Label("Clear filter", systemImage: "xmark")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.appTextSecondary)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.appTextSecondary)
-                .padding(.top, 2)
+                .padding(.top, 4)
             }
         }
     }
