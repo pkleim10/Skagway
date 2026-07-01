@@ -31,6 +31,9 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- Curated Wall cleanup:
+  - Grid now shows the native scroll indicator (respects the macOS "Show scroll bars" setting) — it was suppressed by SwiftUI's default.
+
 - Playback redesign (in progress): unifying the three playback modes into one resizable player surface backed by a single shared `InlinePlaybackController` (resume load/save, sidecar subtitles, error handling, recordPlay, play-pause/restart).
   - Introduced the shared engine and a single `FloatingPlayerPanel` host: one player anchored top-right, shown whenever playback is active, with subtitles, resume banner, and error handling in one place.
   - The panel is **resizable** via a lower-left handle (top-right anchored, jitter-free), clamped between a compact minimum and the available area, with **▭ S M L ⤢** controls: compact (snap to the inspector still/filmstrip footprint), small/medium/large presets, and full-screen. Size is persisted.

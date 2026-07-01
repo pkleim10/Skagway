@@ -61,6 +61,9 @@ struct CuratedWallGrid: View {
                     }
                     .padding(outerPadding)
                 }
+                // Native overlay scroller that respects the macOS "Show scroll bars" system setting
+                // (matches Finder/Photos), rather than the default which can suppress it here.
+                .scrollIndicators(.visible)
             }
             .background(Color.appBackground.opacity(0.4))
         }
