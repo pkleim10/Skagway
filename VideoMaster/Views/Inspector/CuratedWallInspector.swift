@@ -18,6 +18,10 @@ struct CuratedWallInspector: View {
     @State private var filmstrip: NSImage?
     @State private var customFieldValues: [UUID: String] = [:]
     @State private var customFieldMixed: Set<UUID> = []
+    // The selection `customFieldValues` were loaded for, and the values as loaded. Together these
+    // let us flush edits to the *right* videos when the selection changes out from under an edit.
+    @State private var customFieldsLoadedForIds: Set<String> = []
+    @State private var customFieldOriginalValues: [UUID: String] = [:]
     @FocusState private var focusedCustomFieldId: UUID?
 
 
@@ -80,7 +84,10 @@ struct CuratedWallInspector: View {
         .onChange(of: viewModel.selectedVideoIds) { _, _ in loadCustomFieldValues() }
         .onChange(of: focusedCustomFieldId) { old, _ in
             guard let fieldId = old, let value = customFieldValues[fieldId] else { return }
-            Task { await viewModel.persistCustomMetadata(fieldId: fieldId, value: value, forVideoPaths: selectedIds) }
+            // Persist to the selection these values belong to — not the (possibly already-changed)
+            // current selection — so an edit is never written to the wrong video.
+            let ids = customFieldsLoadedForIds
+            Task { await viewModel.persistCustomMetadata(fieldId: fieldId, value: value, forVideoPaths: ids) }
         }
         .onChange(of: viewModel.showThumbnailInDetail) { _, _ in
             filmstrip = nil
@@ -412,10 +419,30 @@ struct CuratedWallInspector: View {
 
     // MARK: - Custom Metadata
 
+    /// Persist any custom-field edits that differ from what was loaded, to the selection those
+    /// values were loaded for. Called before we replace the values (selection change), so an
+    /// in-progress edit isn't lost when the user clicks another video without leaving the field.
+    private func flushPendingCustomEdits() {
+        let ids = customFieldsLoadedForIds
+        guard !ids.isEmpty else { return }
+        for field in viewModel.customMetadataFieldDefinitions {
+            // A field left untouched at "mixed" must not stamp a blank over the differing values.
+            guard !customFieldMixed.contains(field.id) else { continue }
+            let value = customFieldValues[field.id] ?? ""
+            guard value != (customFieldOriginalValues[field.id] ?? "") else { continue }
+            Task { await viewModel.persistCustomMetadata(fieldId: field.id, value: value, forVideoPaths: ids) }
+        }
+    }
+
     private func loadCustomFieldValues() {
+        flushPendingCustomEdits()
         let defs = viewModel.customMetadataFieldDefinitions
         customFieldMixed = []
         customFieldValues = [:]
+        defer {
+            customFieldOriginalValues = customFieldValues
+            customFieldsLoadedForIds = selectedIds
+        }
         guard !defs.isEmpty else { return }
 
         if selectedIds.count == 1, let dbId = video?.databaseId {
