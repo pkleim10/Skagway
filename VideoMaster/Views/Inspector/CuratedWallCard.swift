@@ -10,7 +10,13 @@ import AppKit
 struct CuratedWallCard: View {
     let video: Video
     let isSelected: Bool
+    let isRenaming: Bool
+    @Binding var renameText: String
     let thumbnailService: ThumbnailService
+    var renameFocus: FocusState<Bool>.Binding
+    var onCommitRename: () -> Void
+    var onCancelRename: () -> Void
+    var onRenameEditingChanged: (Bool) -> Void
 
     @State private var thumbnail: NSImage?
     @State private var isHovering = false
@@ -70,11 +76,31 @@ struct CuratedWallCard: View {
 
             // Very light metadata row (exactly as described in mocks + plan)
             VStack(alignment: .leading, spacing: 2) {
-                Text(video.fileName)
-                    .font(.system(size: 11))
-                    .fontWeight(isSelected ? .semibold : .regular)
-                    .foregroundStyle(Color.appTextPrimary)
-                    .lineLimit(1)
+                if isRenaming {
+                    TextField("", text: $renameText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11, weight: .medium))
+                        .lineLimit(1)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.appSurface)
+                        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .stroke(Color.appAccent, lineWidth: 1.5)
+                        )
+                        .focused(renameFocus)
+                        .onSubmit { onCommitRename() }
+                        .onExitCommand { onCancelRename() }
+                        .onAppear { onRenameEditingChanged(true) }
+                        .onDisappear { onRenameEditingChanged(false) }
+                } else {
+                    Text(video.fileName)
+                        .font(.system(size: 11))
+                        .fontWeight(isSelected ? .semibold : .regular)
+                        .foregroundStyle(Color.appTextPrimary)
+                        .lineLimit(1)
+                }
 
                 HStack {
                     Text(video.dateAdded.formatted(date: .abbreviated, time: .omitted))

@@ -25,18 +25,23 @@ struct CuratedWallGrid: View {
         // widths — visually identical, but dropping the GeometryReader lets SwiftUI show the native
         // scroller reliably, including the legacy (space-reserving) style used when the system is set
         // to "Always" or a mouse is attached. Search/count/toggle/filters live in the thin bar above.
-        ScrollViewReader { proxy in
-            ScrollView(.vertical) {
-                LazyVGrid(
+        ScrollView(.vertical) {
+            LazyVGrid(
                     columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: Self.columns),
                     spacing: spacing
                 ) {
                     ForEach(viewModel.filteredVideos) { video in
-                        // Use dedicated elegant card (no inline rename in wall MVP for visual cleanliness)
+                        let isRenamingRow = viewModel.renamingVideoId == video.id
                         CuratedWallCard(
                             video: video,
                             isSelected: viewModel.selectedVideoIds.contains(video.id),
-                            thumbnailService: thumbnailService
+                            isRenaming: isRenamingRow,
+                            renameText: isRenamingRow ? $viewModel.renameText : .constant(""),
+                            thumbnailService: thumbnailService,
+                            renameFocus: $renameFocus,
+                            onCommitRename: { commitRename(video) },
+                            onCancelRename: cancelRename,
+                            onRenameEditingChanged: { viewModel.isEditingText = $0 }
                         )
                         .id(video.id)
                         .contentShape(Rectangle())
@@ -50,6 +55,10 @@ struct CuratedWallGrid: View {
                             Button("Play in External Player") { play(video) }
                             Button("Show in Finder") {
                                 NSWorkspace.shared.selectFile(video.filePath, inFileViewerRootedAtPath: "")
+                            }
+                            Button("Rename") {
+                                viewModel.renameText = video.fileName
+                                viewModel.renamingVideoId = video.id
                             }
                             Menu("Open With") {
                                 let urlsToSend: [URL] = {
@@ -131,13 +140,22 @@ struct CuratedWallGrid: View {
                     viewModel.issueScrollCommand(.toRow(index: rowIndex, total: totalRows))
                 }
             }
-            // Keep the keyboard-navigated selection visible. `anchor: nil` does the minimal scroll to
-            // reveal the target — cheap for the adjacent ±1/±row arrow moves that drive this.
+            .onChange(of: viewModel.renamingVideoId) { _, id in
+                if id != nil {
+                    DispatchQueue.main.async { renameFocus = true }
+                }
+            }
             .onChange(of: viewModel.scrollToVideoId) { _, targetId in
                 guard let id = targetId else { return }
                 viewModel.scrollToVideoId = nil
-                proxy.scrollTo(id, anchor: nil)
-            }
+                let videos = viewModel.filteredVideos
+                guard let index = videos.firstIndex(where: { $0.id == id }) else { return }
+                let rowIndex = index / Self.columns
+                let totalRows = (videos.count + Self.columns - 1) / Self.columns
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(120))
+                    viewModel.issueScrollCommand(.toRow(index: rowIndex, total: totalRows))
+                }
         }
     }
 
@@ -159,6 +177,24 @@ struct CuratedWallGrid: View {
             viewModel.selectedVideoIds = [video.id]
             lastClickedId = video.id
         }
+    }
+
+    private func commitRename(_ video: Video) {
+        let newName = viewModel.renameText.trimmingCharacters(in: .whitespaces)
+        viewModel.renamingVideoId = nil
+        guard !newName.isEmpty, newName != video.fileName else {
+            viewModel.renameText = ""
+            return
+        }
+        Task {
+            _ = await viewModel.renameVideo(video, to: newName)
+            viewModel.renameText = ""
+        }
+    }
+
+    private func cancelRename() {
+        viewModel.renamingVideoId = nil
+        viewModel.renameText = ""
     }
 
     private func play(_ video: Video) {

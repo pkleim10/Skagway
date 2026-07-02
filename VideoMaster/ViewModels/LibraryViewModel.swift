@@ -1721,6 +1721,12 @@ final class LibraryViewModel {
     }
 
     /// Grid keyboard navigation: move selection along `filteredVideos` (same order as list). List relies on `Table` arrow handling.
+    func scrollToSelected() {
+        guard let id = lastSelectedVideoId ?? selectedVideoIds.first,
+              filteredVideos.contains(where: { $0.id == id }) else { return }
+        scrollToVideoId = id
+    }
+
     func navigateFilteredVideoStep(_ step: Int) {
         guard step != 0 else { return }
         let videos = filteredVideos
@@ -2014,13 +2020,26 @@ final class LibraryViewModel {
         let newURL = oldURL.deletingLastPathComponent().appendingPathComponent(trimmed)
         let newFilePath = newURL.path
 
-        guard !FileManager.default.fileExists(atPath: newFilePath) else {
-            print("Rename failed: file already exists at \(newFilePath)")
-            return nil
+        // Case-insensitive filesystems (APFS/HFS+): a case-only rename makes fileExists return
+        // true and moveItem a no-op because both paths resolve to the same inode. Use a temp name.
+        let isCaseOnlyRename = oldURL.path.lowercased() == newURL.path.lowercased()
+
+        if !isCaseOnlyRename {
+            guard !FileManager.default.fileExists(atPath: newFilePath) else {
+                print("Rename failed: file already exists at \(newFilePath)")
+                return nil
+            }
         }
 
         do {
-            try FileManager.default.moveItem(at: oldURL, to: newURL)
+            if isCaseOnlyRename {
+                let tempURL = oldURL.deletingLastPathComponent()
+                    .appendingPathComponent(".\(UUID().uuidString)")
+                try FileManager.default.moveItem(at: oldURL, to: tempURL)
+                try FileManager.default.moveItem(at: tempURL, to: newURL)
+            } else {
+                try FileManager.default.moveItem(at: oldURL, to: newURL)
+            }
             try await videoRepo.renameVideo(videoId: dbId, newFilePath: newFilePath, newFileName: trimmed)
             thumbnailService.migrateCacheKey(from: video.filePath, to: newFilePath)
             if selectedVideoIds.contains(video.filePath) {

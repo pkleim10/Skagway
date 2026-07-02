@@ -33,6 +33,12 @@ struct VideoMasterApp: App {
 
                 Divider()
 
+                Button("Scroll to Selection") {
+                    appState.libraryViewModel?.scrollToSelected()
+                }
+                .keyboardShortcut("j", modifiers: .command)
+                .disabled(appState.libraryViewModel?.selectedVideoIds.isEmpty != false)
+
                 Button("Surprise Me!") {
                     appState.libraryViewModel?.surpriseMePickRandom()
                 }
