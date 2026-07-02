@@ -196,11 +196,28 @@ struct CuratedWallInspector: View {
     private func filmstripSeekAndPlay(at location: CGPoint, size: CGSize, video: Video) {
         // Seek to the clicked time and play in whatever mode the setting indicates (the host that
         // mounts for that mode consumes `pendingFilmstripSeekSeconds`).
-        let w = max(1.0, size.width)
-        let progress = max(0.0, min(1.0, location.x / w))
         let dur = video.duration ?? 0.0
-        viewModel.pendingFilmstripSeekSeconds = progress * dur
+        viewModel.pendingFilmstripSeekSeconds = filmstripClickSeconds(at: location, size: size, duration: dur)
         viewModel.isPlayingInline = true
+    }
+
+    /// Map a click on the filmstrip composite to the timestamp of the clicked frame.
+    /// The composite is a row-major rows×columns grid whose frames are sampled at
+    /// (index+1)/(N+1) of the duration (see `ThumbnailService.buildFilmstrip`), so the seek
+    /// target is that exact sample time — the precise seek in `InlinePlaybackController.start`
+    /// then lands playback on the very frame that was clicked.
+    private func filmstripClickSeconds(at location: CGPoint, size: CGSize, duration: Double) -> Double {
+        let w = max(1.0, size.width)
+        let h = max(1.0, size.height)
+        guard let fs = filmstrip, let grid = ThumbnailService.filmstripGrid(in: fs) else {
+            // Grid unknown (unexpected cache dimensions): treat the full width as a linear timeline.
+            return max(0.0, min(1.0, location.x / w)) * duration
+        }
+        let column = min(grid.columns - 1, max(0, Int(location.x / w * CGFloat(grid.columns))))
+        let row = min(grid.rows - 1, max(0, Int(location.y / h * CGFloat(grid.rows))))
+        let frameCount = grid.rows * grid.columns
+        let index = row * grid.columns + column
+        return Double(index + 1) / Double(frameCount + 1) * duration
     }
 
     private func loadHero() async {

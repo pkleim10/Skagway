@@ -70,6 +70,25 @@ final class ThumbnailService: @unchecked Sendable {
     private static let filmstripCachePrefix = "_filmstrip"
     private static let detailPreviewCachePrefix = "_detailPreview"
 
+    /// Fixed cell footprint (points) used by `buildFilmstrip` for every composite. This is the
+    /// layout contract that lets `filmstripGrid(in:)` recover rows/columns from a cached image,
+    /// since per-video grid choices are not persisted anywhere else.
+    static let filmstripCellSize = NSSize(width: 400, height: 225)
+
+    /// Recover the rows×columns grid of a filmstrip composite from its point size.
+    /// Works for both freshly built images and disk-cached JPEGs: the cache write path preserves
+    /// DPI metadata, so `NSImage.size` stays in points (cell multiples) at any backing scale.
+    /// Returns nil if the image is not a whole multiple of the cell footprint.
+    static func filmstripGrid(in image: NSImage) -> (rows: Int, columns: Int)? {
+        let columns = Int((image.size.width / filmstripCellSize.width).rounded())
+        let rows = Int((image.size.height / filmstripCellSize.height).rounded())
+        guard columns >= 1, rows >= 1,
+              abs(image.size.width - CGFloat(columns) * filmstripCellSize.width) < 2,
+              abs(image.size.height - CGFloat(rows) * filmstripCellSize.height) < 2
+        else { return nil }
+        return (rows, columns)
+    }
+
     /// Presets for detail-pane JPEG long edge (Settings → Video; keep in sync with the picker there).
     static let detailPreviewLongEdgeChoices: [Int] = [480, 720, 1080, 1440, 2160]
 
@@ -489,8 +508,8 @@ final class ThumbnailService: @unchecked Sendable {
             throw ThumbnailError.generationFailed
         }
 
-        let cellWidth: CGFloat = 400
-        let cellHeight: CGFloat = 225
+        let cellWidth = Self.filmstripCellSize.width
+        let cellHeight = Self.filmstripCellSize.height
         let compositeWidth = cellWidth * CGFloat(columns)
         let compositeHeight = cellHeight * CGFloat(rows)
 

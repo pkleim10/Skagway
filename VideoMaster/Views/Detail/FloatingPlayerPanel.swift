@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The single resizable, movable player surface. Positioned within the content area overlay;
-/// S/M/L sizes default to centered, Compact snaps to the top-right inspector footprint.
+/// Compact snaps to the top-right inspector footprint, otherwise the panel floats freely.
 /// The lower-left handle resizes (top + right edges stay pinned). The title bar drags to reposition.
 /// Size and position are persisted to `viewModel` on release.
 struct FloatingPlayerPanel: View {
@@ -103,7 +103,7 @@ struct FloatingPlayerPanel: View {
                 RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
                     .stroke(Color.appAccent.opacity(0.3), lineWidth: 1)
             )
-            .overlay(alignment: .bottomTrailing) { presets }
+            .overlay(alignment: .bottomTrailing) { sizeControls }
             .overlay(alignment: .bottomLeading)  { resizeHandle }
             .overlay(alignment: .top)            { titleBarDragArea }
             .shadow(color: .black.opacity(0.45), radius: 18, x: 0, y: 8)
@@ -140,18 +140,16 @@ struct FloatingPlayerPanel: View {
             .help("Drag to move")
     }
 
-    // MARK: - Presets
+    // MARK: - Size controls
 
-    private var presets: some View {
+    /// The two semantic size states; everything in between is the drag handle's job.
+    private var sizeControls: some View {
         HStack(spacing: 4) {
             iconButton("rectangle", help: "Compact (follows the inspector width)") {
                 viewModel.playerSizeIsCompact = true
                 viewModel.playerLastWasFullScreen = false
                 viewModel.playerFloatingPosition = nil   // compact always anchors top-right
             }
-            presetButton("S", fraction: 0.45)
-            presetButton("M", fraction: 0.66)
-            presetButton("L", fraction: 0.92)
             iconButton("arrow.up.left.and.arrow.down.right", help: "Full screen") {
                 viewModel.isPlayerFullScreen = true
             }
@@ -169,22 +167,6 @@ struct FloatingPlayerPanel: View {
         .padding(.horizontal, 6).padding(.vertical, 2)
         .background(Color.appSurface.opacity(0.85), in: Capsule())
         .help(help)
-    }
-
-    private func presetButton(_ label: String, fraction: CGFloat) -> some View {
-        Button(label) {
-            let w = (available.width - outerPadding * 2) * fraction
-            let h = w * 9.0 / 16.0 + 28
-            viewModel.playerSizeIsCompact = false
-            viewModel.playerLastWasFullScreen = false
-            viewModel.playerFloatingSize = clampSize(CGSize(width: w, height: h))
-            viewModel.playerFloatingPosition = nil   // reset to centered
-        }
-        .font(.caption2.weight(.semibold))
-        .foregroundStyle(Color.appTextSecondary)
-        .buttonStyle(.plain)
-        .padding(.horizontal, 6).padding(.vertical, 2)
-        .background(Color.appSurface.opacity(0.85), in: Capsule())
     }
 
     // MARK: - Resize handle
