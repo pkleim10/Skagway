@@ -496,7 +496,7 @@ private struct LibraryContentView: View {
             }
             return event
         }
-        // Escape key — cancel rename or stop playback
+        // Escape key — cancel rename, defocus text input, or stop playback (priority order).
         if event.keyCode == 53 {
             if lvm.renamingTagId != nil {
                 DispatchQueue.main.async {
@@ -511,6 +511,14 @@ private struct LibraryContentView: View {
                     lvm.renamingVideoId = nil
                     lvm.renameText = ""
                 }
+                return nil
+            }
+            // Defocus any active text input (search field, inspector fields). SwiftUI TextFields
+            // handle Escape themselves before this monitor sees it; this catches NSTextView-backed
+            // fields (TabbableTextEditor handles its own via doCommandBy, but this is a fallback).
+            if let first = NSApp.keyWindow?.firstResponder,
+               first is NSText {
+                DispatchQueue.main.async { NSApp.keyWindow?.makeFirstResponder(nil) }
                 return nil
             }
             if lvm.isPlayingInline {

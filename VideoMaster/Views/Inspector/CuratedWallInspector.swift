@@ -786,6 +786,10 @@ private struct TabbableTextEditor: NSViewRepresentable {
                 onTab()
                 return true
             }
+            if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+                textView.window?.makeFirstResponder(nil)
+                return true
+            }
             return false
         }
     }

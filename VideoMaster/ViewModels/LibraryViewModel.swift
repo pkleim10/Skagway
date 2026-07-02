@@ -466,10 +466,16 @@ final class LibraryViewModel {
     /// True while the player is in true (borderless, edge-to-edge) full-screen.
     var isPlayerFullScreen: Bool = false {
         didSet {
-            // Entering full-screen is a "last used size" choice; remember it. Leaving full-screen or
-            // teardown does NOT clear it here — only an explicit windowed size choice does (see the
-            // panel), so stopping from full-screen still reopens full-screen under "Last used size".
-            if isPlayerFullScreen { playerLastWasFullScreen = true }
+            if isPlayerFullScreen {
+                // Entering full-screen: remember it for "Last used size".
+                playerLastWasFullScreen = true
+            } else if isPlayingInline {
+                // Exiting full-screen while still playing means the user explicitly shifted back to
+                // windowed — clear the flag so the next session doesn't re-open full-screen.
+                // (When playback stops, isPlayingInline is already false before this fires, so
+                // stopping from full-screen still reopens full-screen under "Last used size".)
+                playerLastWasFullScreen = false
+            }
         }
     }
 
