@@ -51,8 +51,62 @@ struct CuratedWallGrid: View {
                             Button("Show in Finder") {
                                 NSWorkspace.shared.selectFile(video.filePath, inFileViewerRootedAtPath: "")
                             }
+                            Menu("Open With") {
+                                let urlsToSend: [URL] = {
+                                    if viewModel.selectedVideoIds.count > 1,
+                                       viewModel.selectedVideoIds.contains(video.id) {
+                                        return viewModel.selectedVideoIds.compactMap { id in
+                                            viewModel.filteredVideos.first(where: { $0.id == id })?.url
+                                        }
+                                    }
+                                    return [video.url]
+                                }()
+                                if ExternalApps.isSubmarineInstalled {
+                                    Button("Submarine") { ExternalApps.openInSubmarine(urlsToSend) }
+                                    Divider()
+                                }
+                                let appURLs = NSWorkspace.shared.urlsForApplications(toOpen: video.url)
+                                ForEach(appURLs, id: \.self) { appURL in
+                                    Button(appURL.deletingPathExtension().lastPathComponent) {
+                                        NSWorkspace.shared.open(
+                                            [video.url],
+                                            withApplicationAt: appURL,
+                                            configuration: NSWorkspace.OpenConfiguration()
+                                        )
+                                        Task { await viewModel.recordPlay(for: video) }
+                                    }
+                                }
+                            }
                             Divider()
-                            Button("Delete") {
+                            Button("Re-encode to MP4\u{2026}") {
+                                if let ffmpeg = viewModel.resolvedFFmpegPath {
+                                    let ids = viewModel.selectedVideoIds.contains(video.id)
+                                        ? viewModel.selectedVideoIds : [video.id]
+                                    let selected = viewModel.filteredVideos.filter { ids.contains($0.id) }
+                                    for v in selected { viewModel.reencodeVideo(v, ffmpegPath: ffmpeg) }
+                                }
+                            }
+                            .disabled(viewModel.resolvedFFmpegPath == nil)
+                            .help(viewModel.resolvedFFmpegPath == nil ? "Requires ffmpeg — configure the path in Settings \u{2192} Tools" : "")
+                            Button("Move Files\u{2026}") {
+                                let panel = NSOpenPanel()
+                                panel.canChooseDirectories = true
+                                panel.canChooseFiles = false
+                                panel.allowsMultipleSelection = false
+                                panel.prompt = "Move Here"
+                                panel.message = "Choose a destination folder"
+                                if panel.runModal() == .OK, let dest = panel.url {
+                                    let ids = viewModel.selectedVideoIds.contains(video.id)
+                                        ? viewModel.selectedVideoIds : [video.id]
+                                    let selected = viewModel.filteredVideos.filter { ids.contains($0.id) }
+                                    Task { await viewModel.moveVideos(selected, to: dest) }
+                                }
+                            }
+                            Divider()
+                            Button("Remove from Library") {
+                                Task { await viewModel.removeVideosFromLibrary([video.id]) }
+                            }
+                            Button("Delete", role: .destructive) {
                                 viewModel.pendingDeleteIds = [video.id]
                                 viewModel.showDeleteConfirmation = true
                             }
@@ -60,9 +114,23 @@ struct CuratedWallGrid: View {
                     }
                 }
                 .padding(outerPadding)
+                .background(ScrollCommandHandler(command: viewModel.scrollCommand, mode: .grid))
             }
             .scrollIndicators(.visible)
             .background(Color(red: 3 / 255, green: 13 / 255, blue: 23 / 255))   // #030D17
+            .onAppear {
+                guard viewModel.scrollToSelectedOnViewSwitch else { return }
+                viewModel.scrollToSelectedOnViewSwitch = false
+                guard let id = viewModel.lastSelectedVideoId ?? viewModel.selectedVideoIds.first,
+                      let index = viewModel.filteredVideos.firstIndex(where: { $0.id == id }) else { return }
+                let videos = viewModel.filteredVideos
+                let rowIndex = index / Self.columns
+                let totalRows = (videos.count + Self.columns - 1) / Self.columns
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(120))
+                    viewModel.issueScrollCommand(.toRow(index: rowIndex, total: totalRows))
+                }
+            }
             // Keep the keyboard-navigated selection visible. `anchor: nil` does the minimal scroll to
             // reveal the target — cheap for the adjacent ±1/±row arrow moves that drive this.
             .onChange(of: viewModel.scrollToVideoId) { _, targetId in

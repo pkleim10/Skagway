@@ -42,6 +42,7 @@ final class LibraryViewModel {
             if let slot = Video.customSortSlot(from: tableSortOrder.first?.keyPath) {
                 let fields = allCustomFieldsForList
                 guard slot < fields.count else { return }
+                pendingScrollAfterSortId = selectedVideoIds.count == 1 ? selectedVideoIds.first : nil
                 customSortAscending = ascending
                 customSortFieldId = fields[slot].id  // didSet → recomputeFilteredVideos + savePreferences
                 return
@@ -863,6 +864,7 @@ final class LibraryViewModel {
 
     func selectCustomSort(fieldId: UUID, ascending: Bool) {
         let slot = allCustomFieldsForList.firstIndex { $0.id == fieldId } ?? 0
+        pendingScrollAfterSortId = selectedVideoIds.count == 1 ? selectedVideoIds.first : nil
         // Update tableSortOrder to show the caret on the correct custom column, suppressing didSet side-effects.
         _settingCustomSortOrder = true
         tableSortOrder = [KeyPathComparator(Video.customSortKeyPath(slot: slot), order: ascending ? .forward : .reverse)]

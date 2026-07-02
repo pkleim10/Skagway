@@ -214,6 +214,7 @@ private struct LibraryContentView: View {
                 selection: Binding(
                     get: { vm.viewMode },
                     set: { newValue in
+                        vm.scrollToSelectedOnViewSwitch = true
                         vm.viewMode = newValue
                         vm.savePreferences()
                     }
