@@ -31,6 +31,12 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.20.0 (build 578) - 2026-07-02
+
+- **⌘F now focuses the search field**, matching the system-wide Find convention. Existing search text is auto-selected via AppKit's standard first-responder behavior.
+- **Fullscreen toggle moved to ⌃⌘F** (Control-Command-F, the macOS-standard fullscreen shortcut), freeing up plain ⌘F for search focus.
+- **Keyboard shortcut modifiers rationalized app-wide**: every shortcut now follows one consistent rule — ⌃ is reserved solely for the OS-mandated fullscreen binding, ⌥ marks an alternate/secondary action (Clear Filters, Toggle Thumbnail/Filmstrip, Show in Finder, Restart from Beginning, Remove from Library), and ⇧ marks an action that reveals or adds UI (Surprise Me, Toggle Filters, Add Folder). Restart from Beginning moved ⌥⌘R → ⌥⌘B; Remove from Library moved ⇧⌘R → ⌥⌘R to resolve the one letter collision this created.
+
 ## 0.19.0 (build 557) - 2026-07-02
 
 - **Arrow key navigation in grid view**: ← / → move to the previous / next video; ↑ / ↓ jump one row up or down (same column position). Navigating scrolls the selection into view. Keys are ignored when a text field (search, inspector custom fields) is focused.

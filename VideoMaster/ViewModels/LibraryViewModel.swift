@@ -223,6 +223,14 @@ final class LibraryViewModel {
         scrollCommand = ScrollCommand(token: scrollCommandToken, kind: kind)
     }
 
+    /// Bumped by the ⌘F global key monitor to request search-field focus. The FocusState it drives
+    /// lives in ContentView, so this token bridges the same way `scrollCommand` does for scroll requests.
+    private(set) var focusSearchFieldToken: Int = 0
+
+    func requestFocusSearchField() {
+        focusSearchFieldToken += 1
+    }
+
     /// Set by renameVideo when sorted by name; consumed by applyFilteredVideos to scroll in same cycle as bump.
     var pendingScrollToAfterRename: String?
     /// Set when sort changes with exactly one selected row; consumed in `applyFilteredVideos` to scroll after reorder.

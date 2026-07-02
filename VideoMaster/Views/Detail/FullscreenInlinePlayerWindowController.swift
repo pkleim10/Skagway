@@ -102,9 +102,9 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
         keyDownMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
             guard self.window?.isKeyWindow == true else { return event }
-            // Esc or ⌘F exits fullscreen (returns to windowed inline player).
+            // Esc or ⌃⌘F exits fullscreen (returns to windowed inline player).
             if event.keyCode == 53 ||
-               (event.keyCode == 3 && event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command) {
+               (event.keyCode == 3 && event.modifierFlags.intersection(.deviceIndependentFlagsMask) == [.control, .command]) {
                 self.closeWindow()
                 return nil
             }
@@ -156,7 +156,7 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
         b.isBordered = false
         b.target = self
         b.action = #selector(closeButtonTapped)
-        b.toolTip = "Exit Full Screen (Esc)"
+        b.toolTip = "Exit Full Screen (⌃⌘F or Esc)"
         b.contentTintColor = .labelColor
         return b
     }

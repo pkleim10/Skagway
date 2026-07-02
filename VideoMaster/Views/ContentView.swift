@@ -83,6 +83,7 @@ private struct LibraryContentView: View {
                 .foregroundStyle(Color.appTextPrimary)
                 .tint(Color.appAccent)
                 .focused($isSearchFocused)
+                .help("Search videos (⌘F)")
             if !vm.searchText.isEmpty {
                 Button {
                     vm.searchText = ""
@@ -205,7 +206,7 @@ private struct LibraryContentView: View {
             .buttonStyle(.plain)
             .foregroundStyle(Color.appTextSecondary)
             .disabled(vm.filteredVideos.isEmpty)
-            .help("Surprise Me — pick a random video (auto-plays if enabled in Settings)")
+            .help("Surprise Me — pick a random video, auto-plays if enabled in Settings (⌘⇧S)")
             .keyboardShortcut("s", modifiers: [.command, .shift])
 
             Divider().frame(height: 16)
@@ -219,7 +220,13 @@ private struct LibraryContentView: View {
                         vm.savePreferences()
                     }
                 ),
-                items: [ViewMode.list, .grid]
+                items: [ViewMode.list, .grid],
+                tooltip: { mode in
+                    switch mode {
+                    case .list: "List view (⌘1)"
+                    case .grid: "Wall view (⌘2)"
+                    }
+                }
             ) { mode in
                 switch mode {
                 case .list: Label("List", systemImage: "list.bullet")
@@ -457,6 +464,9 @@ private struct LibraryContentView: View {
                 window.makeFirstResponder(nil)
             }
         }
+        .onChange(of: vm.focusSearchFieldToken) { _, _ in
+            isSearchFocused = true
+        }
         .onChange(of: vm.isCuratedWallFiltersDrawerOpen) { _, newValue in
             // Animate the reveal factor. The well and drawer heights are driven from this CGFloat,
             // so we get smooth per-frame interpolated sizes instead of a full-height pop followed by a push.
@@ -530,8 +540,7 @@ private struct LibraryContentView: View {
             }
             return event
         }
-        // Space key — play/pause; Shift+Space — restart from beginning
-        // Space — play/pause (or start playback). Restart-from-beginning is the ⌘⌥R menu command
+        // Space — play/pause (or start playback). Restart-from-beginning is the ⌥⌘B menu command
         // (Shift+Space proved unreliable: the Shift modifier doesn't reach this handler on Space).
         if event.keyCode == 49 {
             // A focused text field (e.g. Notes) wins so a space can be typed.
@@ -550,14 +559,21 @@ private struct LibraryContentView: View {
             return nil
         }
 
-        // ⌘F — toggle full-screen inline playback (enter when playing, exit when already fullscreen).
-        if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+        // ⌃⌘F — toggle full-screen inline playback (enter when playing, exit when already fullscreen).
+        if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == [.control, .command],
            event.keyCode == 3 /* 'f' */ {
             if lvm.isPlayingInline {
                 DispatchQueue.main.async { lvm.isPlayerFullScreen.toggle() }
                 return nil
             }
             return event
+        }
+
+        // ⌘F — focus the search field (matches system-wide Find convention).
+        if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+           event.keyCode == 3 /* 'f' */ {
+            DispatchQueue.main.async { lvm.requestFocusSearchField() }
+            return nil
         }
 
         // ⌘⇧F — toggle the Curated Wall top filters drawer (live filters, always starts closed).

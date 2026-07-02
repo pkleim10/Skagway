@@ -64,13 +64,13 @@ struct VideoMasterApp: App {
                 Button("Toggle Full Screen") {
                     appState.libraryViewModel?.isPlayerFullScreen.toggle()
                 }
-                .keyboardShortcut("f", modifiers: .command)
+                .keyboardShortcut("f", modifiers: [.command, .control])
                 .disabled(appState.libraryViewModel?.isPlayingInline != true)
 
                 Button("Restart from Beginning") {
                     appState.libraryViewModel?.playback.restartFromBeginning()
                 }
-                .keyboardShortcut("r", modifiers: [.command, .option])
+                .keyboardShortcut("b", modifiers: [.command, .option])
                 .disabled(!appState.hasLibrary)
             }
             CommandGroup(after: .pasteboard) {
@@ -96,7 +96,7 @@ struct VideoMasterApp: App {
                     let ids = vm.selectedVideoIds
                     Task { await vm.removeVideosFromLibrary(ids) }
                 }
-                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .keyboardShortcut("r", modifiers: [.command, .option])
                 .disabled(appState.libraryViewModel?.selectedVideoIds.isEmpty != false)
             }
             CommandGroup(replacing: .appInfo) {

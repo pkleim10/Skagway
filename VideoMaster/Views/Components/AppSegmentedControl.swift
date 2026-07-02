@@ -7,16 +7,19 @@ struct AppSegmentedControl<Selection: Hashable>: View {
     @Binding var selection: Selection
     let items: [Selection]
     private let makeLabel: (Selection) -> AnyView
+    private let makeTooltip: ((Selection) -> String)?
 
     @Namespace private var namespace
 
     init<Label: View>(
         selection: Binding<Selection>,
         items: [Selection],
+        tooltip: ((Selection) -> String)? = nil,
         @ViewBuilder label: @escaping (Selection) -> Label
     ) {
         self._selection = selection
         self.items = items
+        self.makeTooltip = tooltip
         self.makeLabel = { AnyView(label($0)) }
     }
 
@@ -52,6 +55,7 @@ struct AppSegmentedControl<Selection: Hashable>: View {
                 )
                 .clipShape(RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous))
                 .contentShape(RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous))
+                .help(makeTooltip?(item) ?? "")
             }
         }
         .padding(3)

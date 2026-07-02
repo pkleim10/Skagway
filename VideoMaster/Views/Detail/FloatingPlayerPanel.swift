@@ -150,7 +150,7 @@ struct FloatingPlayerPanel: View {
                 viewModel.playerLastWasFullScreen = false
                 viewModel.playerFloatingPosition = nil   // compact always anchors top-right
             }
-            iconButton("arrow.up.left.and.arrow.down.right", help: "Full screen") {
+            iconButton("arrow.up.left.and.arrow.down.right", help: "Full screen (⌃⌘F)") {
                 viewModel.isPlayerFullScreen = true
             }
         }
