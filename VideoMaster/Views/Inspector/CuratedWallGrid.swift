@@ -13,8 +13,10 @@ struct CuratedWallGrid: View {
     @State private var lastClickedId: String?
     @FocusState private var renameFocus: Bool
 
-    // Target from the full-window mock + checklist decisions: 5 columns, generous breathing
-    private let targetColumns = 5
+    // Target from the full-window mock + checklist decisions: 5 columns, generous breathing.
+    // `columns` is the single source of truth for the grid width — arrow-key row navigation in
+    // ContentView reads it so ↑/↓ move by exactly one row.
+    static let columns = 5
     private let spacing: CGFloat = 22
     private let outerPadding: CGFloat = 18
 
@@ -23,42 +25,52 @@ struct CuratedWallGrid: View {
         // widths — visually identical, but dropping the GeometryReader lets SwiftUI show the native
         // scroller reliably, including the legacy (space-reserving) style used when the system is set
         // to "Always" or a mouse is attached. Search/count/toggle/filters live in the thin bar above.
-        ScrollView(.vertical) {
-            LazyVGrid(
-                columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: targetColumns),
-                spacing: spacing
-            ) {
-                ForEach(viewModel.filteredVideos) { video in
-                    // Use dedicated elegant card (no inline rename in wall MVP for visual cleanliness)
-                    CuratedWallCard(
-                        video: video,
-                        isSelected: viewModel.selectedVideoIds.contains(video.id),
-                        thumbnailService: thumbnailService
-                    )
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 2) {
-                        play(video)
-                    }
-                    .onTapGesture {
-                        handleSelection(video)
-                    }
-                    .contextMenu {
-                        Button("Play in External Player") { play(video) }
-                        Button("Show in Finder") {
-                            NSWorkspace.shared.selectFile(video.filePath, inFileViewerRootedAtPath: "")
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: Self.columns),
+                    spacing: spacing
+                ) {
+                    ForEach(viewModel.filteredVideos) { video in
+                        // Use dedicated elegant card (no inline rename in wall MVP for visual cleanliness)
+                        CuratedWallCard(
+                            video: video,
+                            isSelected: viewModel.selectedVideoIds.contains(video.id),
+                            thumbnailService: thumbnailService
+                        )
+                        .id(video.id)
+                        .contentShape(Rectangle())
+                        .onTapGesture(count: 2) {
+                            play(video)
                         }
-                        Divider()
-                        Button("Delete") {
-                            viewModel.pendingDeleteIds = [video.id]
-                            viewModel.showDeleteConfirmation = true
+                        .onTapGesture {
+                            handleSelection(video)
+                        }
+                        .contextMenu {
+                            Button("Play in External Player") { play(video) }
+                            Button("Show in Finder") {
+                                NSWorkspace.shared.selectFile(video.filePath, inFileViewerRootedAtPath: "")
+                            }
+                            Divider()
+                            Button("Delete") {
+                                viewModel.pendingDeleteIds = [video.id]
+                                viewModel.showDeleteConfirmation = true
+                            }
                         }
                     }
                 }
+                .padding(outerPadding)
             }
-            .padding(outerPadding)
+            .scrollIndicators(.visible)
+            .background(Color(red: 3 / 255, green: 13 / 255, blue: 23 / 255))   // #030D17
+            // Keep the keyboard-navigated selection visible. `anchor: nil` does the minimal scroll to
+            // reveal the target — cheap for the adjacent ±1/±row arrow moves that drive this.
+            .onChange(of: viewModel.scrollToVideoId) { _, targetId in
+                guard let id = targetId else { return }
+                viewModel.scrollToVideoId = nil
+                proxy.scrollTo(id, anchor: nil)
+            }
         }
-        .scrollIndicators(.visible)
-        .background(Color(red: 3 / 255, green: 13 / 255, blue: 23 / 255))   // #030D17
     }
 
     private func handleSelection(_ video: Video) {

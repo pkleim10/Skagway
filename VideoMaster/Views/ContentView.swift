@@ -559,8 +559,32 @@ private struct LibraryContentView: View {
             return nil
         }
 
-        // Grid ↑/↓ selection is handled by `LibraryGridView` (`.focusable` + `.onKeyPress`) so keys reach
-        // the same SwiftUI focus system as the scroll view; local monitors are unreliable here.
+        // Arrow keys — grid navigation. Handled here (same local monitor as Space/Enter/Escape) because
+        // SwiftUI `.onKeyPress` on the grid's `ScrollView` doesn't reliably receive keys inside the
+        // NSHostingView+NSSplitView the Curated Wall is hosted in. ←/→ step one video; ↑/↓ step one row.
+        // keyCodes: 123 ←, 124 →, 125 ↓, 126 ↑.
+        // NB: arrow events always carry `.function` + `.numericPad`, so we must test only the real
+        // command/option/control/shift modifiers — a `.deviceIndependentFlagsMask` check never matches.
+        let commandModifiers: NSEvent.ModifierFlags = [.command, .option, .control, .shift]
+        if [123, 124, 125, 126].contains(event.keyCode),
+           event.modifierFlags.intersection(commandModifiers).isEmpty,
+           lvm.viewMode == .grid,
+           !lvm.isEditingText {
+            // Let a focused text field (search, inspector fields) keep its own caret navigation.
+            if let first = NSApp.keyWindow?.firstResponder, first is NSTextView || first is NSTextField {
+                return event
+            }
+            let step: Int
+            switch event.keyCode {
+            case 123: step = -1                     // ← previous
+            case 124: step = 1                      // → next
+            case 126: step = -CuratedWallGrid.columns   // ↑ one row up
+            default:  step = CuratedWallGrid.columns    // ↓ one row down
+            }
+            DispatchQueue.main.async { lvm.navigateFilteredVideoStep(step) }
+            return nil
+        }
+
         return event
     }
 

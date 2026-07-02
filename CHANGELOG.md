@@ -31,6 +31,12 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.19.0 (build 557) - 2026-07-02
+
+- **Arrow key navigation in grid view**: ← / → move to the previous / next video; ↑ / ↓ jump one row up or down (same column position). Navigating scrolls the selection into view. Keys are ignored when a text field (search, inspector custom fields) is focused.
+- **Fix: inspector custom-field edit lost on selection change**: editing a text/number custom field and then clicking another video no longer drops the edit. Values are now flushed to the correct video before the inspector reloads for the new selection.
+- **Fix: spacebar focus hijack and fullscreen-to-windowed state bug**: spacebar no longer types into the search field on launch; fullscreen-to-windowed transition now correctly restores player state.
+
 ## 0.18.0 (build 551) - 2026-07-01
 
 - **Filmstrip click now seeks to the clicked frame**: clicking a frame in the inspector filmstrip starts playback at that frame's exact timestamp. The mapping is row-aware (rows × columns grid) rather than treating the x position as a 0–100 % scrubber. `ThumbnailService` exposes `filmstripGrid(in:)` to recover the grid from the composite's point size, so per-video grid choices are honoured without persisting them separately.
