@@ -1,6 +1,37 @@
 import SwiftUI
 import AppKit
 
+// MARK: - Per-card selection state
+
+/// One `@Observable` instance per card. When `isSelected` changes, only that card's
+/// body re-runs — not the entire grid. This matches AppKit table behaviour where row
+/// highlighting is O(1) rather than O(visible rows).
+@Observable
+final class CardSelectionState {
+    var isSelected: Bool = false
+}
+
+/// Plain (non-`@Observable`) store so `CuratedWallGrid.body` can call `state(for:)`
+/// without registering a SwiftUI observation dependency on the selection set.
+private final class CardSelectionStore {
+    private var states: [String: CardSelectionState] = [:]
+
+    func state(for id: String) -> CardSelectionState {
+        if let s = states[id] { return s }
+        let s = CardSelectionState()
+        states[id] = s
+        return s
+    }
+
+    func sync(to newIds: Set<String>) {
+        let current = Set(states.filter { $0.value.isSelected }.keys)
+        for id in current.subtracting(newIds) { states[id]?.isSelected = false }
+        for id in newIds.subtracting(current) { state(for: id).isSelected = true }
+    }
+}
+
+// MARK: - Grid
+
 /// The elegant "Wall" browsing surface for the Curated Wall experience.
 /// Matches the refined mockups:
 /// - ~5 columns at typical window widths with generous fixed spacing
@@ -12,6 +43,7 @@ struct CuratedWallGrid: View {
 
     @State private var lastClickedId: String?
     @FocusState private var renameFocus: Bool
+    @State private var selectionStore = CardSelectionStore()
 
     // Target from the full-window mock + checklist decisions: 5 columns, generous breathing.
     // `columns` is the single source of truth for the grid width — arrow-key row navigation in
@@ -34,7 +66,7 @@ struct CuratedWallGrid: View {
                         let isRenamingRow = viewModel.renamingVideoId == video.id
                         CuratedWallCard(
                             video: video,
-                            isSelected: viewModel.selectedVideoIds.contains(video.id),
+                            selectionState: selectionStore.state(for: video.id),
                             isRenaming: isRenamingRow,
                             renameText: isRenamingRow ? $viewModel.renameText : .constant(""),
                             thumbnailService: thumbnailService,
@@ -45,12 +77,12 @@ struct CuratedWallGrid: View {
                         )
                         .id(video.id)
                         .contentShape(Rectangle())
-                        .onTapGesture(count: 2) {
-                            play(video)
-                        }
                         .onTapGesture {
                             handleSelection(video)
                         }
+                        .simultaneousGesture(TapGesture(count: 2).onEnded {
+                            viewModel.isPlayingInline = true
+                        })
                         .contextMenu {
                             Button("Play in External Player") { play(video) }
                             Button("Show in Finder") {
@@ -128,6 +160,7 @@ struct CuratedWallGrid: View {
             .scrollIndicators(.visible)
             .background(Color(red: 3 / 255, green: 13 / 255, blue: 23 / 255))   // #030D17
             .onAppear {
+                selectionStore.sync(to: viewModel.selectedVideoIds)
                 guard viewModel.scrollToSelectedOnViewSwitch else { return }
                 viewModel.scrollToSelectedOnViewSwitch = false
                 guard let id = viewModel.lastSelectedVideoId ?? viewModel.selectedVideoIds.first,
@@ -139,6 +172,9 @@ struct CuratedWallGrid: View {
                     try? await Task.sleep(for: .milliseconds(120))
                     viewModel.issueScrollCommand(.toRow(index: rowIndex, total: totalRows))
                 }
+            }
+            .onChange(of: viewModel.selectedVideoIds) { _, newIds in
+                selectionStore.sync(to: newIds)
             }
             .onChange(of: viewModel.renamingVideoId) { _, id in
                 if id != nil {
@@ -161,22 +197,26 @@ struct CuratedWallGrid: View {
 
     private func handleSelection(_ video: Video) {
         let flags = NSEvent.modifierFlags
+        let newIds: Set<String>
         if flags.contains(.command) {
-            if viewModel.selectedVideoIds.contains(video.id) {
-                viewModel.selectedVideoIds.remove(video.id)
-            } else {
-                viewModel.selectedVideoIds.insert(video.id)
-            }
+            var ids = viewModel.selectedVideoIds
+            if ids.contains(video.id) { ids.remove(video.id) } else { ids.insert(video.id) }
             lastClickedId = video.id
+            newIds = ids
         } else if flags.contains(.shift), let anchor = lastClickedId,
                   let aIdx = viewModel.filteredVideos.firstIndex(where: { $0.id == anchor }),
                   let idx = viewModel.filteredVideos.firstIndex(where: { $0.id == video.id }) {
             let range = min(aIdx, idx)...max(aIdx, idx)
-            viewModel.selectedVideoIds = Set(range.map { viewModel.filteredVideos[$0].id })
+            newIds = Set(range.map { viewModel.filteredVideos[$0].id })
         } else {
-            viewModel.selectedVideoIds = [video.id]
             lastClickedId = video.id
+            newIds = [video.id]
         }
+        // Update card states first (O(1) per-card @Observable update — only the 2 affected
+        // cards re-render, not the whole grid), then update the VM one tick later so the
+        // inspector re-renders after the selection ring is already visible.
+        selectionStore.sync(to: newIds)
+        DispatchQueue.main.async { viewModel.selectedVideoIds = newIds }
     }
 
     private func commitRename(_ video: Video) {

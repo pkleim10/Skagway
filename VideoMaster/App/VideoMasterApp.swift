@@ -61,6 +61,12 @@ struct VideoMasterApp: App {
 
                 Divider()
 
+                Button("Toggle Full Screen") {
+                    appState.libraryViewModel?.isPlayerFullScreen.toggle()
+                }
+                .keyboardShortcut("f", modifiers: .command)
+                .disabled(appState.libraryViewModel?.isPlayingInline != true)
+
                 Button("Restart from Beginning") {
                     appState.libraryViewModel?.playback.restartFromBeginning()
                 }

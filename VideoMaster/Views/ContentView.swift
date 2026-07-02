@@ -550,6 +550,16 @@ private struct LibraryContentView: View {
             return nil
         }
 
+        // ⌘F — toggle full-screen inline playback (enter when playing, exit when already fullscreen).
+        if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+           event.keyCode == 3 /* 'f' */ {
+            if lvm.isPlayingInline {
+                DispatchQueue.main.async { lvm.isPlayerFullScreen.toggle() }
+                return nil
+            }
+            return event
+        }
+
         // ⌘⇧F — toggle the Curated Wall top filters drawer (live filters, always starts closed).
         // This is a fallback in addition to the .keyboardShortcut on the button.
         if event.modifierFlags.contains([.command, .shift]), event.keyCode == 3 /* 'f' */ {

@@ -9,7 +9,7 @@ import AppKit
 /// - Generous breathing room, gallery feel
 struct CuratedWallCard: View {
     let video: Video
-    let isSelected: Bool
+    let selectionState: CardSelectionState
     let isRenaming: Bool
     @Binding var renameText: String
     let thumbnailService: ThumbnailService
@@ -25,6 +25,7 @@ struct CuratedWallCard: View {
     private let corner: CGFloat = 8
 
     var body: some View {
+        let isSelected = selectionState.isSelected
         VStack(alignment: .leading, spacing: 6) {
             // Image area - the star of the card
             ZStack(alignment: .bottomTrailing) {
