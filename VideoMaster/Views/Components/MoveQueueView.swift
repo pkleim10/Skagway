@@ -11,6 +11,10 @@ struct MoveQueueView: View {
         vm.moveJobs.first { $0.status == .queued }?.id
     }
 
+    private var hasCompleted: Bool {
+        vm.moveJobs.contains { $0.isCompleted }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -41,6 +45,12 @@ struct MoveQueueView: View {
                 .font(.headline)
                 .foregroundStyle(Color.appTextPrimary)
             Spacer()
+            if hasCompleted {
+                Button("Clear") { vm.clearCompletedMoves() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.appTextSecondary)
+            }
             Button("Done") { dismiss() }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)

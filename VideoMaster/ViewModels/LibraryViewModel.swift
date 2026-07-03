@@ -2629,16 +2629,22 @@ final class LibraryViewModel {
         return completed == 1 ? "1 moved" : "\(completed) moved"
     }
 
+    /// Top of the list, but below the currently-moving job (if any) — that job stays pinned at
+    /// index 0 for the duration of its move (see `drainMoveQueue`).
+    private var newestJobInsertionIndex: Int {
+        moveJobs.contains(where: { if case .moving = $0.status { return true }; return false }) ? 1 : 0
+    }
+
     private func recordFailedMoveJob(video: Video, destinationFolder: URL, reason: String) {
         var job = MoveJob(video: video, destinationFolder: destinationFolder)
         job.status = .failed(reason: reason)
-        moveJobs.append(job)
+        moveJobs.insert(job, at: newestJobInsertionIndex)
         persistMoveJobs()
     }
 
     private func enqueueMoveJob(video: Video, destinationFolder: URL) {
         guard !moveJobs.contains(where: { $0.isActive && $0.videoDatabaseId != nil && $0.videoDatabaseId == video.databaseId }) else { return }
-        moveJobs.append(MoveJob(video: video, destinationFolder: destinationFolder))
+        moveJobs.insert(MoveJob(video: video, destinationFolder: destinationFolder), at: newestJobInsertionIndex)
         persistMoveJobs()
     }
 
@@ -2666,6 +2672,12 @@ final class LibraryViewModel {
         defer { isDrainingMoves = false }
         while let idx = moveJobs.firstIndex(where: { $0.status == .queued }) {
             let jobId = moveJobs[idx].id
+            // The job that's about to run pops to the very top of the list, ahead of everything
+            // else queued after it, so it's always obvious at a glance what's active right now.
+            if idx != 0 {
+                let job = moveJobs.remove(at: idx)
+                moveJobs.insert(job, at: 0)
+            }
             updateMoveJobStatus(jobId, .moving(fractionComplete: 0))
             await performMove(jobId: jobId)
         }
@@ -2811,6 +2823,14 @@ final class LibraryViewModel {
     func dismissMove(_ id: UUID) {
         guard let idx = moveJobs.firstIndex(where: { $0.id == id }), !moveJobs[idx].isActive else { return }
         moveJobs.remove(at: idx)
+        persistMoveJobs()
+    }
+
+    /// Remove every completed row at once — the "Clear" action in the queue manager, same as a
+    /// browser download manager's "clear completed." Leaves queued/moving/failed rows untouched.
+    func clearCompletedMoves() {
+        guard moveJobs.contains(where: { $0.isCompleted }) else { return }
+        moveJobs.removeAll { $0.isCompleted }
         persistMoveJobs()
     }
 
