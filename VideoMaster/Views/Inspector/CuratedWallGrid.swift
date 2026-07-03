@@ -44,6 +44,7 @@ struct CuratedWallGrid: View {
     @State private var lastClickedId: String?
     @FocusState private var renameFocus: Bool
     @State private var selectionStore = CardSelectionStore()
+    @State private var filmstripVideo: Video?
 
     // Target from the full-window mock + checklist decisions: 5 columns, generous breathing.
     // `columns` is the single source of truth for the grid width — arrow-key row navigation in
@@ -144,6 +145,9 @@ struct CuratedWallGrid: View {
                                 }
                             }
                             Divider()
+                            Button("Modify Filmstrip\u{2026}") {
+                                filmstripVideo = video
+                            }
                             Button("Regenerate Thumbnail") {
                                 let ids = viewModel.selectedVideoIds.contains(video.id)
                                     ? viewModel.selectedVideoIds : [video.id]
@@ -205,6 +209,16 @@ struct CuratedWallGrid: View {
                     try? await Task.sleep(for: .milliseconds(120))
                     viewModel.issueScrollCommand(.toRow(index: rowIndex, total: totalRows))
                 }
+        }
+        .sheet(item: $filmstripVideo) { video in
+            FilmstripConfigView(
+                video: video,
+                thumbnailService: thumbnailService,
+                defaultRows: viewModel.defaultFilmstripRows,
+                defaultColumns: viewModel.defaultFilmstripColumns
+            ) { _ in
+                viewModel.filmstripRefreshId &+= 1
+            }
         }
     }
 

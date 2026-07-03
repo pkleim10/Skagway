@@ -93,6 +93,13 @@ struct CuratedWallInspector: View {
             filmstrip = nil
             Task { await loadHero() }
         }
+        // "Modify Filmstrip…" (grid + list context menu) bumps this after regenerating — the
+        // filmstrip cache file changes without `filePath`/`thumbnailPath` changing, so nothing else
+        // here would otherwise notice and reload.
+        .onChange(of: viewModel.filmstripRefreshId) { _, _ in
+            filmstrip = nil
+            Task { await loadHero() }
+        }
         // Keyed on `thumbnailPath` too so "Regenerate Thumbnail" (which bumps it to a fresh
         // cache-busting value) refreshes the hero for the currently-inspected video.
         .task(id: "\(video?.filePath ?? "")|\(video?.thumbnailPath ?? "")") {
