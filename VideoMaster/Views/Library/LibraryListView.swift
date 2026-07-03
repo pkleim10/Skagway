@@ -176,6 +176,7 @@ struct LibraryListView: View {
             if let filePath = ids.first,
                let video = viewModel.filteredVideos.first(where: { $0.id == filePath })
             {
+                let isMoving = ids.contains { viewModel.activeMoveVideoIds.contains($0) }
                 Button("Play in External Player") {
                     NSWorkspace.shared.open(video.url)
                     Task { await viewModel.recordPlay(for: video) }
@@ -214,6 +215,8 @@ struct LibraryListView: View {
                         }
                     }
                 }
+                .disabled(isMoving)
+                .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "")
                 if ids.count == 1 {
                     Button("Rename") {
                         viewModel.renameText = video.fileName
@@ -228,8 +231,8 @@ struct LibraryListView: View {
                         }
                     }
                 }
-                .disabled(ffmpegPath == nil)
-                .help(ffmpegPath == nil ? "Requires ffmpeg — configure the path in Settings \u{2192} Tools" : "")
+                .disabled(isMoving || ffmpegPath == nil)
+                .help(isMoving ? "Move in progress — file isn't safe to modify yet" : (ffmpegPath == nil ? "Requires ffmpeg — configure the path in Settings \u{2192} Tools" : ""))
                 Button("Move Files\u{2026}") {
                     let panel = NSOpenPanel()
                     panel.canChooseDirectories = true
@@ -242,6 +245,8 @@ struct LibraryListView: View {
                         Task { await viewModel.moveVideos(selected, to: dest) }
                     }
                 }
+                .disabled(isMoving)
+                .help(isMoving ? "Move already in progress" : "")
                 Divider()
                 Button("Modify Filmstrip\u{2026}") {
                     filmstripVideo = video
@@ -256,10 +261,14 @@ struct LibraryListView: View {
                         }
                     }
                 }
+                .disabled(isMoving)
+                .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "")
                 Divider()
                 Button("Remove from Library") {
                     Task { await viewModel.removeVideosFromLibrary(ids) }
                 }
+                .disabled(isMoving)
+                .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "")
                 Button("Delete Video…", role: .destructive) {
                     if viewModel.confirmDeletions {
                         viewModel.pendingDeleteIds = ids
@@ -268,6 +277,8 @@ struct LibraryListView: View {
                         Task { await viewModel.deleteVideos(ids) }
                     }
                 }
+                .disabled(isMoving)
+                .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "")
             }
         } primaryAction: { ids in
             if let filePath = ids.first,

@@ -28,6 +28,7 @@ private struct LibraryContentView: View {
     @State private var fullScreenController: FullscreenInlinePlayerWindowController?
     @State private var showListColumnsSheet = false
     @State private var showConversionQueue = false
+    @State private var showMoveQueue = false
     @FocusState private var isSearchFocused: Bool
 
     /// Local presentation flag for the filters drawer (discrete).
@@ -153,6 +154,39 @@ private struct LibraryContentView: View {
         .buttonStyle(.plain)
         .padding(.trailing, 4)
         .help("Re-encode queue — click to manage")
+    }
+
+    /// True while any cross-volume move is queued or running (drives the spinner in the pill).
+    private var isMoveActive: Bool {
+        vm.moveJobs.contains { $0.isActive }
+    }
+
+    /// Clickable status pill that opens the move queue manager.
+    private var movePill: some View {
+        Button {
+            showMoveQueue = true
+        } label: {
+            HStack(spacing: 5) {
+                if isMoveActive {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Image(systemName: "arrow.right.doc.on.clipboard")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+                Text(vm.moveStatusText)
+                    .font(.system(size: 10))
+                    .monospacedDigit()
+            }
+            .foregroundStyle(isMoveActive ? Color.appAccent : Color.appTextSecondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                Capsule().fill(Color.appAccent.opacity(isMoveActive ? 0.14 : 0.08))
+            )
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, 4)
+        .help("Move queue — click to manage")
     }
 
     private var sortCluster: some View {
@@ -291,6 +325,12 @@ private struct LibraryContentView: View {
             // Re-encode queue pill — click to open the queue manager.
             if vm.hasConversionActivity {
                 conversionPill
+            }
+
+            // Move queue pill — click to open the move manager. Same-volume moves are instant
+            // and never appear here; only cross-volume (copy + delete) moves show up.
+            if vm.hasMoveActivity {
+                movePill
             }
 
             // The single toggle for the top filters drawer.
@@ -531,6 +571,9 @@ private struct LibraryContentView: View {
         }
         .sheet(isPresented: $showConversionQueue) {
             ConversionQueueView(vm: vm)
+        }
+        .sheet(isPresented: $showMoveQueue) {
+            MoveQueueView(vm: vm)
         }
         .onChange(of: vm.focusSearchFieldToken) { _, _ in
             isSearchFocused = true

@@ -320,6 +320,7 @@ final class LibraryViewModel {
     private static let showRecentlyConvertedKey = "VideoMaster.showRecentlyConverted"
     private static let recentlyConvertedEntriesKey = "VideoMaster.recentlyConvertedEntries"
     private static let conversionJobsKey = "VideoMaster.conversionJobs"
+    private static let moveJobsKey = "VideoMaster.moveJobs"
     private static let ffmpegPathKey = "VideoMaster.ffmpegPath"
     private static let customMetadataFieldDefinitionsKey = "VideoMaster.customMetadataFieldDefinitions"
     private static let missingCountScannedKey = "VideoMaster.missingCountScanned"
@@ -427,8 +428,15 @@ final class LibraryViewModel {
     private var isDrainingConversions = false
     /// The currently running ffmpeg process, held so an in-progress job can be aborted.
     private var currentConversionProcess: Process?
-    var isMoving: Bool = false
-    var moveProgress: String = ""
+
+    /// The move queue + history, persisted so it survives relaunch. Only cross-volume moves
+    /// (real copy + delete) enter this queue — same-volume moves are an instant atomic rename
+    /// and run inline. Views read this; only the view model mutates it.
+    private(set) var moveJobs: [MoveJob] = []
+    /// True while `drainMoveQueue()` is running so we never start a second drain loop.
+    private var isDrainingMoves = false
+    /// The currently running copy task, held so an in-progress job can be aborted.
+    private var currentMoveTask: Task<Void, Error>?
 
     private func resetFilterIfHidden() {
         switch sidebarFilter {
@@ -998,6 +1006,11 @@ final class LibraryViewModel {
             conversionJobs = legacy.map { ConversionJob(migratedConvertedPath: $0.path, date: $0.date) }
         }
         conversionJobs.removeAll { $0.isExpired() }
+        if let data = defaults.data(forKey: Self.moveJobsKey),
+           let decoded = try? JSONDecoder().decode([MoveJob].self, from: data)
+        {
+            moveJobs = decoded
+        }
         if let v = defaults.object(forKey: Self.missingCountScannedKey) as? Bool { missingCountScanned = v }
         if let ids = defaults.stringArray(forKey: Self.missingVideoIdsKey) { missingVideoIds = Set(ids) }
         if defaults.object(forKey: Self.showThumbnailInDetailKey) != nil {
@@ -1088,6 +1101,7 @@ final class LibraryViewModel {
         }
 
         resumePendingConversions()
+        resumePendingMoves()
     }
 
     func stopObserving() {
@@ -2124,47 +2138,60 @@ final class LibraryViewModel {
         }
     }
 
+    /// Same-volume moves are an atomic rename (instant, no partial-file risk) and run inline.
+    /// Cross-volume moves are a real copy + delete and go through the persisted move queue
+    /// (`MoveJob`) so progress is visible and conflicting actions on the file can be disabled
+    /// until it's safe again — see `MoveFiles_Queue_Plan_2026-07-03.md`.
     func moveVideos(_ videosToMove: [Video], to destinationFolder: URL) async {
-        isMoving = true
-        defer { isMoving = false; moveProgress = "" }
-        let total = videosToMove.count
-        for (index, video) in videosToMove.enumerated() {
-            let name = video.fileName
-            let remaining = total - index - 1
-            moveProgress = remaining > 0
-                ? "Moving '\(name)'… (\(remaining) remaining)"
-                : "Moving '\(name)'…"
-            let newURL = destinationFolder.appendingPathComponent(name)
-            if newURL == video.url { continue }
+        for video in videosToMove {
+            let newURL = destinationFolder.appendingPathComponent(video.fileName)
+            if newURL.path == video.url.path { continue }
             guard !FileManager.default.fileExists(atPath: newURL.path) else {
-                moveProgress = "Skipped '\(name)': file already exists at destination"
-                try? await Task.sleep(for: .seconds(2))
+                recordFailedMoveJob(video: video, destinationFolder: destinationFolder,
+                                     reason: "\(video.fileName) already exists at destination")
                 continue
             }
-            do {
-                try FileManager.default.moveItem(at: video.url, to: newURL)
-            } catch {
-                moveProgress = "Failed to move '\(name)': \(error.localizedDescription)"
-                try? await Task.sleep(for: .seconds(2))
-                continue
+            if isSameVolume(video.url, destinationFolder) {
+                await performSameVolumeMove(video: video, newURL: newURL)
+            } else {
+                enqueueMoveJob(video: video, destinationFolder: destinationFolder)
             }
-            guard let dbId = video.databaseId else { continue }
-            do {
-                try await videoRepo.renameVideo(videoId: dbId, newFilePath: newURL.path, newFileName: name)
-            } catch {
-                try? FileManager.default.moveItem(at: newURL, to: video.url)
-                moveProgress = "Failed to update library for '\(name)'"
-                try? await Task.sleep(for: .seconds(2))
-                continue
-            }
-            thumbnailService.migrateCacheKey(from: video.filePath, to: newURL.path)
-            if selectedVideoIds.contains(video.filePath) {
-                selectedVideoIds.remove(video.filePath)
-                selectedVideoIds.insert(newURL.path)
-            }
-            if lastSelectedVideoId == video.filePath {
-                lastSelectedVideoId = newURL.path
-            }
+        }
+        startDrainingMovesIfNeeded()
+    }
+
+    private func isSameVolume(_ a: URL, _ b: URL) -> Bool {
+        guard let av = try? a.resourceValues(forKeys: [.volumeIdentifierKey]).volumeIdentifier as? NSObject,
+              let bv = try? b.resourceValues(forKeys: [.volumeIdentifierKey]).volumeIdentifier as? NSObject
+        else { return false }
+        return av.isEqual(bv)
+    }
+
+    private func performSameVolumeMove(video: Video, newURL: URL) async {
+        let fm = FileManager.default
+        do {
+            try fm.moveItem(at: video.url, to: newURL)
+        } catch {
+            recordFailedMoveJob(video: video, destinationFolder: newURL.deletingLastPathComponent(),
+                                 reason: "Failed to move: \(error.localizedDescription)")
+            return
+        }
+        guard let dbId = video.databaseId else { return }
+        do {
+            try await videoRepo.renameVideo(videoId: dbId, newFilePath: newURL.path, newFileName: newURL.lastPathComponent)
+        } catch {
+            try? fm.moveItem(at: newURL, to: video.url)
+            recordFailedMoveJob(video: video, destinationFolder: newURL.deletingLastPathComponent(),
+                                 reason: "Moved, but couldn't update the library — rolled back.")
+            return
+        }
+        thumbnailService.migrateCacheKey(from: video.filePath, to: newURL.path)
+        if selectedVideoIds.contains(video.filePath) {
+            selectedVideoIds.remove(video.filePath)
+            selectedVideoIds.insert(newURL.path)
+        }
+        if lastSelectedVideoId == video.filePath {
+            lastSelectedVideoId = newURL.path
         }
     }
 
@@ -2553,6 +2580,238 @@ final class LibraryViewModel {
         }
         if changed { persistConversionJobs() }
         startDrainingIfNeeded()
+    }
+
+    // MARK: - Move queue (cross-volume moves only — see `moveVideos`)
+
+    /// Video ids (file paths) with a queued or in-flight move — context menus disable
+    /// destructive/file-touching actions for these until the move completes.
+    var activeMoveVideoIds: Set<String> {
+        Set(moveJobs.filter { $0.isActive }.compactMap { job -> String? in
+            if let dbId = job.videoDatabaseId, let v = videos.first(where: { $0.databaseId == dbId }) {
+                return v.filePath
+            }
+            return job.sourcePath
+        })
+    }
+
+    var hasMoveActivity: Bool { !moveJobs.isEmpty }
+
+    var moveStatusText: String {
+        if let running = moveJobs.first(where: { if case .moving = $0.status { return true }; return false }) {
+            let pct: Int = { if case .moving(let f) = running.status { return Int(f * 100) }; return 0 }()
+            let queued = moveJobs.filter { $0.status == .queued }.count
+            let base = "Moving '\(running.sourceFileName)'… \(pct)%"
+            return queued > 0 ? "\(base) (+\(queued) queued)" : base
+        }
+        let queued = moveJobs.filter { $0.status == .queued }.count
+        if queued > 0 { return queued == 1 ? "1 queued to move" : "\(queued) queued to move" }
+        let failed = moveJobs.filter { if case .failed = $0.status { return true }; return false }.count
+        if failed > 0 { return failed == 1 ? "1 move failed" : "\(failed) moves failed" }
+        let completed = moveJobs.filter { $0.isCompleted }.count
+        return completed == 1 ? "1 moved" : "\(completed) moved"
+    }
+
+    private func recordFailedMoveJob(video: Video, destinationFolder: URL, reason: String) {
+        var job = MoveJob(video: video, destinationFolder: destinationFolder)
+        job.status = .failed(reason: reason)
+        moveJobs.append(job)
+        persistMoveJobs()
+    }
+
+    private func enqueueMoveJob(video: Video, destinationFolder: URL) {
+        guard !moveJobs.contains(where: { $0.isActive && $0.videoDatabaseId != nil && $0.videoDatabaseId == video.databaseId }) else { return }
+        moveJobs.append(MoveJob(video: video, destinationFolder: destinationFolder))
+        persistMoveJobs()
+    }
+
+    private func persistMoveJobs() {
+        if let data = try? JSONEncoder().encode(moveJobs) {
+            UserDefaults.standard.set(data, forKey: Self.moveJobsKey)
+        }
+    }
+
+    /// Update a job's status in place. Progress ticks pass `persist: false` to avoid
+    /// hammering UserDefaults; state transitions persist.
+    private func updateMoveJobStatus(_ id: UUID, _ status: MoveJob.Status, persist: Bool = true) {
+        guard let idx = moveJobs.firstIndex(where: { $0.id == id }) else { return }
+        moveJobs[idx].status = status
+        if persist { persistMoveJobs() }
+    }
+
+    private func startDrainingMovesIfNeeded() {
+        guard !isDrainingMoves, moveJobs.contains(where: { $0.status == .queued }) else { return }
+        isDrainingMoves = true
+        Task { await drainMoveQueue() }
+    }
+
+    private func drainMoveQueue() async {
+        defer { isDrainingMoves = false }
+        while let idx = moveJobs.firstIndex(where: { $0.status == .queued }) {
+            let jobId = moveJobs[idx].id
+            updateMoveJobStatus(jobId, .moving(fractionComplete: 0))
+            await performMove(jobId: jobId)
+        }
+    }
+
+    private func performMove(jobId: UUID) async {
+        guard let job = moveJobs.first(where: { $0.id == jobId }) else { return }
+        let liveVideo = job.videoDatabaseId.flatMap { dbId in videos.first { $0.databaseId == dbId } }
+        let sourcePath = liveVideo?.filePath ?? job.sourcePath
+        let sourceName = liveVideo?.fileName ?? job.sourceFileName
+        let sourceURL = URL(fileURLWithPath: sourcePath)
+        let destFolder = URL(fileURLWithPath: job.destinationFolderPath)
+        let tempURL = destFolder.appendingPathComponent("\(sourceName).moving")
+        let finalURL = destFolder.appendingPathComponent(sourceName)
+        let fm = FileManager.default
+
+        // Preconditions. The original is never touched until the copy is verified complete.
+        guard fm.fileExists(atPath: sourceURL.path) else {
+            updateMoveJobStatus(jobId, .failed(reason: "Source file is missing"))
+            return
+        }
+        guard finalURL.path == sourceURL.path || !fm.fileExists(atPath: finalURL.path) else {
+            updateMoveJobStatus(jobId, .failed(reason: "\(finalURL.lastPathComponent) already exists at destination"))
+            return
+        }
+        try? fm.removeItem(at: tempURL) // clear any stale partial from an interrupted prior run
+
+        let progress = Progress(totalUnitCount: 1)
+        let observation = progress.observe(\.fractionCompleted, options: [.new]) { [weak self] prog, _ in
+            Task { @MainActor in
+                self?.updateMoveJobStatus(jobId, .moving(fractionComplete: prog.fractionCompleted), persist: false)
+            }
+        }
+        let copyTask = Task.detached(priority: .utility) {
+            progress.becomeCurrent(withPendingUnitCount: 1)
+            defer { progress.resignCurrent() }
+            try fm.copyItem(at: sourceURL, to: tempURL)
+        }
+        currentMoveTask = copyTask
+        do {
+            try await copyTask.value
+        } catch {
+            observation.invalidate()
+            currentMoveTask = nil
+            try? fm.removeItem(at: tempURL)
+            // If the job was aborted it's already been removed from moveJobs; only report a
+            // failure for jobs still tracked (a genuine copy error, not a user-initiated abort).
+            if moveJobs.contains(where: { $0.id == jobId }) {
+                updateMoveJobStatus(jobId, .failed(reason: "Copy failed: \(error.localizedDescription)"))
+            }
+            return
+        }
+        observation.invalidate()
+        currentMoveTask = nil
+
+        let srcSize = (try? fm.attributesOfItem(atPath: sourceURL.path)[.size] as? Int64) ?? nil
+        let tmpSize = (try? fm.attributesOfItem(atPath: tempURL.path)[.size] as? Int64) ?? nil
+        guard let srcSize, let tmpSize, srcSize == tmpSize else {
+            try? fm.removeItem(at: tempURL)
+            updateMoveJobStatus(jobId, .failed(reason: "Copy verification failed (size mismatch)"))
+            return
+        }
+
+        do {
+            try fm.moveItem(at: tempURL, to: finalURL) // same-volume rename of the temp — instant
+        } catch {
+            try? fm.removeItem(at: tempURL)
+            updateMoveJobStatus(jobId, .failed(reason: "Couldn't finalize destination file: \(error.localizedDescription)"))
+            return
+        }
+
+        // Only now remove the source — the destination is fully valid at this point.
+        do {
+            try fm.removeItem(at: sourceURL)
+        } catch {
+            updateMoveJobStatus(jobId, .failed(reason: "Moved, but couldn't remove the original: \(error.localizedDescription)"))
+            return
+        }
+
+        guard let dbId = liveVideo?.databaseId else {
+            if let idx = moveJobs.firstIndex(where: { $0.id == jobId }) {
+                moveJobs[idx].status = .completed
+                moveJobs[idx].completedAt = Date()
+                moveJobs[idx].newPath = finalURL.path
+                persistMoveJobs()
+            }
+            return
+        }
+        do {
+            try await videoRepo.renameVideo(videoId: dbId, newFilePath: finalURL.path, newFileName: sourceName)
+        } catch {
+            try? fm.moveItem(at: finalURL, to: sourceURL) // roll back so the file isn't silently lost
+            updateMoveJobStatus(jobId, .failed(reason: "Moved the file, but couldn't update the library — rolled back."))
+            return
+        }
+        thumbnailService.migrateCacheKey(from: sourcePath, to: finalURL.path)
+        if selectedVideoIds.contains(sourcePath) {
+            selectedVideoIds.remove(sourcePath)
+            selectedVideoIds.insert(finalURL.path)
+        }
+        if lastSelectedVideoId == sourcePath {
+            lastSelectedVideoId = finalURL.path
+        }
+        if let idx = moveJobs.firstIndex(where: { $0.id == jobId }) {
+            moveJobs[idx].status = .completed
+            moveJobs[idx].completedAt = Date()
+            moveJobs[idx].newPath = finalURL.path
+            persistMoveJobs()
+        }
+    }
+
+    /// Abort a queued job (remove it) or the running one (cancel the copy, discard the partial).
+    func abortMove(_ id: UUID) {
+        guard let idx = moveJobs.firstIndex(where: { $0.id == id }) else { return }
+        let wasRunning: Bool = { if case .moving = moveJobs[idx].status { return true }; return false }()
+        moveJobs.remove(at: idx)
+        persistMoveJobs()
+        if wasRunning {
+            currentMoveTask?.cancel() // performMove will discard the partial
+        }
+    }
+
+    func moveJobToTop(_ id: UUID) {
+        guard let from = moveJobs.firstIndex(where: { $0.id == id }), moveJobs[from].status == .queued else { return }
+        let job = moveJobs.remove(at: from)
+        let insertAt = moveJobs.firstIndex(where: { $0.status == .queued }) ?? moveJobs.count
+        moveJobs.insert(job, at: insertAt)
+        persistMoveJobs()
+    }
+
+    /// Remove a finished/failed row from the history.
+    func dismissMove(_ id: UUID) {
+        guard let idx = moveJobs.firstIndex(where: { $0.id == id }), !moveJobs[idx].isActive else { return }
+        moveJobs.remove(at: idx)
+        persistMoveJobs()
+    }
+
+    /// Re-queue a failed job.
+    func retryMove(_ id: UUID) {
+        guard let idx = moveJobs.firstIndex(where: { $0.id == id }), case .failed = moveJobs[idx].status else { return }
+        moveJobs[idx].status = .queued
+        persistMoveJobs()
+        startDrainingMovesIfNeeded()
+    }
+
+    /// On launch: re-queue any job interrupted mid-copy, sweep stray `.moving` partials under
+    /// every known destination folder, and restart the drain loop.
+    func resumePendingMoves() {
+        let fm = FileManager.default
+        var changed = false
+        for i in moveJobs.indices {
+            if case .moving = moveJobs[i].status {
+                moveJobs[i].status = .queued
+                changed = true
+            }
+        }
+        for job in moveJobs where !job.isCompleted {
+            let destFolder = URL(fileURLWithPath: job.destinationFolderPath)
+            let tempURL = destFolder.appendingPathComponent("\(job.sourceFileName).moving")
+            try? fm.removeItem(at: tempURL)
+        }
+        if changed { persistMoveJobs() }
+        startDrainingMovesIfNeeded()
     }
 
     func refreshMissingCount() async {

@@ -13,6 +13,9 @@ struct CuratedWallCard: View {
     let isRenaming: Bool
     @Binding var renameText: String
     let thumbnailService: ThumbnailService
+    /// True while this video has an active (queued or in-flight) cross-volume move — shows a
+    /// spinner badge over the thumbnail so the "frozen" state is visible without right-clicking.
+    var isMoving: Bool = false
     var renameFocus: FocusState<Bool>.Binding
     var onCommitRename: () -> Void
     var onCancelRename: () -> Void
@@ -67,6 +70,24 @@ struct CuratedWallCard: View {
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                         .padding(6)
+                }
+
+                // Frozen-while-moving badge: dims the thumbnail and shows a spinner so it's
+                // obvious the file isn't safe to touch yet, without needing to right-click.
+                if isMoving {
+                    RoundedRectangle(cornerRadius: corner, style: .continuous)
+                        .fill(Color.black.opacity(0.45))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: thumbHeight)
+                    VStack(spacing: 4) {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.white)
+                        Text("Moving…")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(.white)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: thumbHeight, alignment: .center)
                 }
             }
             // Selection checkmark — white check in a blue circle, upper-left corner.

@@ -65,12 +65,14 @@ struct CuratedWallGrid: View {
                 ) {
                     ForEach(viewModel.filteredVideos) { video in
                         let isRenamingRow = viewModel.renamingVideoId == video.id
+                        let isMoving = viewModel.activeMoveVideoIds.contains(video.id)
                         CuratedWallCard(
                             video: video,
                             selectionState: selectionStore.state(for: video.id),
                             isRenaming: isRenamingRow,
                             renameText: isRenamingRow ? $viewModel.renameText : .constant(""),
                             thumbnailService: thumbnailService,
+                            isMoving: isMoving,
                             renameFocus: $renameFocus,
                             onCommitRename: { commitRename(video) },
                             onCancelRename: cancelRename,
@@ -119,6 +121,8 @@ struct CuratedWallGrid: View {
                                     }
                                 }
                             }
+                            .disabled(isMoving)
+                            .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "")
                             Divider()
                             Button("Re-encode to MP4\u{2026}") {
                                 if let ffmpeg = viewModel.resolvedFFmpegPath {
@@ -128,8 +132,8 @@ struct CuratedWallGrid: View {
                                     for v in selected { viewModel.reencodeVideo(v, ffmpegPath: ffmpeg) }
                                 }
                             }
-                            .disabled(viewModel.resolvedFFmpegPath == nil)
-                            .help(viewModel.resolvedFFmpegPath == nil ? "Requires ffmpeg — configure the path in Settings \u{2192} Tools" : "")
+                            .disabled(isMoving || viewModel.resolvedFFmpegPath == nil)
+                            .help(isMoving ? "Move in progress — file isn't safe to modify yet" : (viewModel.resolvedFFmpegPath == nil ? "Requires ffmpeg — configure the path in Settings \u{2192} Tools" : ""))
                             Button("Move Files\u{2026}") {
                                 let panel = NSOpenPanel()
                                 panel.canChooseDirectories = true
@@ -144,6 +148,8 @@ struct CuratedWallGrid: View {
                                     Task { await viewModel.moveVideos(selected, to: dest) }
                                 }
                             }
+                            .disabled(isMoving)
+                            .help(isMoving ? "Move already in progress" : "")
                             Divider()
                             Button("Modify Filmstrip\u{2026}") {
                                 filmstripVideo = video
@@ -160,14 +166,20 @@ struct CuratedWallGrid: View {
                                     }
                                 }
                             }
+                            .disabled(isMoving)
+                            .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "")
                             Divider()
                             Button("Remove from Library") {
                                 Task { await viewModel.removeVideosFromLibrary([video.id]) }
                             }
+                            .disabled(isMoving)
+                            .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "")
                             Button("Delete Video…", role: .destructive) {
                                 viewModel.pendingDeleteIds = [video.id]
                                 viewModel.showDeleteConfirmation = true
                             }
+                            .disabled(isMoving)
+                            .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "")
                         }
                     }
                 }
