@@ -1770,6 +1770,22 @@ final class LibraryViewModel {
         scrollToVideoId = newId
     }
 
+    /// Home / End key equivalents: select the first / last video in the current filtered order and
+    /// scroll it into view. Uses `.top`/`.bottom` (not `scrollToVideoId`'s `.toRow`, which centers a
+    /// row rather than pinning it, and has no special handling for List's column header) so List's
+    /// first row lands fully clear of the header instead of partially hidden under it.
+    func goToFirstVideo() {
+        guard let first = filteredVideos.first else { return }
+        selectedVideoIds = [first.id]
+        issueScrollCommand(.top)
+    }
+
+    func goToLastVideo() {
+        guard let last = filteredVideos.last else { return }
+        selectedVideoIds = [last.id]
+        issueScrollCommand(.bottom)
+    }
+
     func showFolderPicker() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false

@@ -31,10 +31,17 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.21.0 (build 594) - 2026-07-02
+
 - **New: "Play from Beginning" (⌥-Space)**: starts the selected video from 0, ignoring any saved resume position. When a video is already playing, ⌥-Space restarts it from the beginning — this replaces the old ⌥⌘B "Restart from Beginning" shortcut (the menu item remains, without a shortcut). Plain Space is unchanged (resume / play-pause).
 - **Fix: unreachable-file playback no longer flashes and vanishes**: if the video's drive isn't mounted (or the file otherwise can't be opened), the player panel now stays open and shows the existing "Playback Failed" error card (Open in External Player / Dismiss) instead of instantly tearing down the panel before the message can render.
 - **New: "Regenerate Thumbnail"** context-menu action (grid + list, single or multi-selection): picks a fresh random position between 10%–90% of the video's duration and regenerates both the thumbnail and the detail-preview still, for videos whose auto-picked frame (10% in, capped at 30s) looks bad — a black frame, title card, or blurry transition. Also fixes a latent race where a slow detail-preview fetch for a previous card state could land late and overwrite a newer one.
-- **New: "Make Thumbnail from Current Frame"** — a camera icon in the floating player panel (and a matching menu item) captures the exact frame on screen right now and sets it as the thumbnail + detail preview, replacing whatever was cached. The precise-control counterpart to "Regenerate Thumbnail": scrub to the exact moment you want, then capture it. Uses a zero seek tolerance so it lands on the exact frame rather than a nearby keyframe. No mouse affordance in true full-screen yet (menu item still reaches it via the app-wide command).
+- **New: "Make Thumbnail from Current Frame"** — a camera icon in the floating player panel (and a matching menu item) captures the exact frame on screen right now and sets it as the thumbnail + detail preview, replacing whatever was cached. The precise-control counterpart to "Regenerate Thumbnail": scrub to the exact moment you want, then capture it. Uses a zero seek tolerance so it lands on the exact frame rather than a nearby keyframe. No mouse affordance in true full-screen yet (menu item still reaches it via the app-wide command). Shortcut: ⌥⌘M.
+- **New: "Modify Filmstrip…"** added to the Wall grid's context menu (already present in List); the Inspector now actually refreshes after using it — it was already being signaled but nothing was listening.
+- **Fix: compact player no longer snaps back when dragged.** Moving the title bar exited compact mode without clearing the compact flag, so the panel's position kept resetting to the fixed top-right slot the moment the drag ended. It now exits compact on the first drag frame (freezing the current size first, so there's no resize jump) and stays wherever it's dropped.
+- **New: Tag blind default-state setting** (Settings → Tags): the Inspector's "Add tags" blind can be set to always closed (previous behavior), always open, or left as-is (last used) on each new selection.
+- **Assigned tags pop more** in the Inspector: stronger accent fill, full-opacity border, semibold text — same accent color, no new palette.
+- **New: "Go to First" / "Go to Last"** (Home / End keys, list and grid): selects and scrolls to the first/last video in the current filtered order. List scrolling uses the same header-aware positioning as other jump commands so the first row lands fully clear of the column header instead of partially hidden under it.
 
 ## 0.20.0 (build 578) - 2026-07-02
 

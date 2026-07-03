@@ -625,6 +625,26 @@ private struct LibraryContentView: View {
             return nil
         }
 
+        // Home / End — "Go to first" / "Go to last": select the first/last video in the current
+        // filtered order and scroll it into view. Works in both list and grid (unlike the arrow-key
+        // block above, which is grid-only since List's Table already handles its own arrow keys).
+        // Handled here rather than a SwiftUI `.keyboardShortcut(.home/.end)` for the same reason as
+        // arrow-key navigation: Table's own responder chain can intercept Home/End for plain
+        // scrolling before a menu-level shortcut would ever see the event.
+        // NB: like arrow keys, Home/End always carry `.function` (+ often `.numericPad`), so a
+        // `.deviceIndependentFlagsMask` emptiness check never matches — test only the real modifiers.
+        if event.keyCode == 115 || event.keyCode == 119,  // 115 Home, 119 End
+           event.modifierFlags.intersection(commandModifiers).isEmpty,
+           !lvm.isEditingText {
+            if let first = NSApp.keyWindow?.firstResponder, first is NSTextView || first is NSTextField {
+                return event
+            }
+            DispatchQueue.main.async {
+                if event.keyCode == 115 { lvm.goToFirstVideo() } else { lvm.goToLastVideo() }
+            }
+            return nil
+        }
+
         return event
     }
 
