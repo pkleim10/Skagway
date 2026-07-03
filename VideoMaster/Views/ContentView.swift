@@ -376,7 +376,9 @@ private struct LibraryContentView: View {
                     guard let v = selectedVideo else { vm.isPlayingInline = false; return }
                     let seek = vm.pendingFilmstripSeekSeconds ?? 0
                     vm.pendingFilmstripSeekSeconds = nil
-                    vm.playback.start(video: v, at: seek)
+                    let ignoreResume = vm.pendingIgnoreResumeOnNextStart
+                    vm.pendingIgnoreResumeOnNextStart = false
+                    vm.playback.start(video: v, at: seek, ignoreResume: ignoreResume)
                     // Apply the starting-size preference. `.lastSize` keeps whatever the player was
                     // last left at (including sticky compact mode); `.compact` re-enables compact.
                     switch vm.playerStartPreference {
@@ -540,8 +542,9 @@ private struct LibraryContentView: View {
             }
             return event
         }
-        // Space — play/pause (or start playback). Restart-from-beginning is the ⌥⌘B menu command
-        // (Shift+Space proved unreliable: the Shift modifier doesn't reach this handler on Space).
+        // Space — play/pause (or start playback). ⌥-Space — "Play from Beginning": starts (or, if
+        // already playing, restarts) from 0, ignoring any saved resume position. ⌥-Space replaces the
+        // old ⌥⌘B "Restart from Beginning" shortcut for the already-playing case.
         if event.keyCode == 49 {
             // A focused text field (e.g. Notes) wins so a space can be typed.
             if let first = NSApp.keyWindow?.firstResponder,
@@ -550,12 +553,22 @@ private struct LibraryContentView: View {
                 return event
             }
             guard !lvm.isEditingText else { return event }
+            let optionHeld = event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .option
             if lvm.isPlayingInline {
-                DispatchQueue.main.async { lvm.playback.togglePlayPause() }
+                DispatchQueue.main.async {
+                    if optionHeld {
+                        lvm.playback.restartFromBeginning()
+                    } else {
+                        lvm.playback.togglePlayPause()
+                    }
+                }
                 return nil
             }
             guard !lvm.selectedVideoIds.isEmpty else { return event }
-            DispatchQueue.main.async { lvm.isPlayingInline = true }
+            DispatchQueue.main.async {
+                if optionHeld { lvm.pendingIgnoreResumeOnNextStart = true }
+                lvm.isPlayingInline = true
+            }
             return nil
         }
 

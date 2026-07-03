@@ -41,8 +41,9 @@ final class InlinePlaybackController {
     // MARK: - Lifecycle
 
     /// Begin playback of `video`. `seconds == 0` lets the saved resume position apply (with banner);
-    /// `seconds > 0` is an explicit seek (filmstrip click / Shift-Space) that suppresses resume.
-    func start(video: Video, at seconds: Double) {
+    /// `seconds > 0` is an explicit seek (filmstrip click) that suppresses resume. `ignoreResume`
+    /// starts plainly at `seconds` even when a saved position exists (⌥-Space "Play from Beginning").
+    func start(video: Video, at seconds: Double, ignoreResume: Bool = false) {
         currentVideo = video
         playerError = nil
         statusTask?.cancel()
@@ -63,7 +64,7 @@ final class InlinePlaybackController {
                 } else {
                     playerError = "The file could not be found. The drive may not be mounted."
                 }
-                viewModel.isPlayingInline = false
+                surfaceErrorKeepingPanel()
                 return
             }
 
@@ -72,7 +73,7 @@ final class InlinePlaybackController {
             subtitleTrack.attach(to: newPlayer)
 
             let resumeSeconds: Double? = {
-                guard seconds == 0 else { return nil }
+                guard seconds == 0, !ignoreResume else { return nil }
                 guard let s = PlaybackPositionStore.loadSeconds(filePath: video.filePath) else { return nil }
                 guard s >= 1.0 else { return nil }
                 if let duration = video.duration, duration > 0, s >= duration - 5.0 { return nil }
@@ -109,13 +110,27 @@ final class InlinePlaybackController {
                 guard !Task.isCancelled else { return }
                 if status == .failed {
                     playerError = item.error?.localizedDescription ?? "The file could not be opened for playback."
-                    viewModel.isPlayingInline = false
+                    surfaceErrorKeepingPanel()
                     return
                 } else if status == .readyToPlay {
                     return
                 }
             }
         }
+    }
+
+    /// A playback attempt failed (unreachable file / unplayable codec / load error). Keep the panel
+    /// mounted (`isPlayingInline` stays true) so the error overlay — with "Open in External Player" /
+    /// "Dismiss" — is actually visible, instead of flipping `isPlayingInline` off, which unmounts the
+    /// panel instantly and just reads as a flash. The error overlay lives in the in-window panel, so
+    /// drop out of full-screen (if the "open at full screen" preference put us there) so it can show.
+    private func surfaceErrorKeepingPanel() {
+        if viewModel.isPlayerFullScreen { viewModel.isPlayerFullScreen = false }
+        // Tear down any prior (now-stale) player so an earlier video doesn't keep playing behind the
+        // error overlay when a *switch* to an unreachable file fails. No-op on a cold start (player nil).
+        subtitleTrack.detach()
+        player?.pause()
+        player = nil
     }
 
     /// Tear down the player, persisting the current position so the next play can resume.

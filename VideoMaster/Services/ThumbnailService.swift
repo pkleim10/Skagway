@@ -548,6 +548,90 @@ final class ThumbnailService: @unchecked Sendable {
         return compositeImage
     }
 
+    /// Regenerate the thumbnail *and* the 720pt detail-preview still — together, at the same fresh
+    /// random position between 10% and 90% of the video's duration — replacing whatever's cached.
+    /// Both need regenerating: the Curated Wall grid card and Inspector hero actually display the
+    /// *detail preview*, using the small thumbnail only as a fast first paint, so regenerating just
+    /// the thumbnail wouldn't change what's visible there. Clears every cached detail-preview size
+    /// for this file so nothing stale can be served under a different long-edge setting.
+    /// Used by the "Regenerate Thumbnail" context-menu action when the auto-picked frame (10% in,
+    /// capped at 30s) looks bad — e.g. a black frame, title card, or blurry transition.
+    func regenerateThumbnail(for video: Video) async throws -> URL {
+        await generationGate.acquire()
+        do {
+            let url = try await performRegenerateThumbnail(for: video)
+            await generationGate.release()
+            return url
+        } catch {
+            await generationGate.release()
+            throw error
+        }
+    }
+
+    private func performRegenerateThumbnail(for video: Video) async throws -> URL {
+        let filePath = video.filePath
+        let asset = AVURLAsset(url: video.url)
+        var targetSeconds = 5.0
+        if let d = try? await asset.load(.duration) {
+            let total = CMTimeGetSeconds(d)
+            if total.isFinite, total > 0 {
+                targetSeconds = total * Double.random(in: 0.1...0.9)
+            }
+        }
+
+        let thumbURL = thumbnailURL(for: filePath)
+        try? FileManager.default.removeItem(at: thumbURL)
+        memoryCache.removeObject(forKey: filePath as NSString)
+        for edge in Self.detailPreviewLongEdgeChoices {
+            try? FileManager.default.removeItem(at: detailPreviewURL(for: filePath, longEdge: edge))
+            memoryCache.removeObject(forKey: detailPreviewMemoryKey(filePath: filePath, longEdge: edge))
+        }
+        try? FileManager.default.removeItem(at: legacyDetailPreviewURL(for: filePath))
+
+        try await writeStill(
+            for: video, atSeconds: targetSeconds, maxDimension: 400,
+            compressionFactor: 0.75, cacheURL: thumbURL,
+            memoryKey: filePath as NSString, timeout: 10
+        )
+        try await writeStill(
+            for: video, atSeconds: targetSeconds, maxDimension: 720,
+            compressionFactor: 0.82, cacheURL: detailPreviewURL(for: filePath, longEdge: 720),
+            memoryKey: detailPreviewMemoryKey(filePath: filePath, longEdge: 720), timeout: 15
+        )
+        return thumbURL
+    }
+
+    /// Shared still-frame capture for `regenerateThumbnail`: seek to `seconds`, JPEG-encode, write to
+    /// `cacheURL`, populate the memory cache. Kept separate from `generateThumbnailWork` /
+    /// `generateDetailPreviewWork` (which pick their own position and early-return when already
+    /// cached) so this always-regenerate path can't hit their "already cached" fast return.
+    private func writeStill(
+        for video: Video, atSeconds seconds: Double, maxDimension: CGFloat,
+        compressionFactor: CGFloat, cacheURL: URL, memoryKey: NSString, timeout: Double
+    ) async throws {
+        let url = video.url
+        let nsImage: NSImage = try await withTimeout(seconds: timeout) {
+            let asset = AVURLAsset(url: url)
+            let generator = AVAssetImageGenerator(asset: asset)
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: maxDimension, height: maxDimension)
+            generator.requestedTimeToleranceBefore = CMTime(seconds: 3, preferredTimescale: 600)
+            generator.requestedTimeToleranceAfter = CMTime(seconds: 3, preferredTimescale: 600)
+            let time = CMTime(seconds: seconds, preferredTimescale: 600)
+            let (cgImage, _) = try await generator.image(at: time)
+            return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        }
+
+        guard let tiffData = nsImage.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffData),
+              let jpegData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: compressionFactor])
+        else {
+            throw ThumbnailError.encodingFailed
+        }
+        try jpegData.write(to: cacheURL)
+        memoryCache.setObject(nsImage, forKey: memoryKey)
+    }
+
     func deleteAllFilmstrips() {
         managementLock.lock()
         defer { managementLock.unlock() }

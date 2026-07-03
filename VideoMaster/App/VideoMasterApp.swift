@@ -67,11 +67,12 @@ struct VideoMasterApp: App {
                 .keyboardShortcut("f", modifiers: [.command, .control])
                 .disabled(appState.libraryViewModel?.isPlayingInline != true)
 
+                // Restart from Beginning is reachable via ⌥-Space while a video is playing
+                // (see the Space key handler in ContentView); the menu item stays for discoverability.
                 Button("Restart from Beginning") {
                     appState.libraryViewModel?.playback.restartFromBeginning()
                 }
-                .keyboardShortcut("b", modifiers: [.command, .option])
-                .disabled(!appState.hasLibrary)
+                .disabled(appState.libraryViewModel?.isPlayingInline != true)
             }
             CommandGroup(after: .pasteboard) {
                 Button("Delete\u{2026}") {

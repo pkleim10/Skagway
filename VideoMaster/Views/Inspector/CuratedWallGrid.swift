@@ -144,6 +144,19 @@ struct CuratedWallGrid: View {
                                 }
                             }
                             Divider()
+                            Button("Regenerate Thumbnail") {
+                                let ids = viewModel.selectedVideoIds.contains(video.id)
+                                    ? viewModel.selectedVideoIds : [video.id]
+                                let selected = viewModel.filteredVideos.filter { ids.contains($0.id) }
+                                for v in selected {
+                                    Task {
+                                        if let url = try? await thumbnailService.regenerateThumbnail(for: v) {
+                                            await viewModel.setRegeneratedThumbnailPath(videoPath: v.filePath, url: url)
+                                        }
+                                    }
+                                }
+                            }
+                            Divider()
                             Button("Remove from Library") {
                                 Task { await viewModel.removeVideosFromLibrary([video.id]) }
                             }

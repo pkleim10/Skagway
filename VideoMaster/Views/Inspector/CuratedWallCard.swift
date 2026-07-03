@@ -20,6 +20,11 @@ struct CuratedWallCard: View {
 
     @State private var thumbnail: NSImage?
     @State private var isHovering = false
+    /// Cancelled + replaced every time the task below (re)starts, so a slow detail-preview fetch from
+    /// a *previous* thumbnailPath (e.g. right before a "Regenerate Thumbnail") can't land after a
+    /// newer one and overwrite it with a stale image — `.task(id:)`'s auto-cancellation only covers
+    /// its own structured body, not this nested unstructured `Task`.
+    @State private var detailUpgradeTask: Task<Void, Never>?
 
     private let thumbHeight: CGFloat = 188   // taller, more gallery presence per the mock
     private let corner: CGFloat = 8
@@ -139,19 +144,19 @@ struct CuratedWallCard: View {
         .onHover { hovering in
             isHovering = hovering
         }
-        .task(id: video.filePath) {
-            if thumbnail == nil {
-                if let lo = thumbnailService.loadThumbnail(for: video.filePath) {
-                    thumbnail = lo
-                }
-                // Upgrade to nicer detail preview asynchronously when available (no blocking the card)
-                Task {
-                    if let hi = await thumbnailService.detailPreviewImage(for: video, longEdge: 720) {
-                        await MainActor.run {
-                            if self.thumbnail == nil || self.thumbnail?.size.width ?? 0 < 400 {
-                                self.thumbnail = hi
-                            }
-                        }
+        // Keyed on `thumbnailPath` (not just `filePath`) so "Regenerate Thumbnail" — which bumps
+        // `thumbnailPath` to a fresh cache-busting value — actually reloads this card.
+        .task(id: "\(video.filePath)|\(video.thumbnailPath ?? "")") {
+            if let lo = thumbnailService.loadThumbnail(for: video.filePath) {
+                thumbnail = lo
+            }
+            // Upgrade to nicer detail preview asynchronously when available (no blocking the card)
+            detailUpgradeTask?.cancel()
+            detailUpgradeTask = Task {
+                if let hi = await thumbnailService.detailPreviewImage(for: video, longEdge: 720) {
+                    guard !Task.isCancelled else { return }
+                    await MainActor.run {
+                        self.thumbnail = hi
                     }
                 }
             }

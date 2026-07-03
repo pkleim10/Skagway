@@ -246,6 +246,16 @@ struct LibraryListView: View {
                 Button("Modify Filmstrip\u{2026}") {
                     filmstripVideo = video
                 }
+                Button("Regenerate Thumbnail") {
+                    let selected = viewModel.filteredVideos.filter { ids.contains($0.id) }
+                    for v in selected {
+                        Task {
+                            if let url = try? await thumbnailService.regenerateThumbnail(for: v) {
+                                await viewModel.setRegeneratedThumbnailPath(videoPath: v.filePath, url: url)
+                            }
+                        }
+                    }
+                }
                 Divider()
                 Button("Remove from Library") {
                     Task { await viewModel.removeVideosFromLibrary(ids) }
@@ -488,7 +498,8 @@ struct LibraryListView: View {
                 arrowEdge: .trailing
             ) {
                 AsyncThumbnailView(
-                    filePath: video.filePath, thumbnailService: thumbnailService
+                    filePath: video.filePath, thumbnailService: thumbnailService,
+                    cacheVersion: video.thumbnailPath
                 )
                 .frame(width: 224, height: 144)
                 .appMediaFrame(cornerRadius: AppRadius.md)

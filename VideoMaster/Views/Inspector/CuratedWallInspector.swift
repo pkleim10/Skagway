@@ -93,7 +93,9 @@ struct CuratedWallInspector: View {
             filmstrip = nil
             Task { await loadHero() }
         }
-        .task(id: video?.filePath) {
+        // Keyed on `thumbnailPath` too so "Regenerate Thumbnail" (which bumps it to a fresh
+        // cache-busting value) refreshes the hero for the currently-inspected video.
+        .task(id: "\(video?.filePath ?? "")|\(video?.thumbnailPath ?? "")") {
             await loadHero()
         }
     }

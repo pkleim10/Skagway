@@ -31,6 +31,10 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **New: "Play from Beginning" (⌥-Space)**: starts the selected video from 0, ignoring any saved resume position. When a video is already playing, ⌥-Space restarts it from the beginning — this replaces the old ⌥⌘B "Restart from Beginning" shortcut (the menu item remains, without a shortcut). Plain Space is unchanged (resume / play-pause).
+- **Fix: unreachable-file playback no longer flashes and vanishes**: if the video's drive isn't mounted (or the file otherwise can't be opened), the player panel now stays open and shows the existing "Playback Failed" error card (Open in External Player / Dismiss) instead of instantly tearing down the panel before the message can render.
+- **New: "Regenerate Thumbnail"** context-menu action (grid + list, single or multi-selection): picks a fresh random position between 10%–90% of the video's duration and regenerates both the thumbnail and the detail-preview still, for videos whose auto-picked frame (10% in, capped at 30s) looks bad — a black frame, title card, or blurry transition. Also fixes a latent race where a slow detail-preview fetch for a previous card state could land late and overwrite a newer one.
+
 ## 0.20.0 (build 578) - 2026-07-02
 
 - **⌘F now focuses the search field**, matching the system-wide Find convention. Existing search text is auto-selected via AppKit's standard first-responder behavior.

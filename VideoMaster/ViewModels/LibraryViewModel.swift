@@ -189,6 +189,8 @@ final class LibraryViewModel {
     var isPlayingInline: Bool = false
     /// Set before `isPlayingInline = true` on filmstrip tap; consumed when creating the inline player (Space leaves nil → start at 0).
     var pendingFilmstripSeekSeconds: Double?
+    /// Set before `isPlayingInline = true` on ⌥-Space ("Play from Beginning"); consumed when creating the player to skip the saved resume position.
+    var pendingIgnoreResumeOnNextStart: Bool = false
     var pendingAutoPlay: Bool = false
     var isEditingText: Bool = false
     var renamingVideoId: String?
@@ -1945,6 +1947,23 @@ final class LibraryViewModel {
         videos = updated
         if let dbId {
             try? await videoRepo.updateThumbnailPath(videoId: dbId, path: url.path)
+        }
+    }
+
+    /// Persists a *regenerated* thumbnail and bumps a cache-busting suffix onto `thumbnailPath`, so
+    /// already-rendered Wall cards / list rows (keyed on `thumbnailPath` as their reload trigger)
+    /// actually pick up the new image. Plain `setThumbnailPath` writes the bare disk path, which is a
+    /// deterministic hash of the file path and doesn't change between regenerations — so a bare write
+    /// wouldn't produce a new value for anything keyed on it to react to.
+    func setRegeneratedThumbnailPath(videoPath: String, url: URL) async {
+        guard let idx = videos.firstIndex(where: { $0.filePath == videoPath }) else { return }
+        var updated = videos
+        let versioned = "\(url.path)#\(Date().timeIntervalSince1970)"
+        updated[idx].thumbnailPath = versioned
+        let dbId = updated[idx].databaseId
+        videos = updated
+        if let dbId {
+            try? await videoRepo.updateThumbnailPath(videoId: dbId, path: versioned)
         }
     }
 
