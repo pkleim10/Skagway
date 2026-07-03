@@ -2168,6 +2168,14 @@ final class LibraryViewModel {
     }
 
     private func performSameVolumeMove(video: Video, newURL: URL) async {
+        // Captured *before* the DB write: `videos`'s didSet prunes `selectedVideoIds` to valid
+        // ids the moment GRDB's observation stream reflects the rename (async, off this call's
+        // await), which can race ahead of the update below and silently drop the old path before
+        // we get to it. Deciding selection from this snapshot — not by re-checking the (possibly
+        // already-pruned) live set after the await — makes the outcome race-proof either way.
+        let wasSelected = selectedVideoIds.contains(video.filePath)
+        let wasLastSelected = lastSelectedVideoId == video.filePath
+
         let fm = FileManager.default
         do {
             try fm.moveItem(at: video.url, to: newURL)
@@ -2186,11 +2194,11 @@ final class LibraryViewModel {
             return
         }
         thumbnailService.migrateCacheKey(from: video.filePath, to: newURL.path)
-        if selectedVideoIds.contains(video.filePath) {
+        if wasSelected {
             selectedVideoIds.remove(video.filePath)
             selectedVideoIds.insert(newURL.path)
         }
-        if lastSelectedVideoId == video.filePath {
+        if wasLastSelected {
             lastSelectedVideoId = newURL.path
         }
     }
@@ -2665,6 +2673,12 @@ final class LibraryViewModel {
         let finalURL = destFolder.appendingPathComponent(sourceName)
         let fm = FileManager.default
 
+        // Captured *before* the DB write — see the matching comment in `performSameVolumeMove`:
+        // GRDB's observation stream can prune `selectedVideoIds` (via `videos`'s didSet) the
+        // moment the rename commits, racing ahead of the update at the end of this function.
+        let wasSelected = selectedVideoIds.contains(sourcePath)
+        let wasLastSelected = lastSelectedVideoId == sourcePath
+
         // Preconditions. The original is never touched until the copy is verified complete.
         guard fm.fileExists(atPath: sourceURL.path) else {
             updateMoveJobStatus(jobId, .failed(reason: "Source file is missing"))
@@ -2745,11 +2759,11 @@ final class LibraryViewModel {
             return
         }
         thumbnailService.migrateCacheKey(from: sourcePath, to: finalURL.path)
-        if selectedVideoIds.contains(sourcePath) {
+        if wasSelected {
             selectedVideoIds.remove(sourcePath)
             selectedVideoIds.insert(finalURL.path)
         }
-        if lastSelectedVideoId == sourcePath {
+        if wasLastSelected {
             lastSelectedVideoId = finalURL.path
         }
         if let idx = moveJobs.firstIndex(where: { $0.id == jobId }) {
