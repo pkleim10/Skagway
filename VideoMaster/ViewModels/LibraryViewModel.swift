@@ -2168,11 +2168,6 @@ final class LibraryViewModel {
     }
 
     private func performSameVolumeMove(video: Video, newURL: URL) async {
-        // Captured *before* the DB write: `videos`'s didSet prunes `selectedVideoIds` to valid
-        // ids the moment GRDB's observation stream reflects the rename (async, off this call's
-        // await), which can race ahead of the update below and silently drop the old path before
-        // we get to it. Deciding selection from this snapshot — not by re-checking the (possibly
-        // already-pruned) live set after the await — makes the outcome race-proof either way.
         let wasSelected = selectedVideoIds.contains(video.filePath)
         let wasLastSelected = lastSelectedVideoId == video.filePath
 
@@ -2193,7 +2188,21 @@ final class LibraryViewModel {
                                  reason: "Moved, but couldn't update the library — rolled back.")
             return
         }
+
+        // Everything below is synchronous (no further `await`) so none of it can be interleaved
+        // by GRDB's independent observation stream — that stream reacts to the DB write above on
+        // its own async path and, left alone, can update `videos`/prune `selectedVideoIds` at an
+        // arbitrary moment relative to our own selection update, dropping the video's selection
+        // depending on exactly how the race lands. Applying the rename to `videos` ourselves
+        // first, then updating selection, in one uninterrupted block, means the two can never be
+        // inconsistent — GRDB's later redundant delivery of the same data is then a no-op.
         thumbnailService.migrateCacheKey(from: video.filePath, to: newURL.path)
+        if let idx = videos.firstIndex(where: { $0.databaseId == dbId }) {
+            var updated = videos
+            updated[idx].filePath = newURL.path
+            updated[idx].fileName = newURL.lastPathComponent
+            videos = updated
+        }
         if wasSelected {
             selectedVideoIds.remove(video.filePath)
             selectedVideoIds.insert(newURL.path)
@@ -2673,9 +2682,6 @@ final class LibraryViewModel {
         let finalURL = destFolder.appendingPathComponent(sourceName)
         let fm = FileManager.default
 
-        // Captured *before* the DB write — see the matching comment in `performSameVolumeMove`:
-        // GRDB's observation stream can prune `selectedVideoIds` (via `videos`'s didSet) the
-        // moment the rename commits, racing ahead of the update at the end of this function.
         let wasSelected = selectedVideoIds.contains(sourcePath)
         let wasLastSelected = lastSelectedVideoId == sourcePath
 
@@ -2758,7 +2764,15 @@ final class LibraryViewModel {
             updateMoveJobStatus(jobId, .failed(reason: "Moved the file, but couldn't update the library — rolled back."))
             return
         }
+        // Synchronous from here (no further `await`) — see the matching comment in
+        // `performSameVolumeMove` for why `videos` is updated locally before selection.
         thumbnailService.migrateCacheKey(from: sourcePath, to: finalURL.path)
+        if let idx = videos.firstIndex(where: { $0.databaseId == dbId }) {
+            var updated = videos
+            updated[idx].filePath = finalURL.path
+            updated[idx].fileName = sourceName
+            videos = updated
+        }
         if wasSelected {
             selectedVideoIds.remove(sourcePath)
             selectedVideoIds.insert(finalURL.path)
