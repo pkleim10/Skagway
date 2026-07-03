@@ -319,6 +319,7 @@ final class LibraryViewModel {
     private static let showMissingKey = "VideoMaster.showMissing"
     private static let showRecentlyConvertedKey = "VideoMaster.showRecentlyConverted"
     private static let recentlyConvertedEntriesKey = "VideoMaster.recentlyConvertedEntries"
+    private static let conversionJobsKey = "VideoMaster.conversionJobs"
     private static let ffmpegPathKey = "VideoMaster.ffmpegPath"
     private static let customMetadataFieldDefinitionsKey = "VideoMaster.customMetadataFieldDefinitions"
     private static let missingCountScannedKey = "VideoMaster.missingCountScanned"
@@ -413,16 +414,19 @@ final class LibraryViewModel {
         }
     }
 
-    // Tracks videos re-encoded in the last 30 days; persisted to UserDefaults as JSON.
+    // Legacy shape kept only to migrate the old UserDefaults key into `conversionJobs`.
     private struct ConvertedEntry: Codable {
         var path: String
         var date: Date
     }
-    private var recentlyConvertedEntries: [ConvertedEntry] = []
 
-    var isConverting: Bool = false
-    var conversionProgress: String = ""
-    private var conversionQueue: [(video: Video, ffmpegPath: String)] = []
+    /// The re-encode queue + history, persisted so it survives relaunch. Views read this;
+    /// only the view model mutates it (always via `persistConversionJobs()` on transitions).
+    private(set) var conversionJobs: [ConversionJob] = []
+    /// True while `drainConversionQueue()` is running so we never start a second drain loop.
+    private var isDrainingConversions = false
+    /// The currently running ffmpeg process, held so an in-progress job can be aborted.
+    private var currentConversionProcess: Process?
     var isMoving: Bool = false
     var moveProgress: String = ""
 
@@ -983,11 +987,17 @@ final class LibraryViewModel {
         if let v = defaults.string(forKey: Self.ffmpegPathKey) { ffmpegUserPath = v }
         if let v = defaults.object(forKey: Self.showMissingKey) as? Bool { showMissing = v }
         if let v = defaults.object(forKey: Self.showRecentlyConvertedKey) as? Bool { showRecentlyConverted = v }
-        if let data = defaults.data(forKey: Self.recentlyConvertedEntriesKey),
-           let decoded = try? JSONDecoder().decode([ConvertedEntry].self, from: data)
+        if let data = defaults.data(forKey: Self.conversionJobsKey),
+           let decoded = try? JSONDecoder().decode([ConversionJob].self, from: data)
         {
-            recentlyConvertedEntries = decoded
+            conversionJobs = decoded
+        } else if let data = defaults.data(forKey: Self.recentlyConvertedEntriesKey),
+                  let legacy = try? JSONDecoder().decode([ConvertedEntry].self, from: data)
+        {
+            // One-time migration from the old "recently converted" list into completed jobs.
+            conversionJobs = legacy.map { ConversionJob(migratedConvertedPath: $0.path, date: $0.date) }
         }
+        conversionJobs.removeAll { $0.isExpired() }
         if let v = defaults.object(forKey: Self.missingCountScannedKey) as? Bool { missingCountScanned = v }
         if let ids = defaults.stringArray(forKey: Self.missingVideoIdsKey) { missingVideoIds = Set(ids) }
         if defaults.object(forKey: Self.showThumbnailInDetailKey) != nil {
@@ -1076,6 +1086,8 @@ final class LibraryViewModel {
             await loadTags()
             await loadCollections()
         }
+
+        resumePendingConversions()
     }
 
     func stopObserving() {
@@ -1157,7 +1169,7 @@ final class LibraryViewModel {
             recentlyAddedDays: recentlyAddedDays,
             recentlyPlayedDays: recentlyPlayedDays,
             topRatedMinRating: topRatedMinRating,
-            recentlyConvertedDates: recentlyConvertedEntries.reduce(into: [:]) { dict, e in dict[e.path] = e.date },
+            recentlyConvertedDates: recentlyConvertedDates,
             minDurationSeconds: minDurationSeconds,
             maxDurationSeconds: maxDurationSeconds,
             customSortField: resolvedCustomSortField,
@@ -1513,7 +1525,7 @@ final class LibraryViewModel {
         var byRating: [Int: Int] = [:]
         let addedCutoff = Calendar.current.date(byAdding: .day, value: -recentlyAddedDays, to: Date()) ?? Date()
         let playedCutoff = Calendar.current.date(byAdding: .day, value: -recentlyPlayedDays, to: Date()) ?? Date()
-        let convertedPaths = Set(recentlyConvertedEntries.map(\.path))
+        let convertedPaths = Set(recentlyConvertedDates.keys)
 
         typealias DupKey = String
         var buckets: [DupKey: [String]] = [:]
@@ -2207,83 +2219,114 @@ final class LibraryViewModel {
         }
     }
 
+    // MARK: - Re-encode queue
+
+    /// [path: completion date] for completed jobs — feeds the "recently converted" filter/badge.
+    private var recentlyConvertedDates: [String: Date] {
+        var result: [String: Date] = [:]
+        for job in conversionJobs where job.isCompleted {
+            if let path = job.convertedPath, let date = job.completedAt { result[path] = date }
+        }
+        return result
+    }
+
+    /// True when there is anything to show in the queue manager (active work or kept history).
+    var hasConversionActivity: Bool { !conversionJobs.isEmpty }
+
+    /// Short status for the header pill / status bar.
+    var conversionStatusText: String {
+        if let running = conversionJobs.first(where: { if case .converting = $0.status { return true }; return false }) {
+            let pct: Int = { if case .converting(let p) = running.status { return p }; return 0 }()
+            let queued = conversionJobs.filter { $0.status == .queued }.count
+            let base = "Re-encoding '\(running.sourceFileName)'… \(pct)%"
+            return queued > 0 ? "\(base) (+\(queued) queued)" : base
+        }
+        let queued = conversionJobs.filter { $0.status == .queued }.count
+        if queued > 0 { return queued == 1 ? "1 queued to re-encode" : "\(queued) queued to re-encode" }
+        let failed = conversionJobs.filter { if case .failed = $0.status { return true }; return false }.count
+        if failed > 0 { return failed == 1 ? "1 re-encode failed" : "\(failed) re-encodes failed" }
+        let completed = conversionJobs.filter { $0.isCompleted }.count
+        return completed == 1 ? "1 re-encoded" : "\(completed) re-encoded"
+    }
+
     func reencodeVideo(_ video: Video, ffmpegPath: String) {
-        conversionQueue.append((video: video, ffmpegPath: ffmpegPath))
-        updateConversionProgress()
-        if !isConverting {
-            isConverting = true
-            Task { await drainConversionQueue() }
+        // Don't queue a file that already has an active job.
+        if conversionJobs.contains(where: { $0.isActive && $0.videoDatabaseId != nil && $0.videoDatabaseId == video.databaseId }) {
+            return
+        }
+        conversionJobs.append(ConversionJob(video: video, ffmpegPath: ffmpegPath))
+        persistConversionJobs()
+        startDrainingIfNeeded()
+    }
+
+    private func persistConversionJobs() {
+        if let data = try? JSONEncoder().encode(conversionJobs) {
+            UserDefaults.standard.set(data, forKey: Self.conversionJobsKey)
         }
     }
 
-    private func updateConversionProgress() {
-        guard !conversionQueue.isEmpty else { return }
-        let name = conversionQueue[0].video.fileName
-        let remaining = conversionQueue.count - 1
-        conversionProgress = remaining > 0
-            ? "Re-encoding '\(name)'… (\(remaining) remaining)"
-            : "Re-encoding '\(name)'…"
+    /// Update a job's status in place. Progress ticks pass `persist: false` to avoid
+    /// hammering UserDefaults; state transitions persist.
+    private func updateJobStatus(_ id: UUID, _ status: ConversionJob.Status, persist: Bool = true) {
+        guard let idx = conversionJobs.firstIndex(where: { $0.id == id }) else { return }
+        conversionJobs[idx].status = status
+        if persist { persistConversionJobs() }
+    }
+
+    private func startDrainingIfNeeded() {
+        guard !isDrainingConversions,
+              conversionJobs.contains(where: { $0.status == .queued }) else { return }
+        isDrainingConversions = true
+        Task { await drainConversionQueue() }
     }
 
     private func drainConversionQueue() async {
-        isConverting = true
-        defer {
-            isConverting = false
-            conversionProgress = ""
-        }
-
-        recentlyConvertedEntries = []
-        if let data = try? JSONEncoder().encode(recentlyConvertedEntries) {
-            UserDefaults.standard.set(data, forKey: Self.recentlyConvertedEntriesKey)
-        }
-        updateLibraryCounts()
-        recomputeFilteredVideos()
-
-        while !conversionQueue.isEmpty {
-            let job = conversionQueue[0]
-            updateConversionProgress()
-            await performReencode(video: job.video, ffmpegPath: job.ffmpegPath)
-            conversionQueue.removeFirst()
+        defer { isDrainingConversions = false }
+        while let idx = conversionJobs.firstIndex(where: { $0.status == .queued }) {
+            let jobId = conversionJobs[idx].id
+            updateJobStatus(jobId, .converting(pct: 0))
+            await performReencode(jobId: jobId)
         }
     }
 
-    private func performReencode(video: Video, ffmpegPath: String) async {
-        let videoURL = URL(fileURLWithPath: video.filePath)
+    private func performReencode(jobId: UUID) async {
+        guard let job = conversionJobs.first(where: { $0.id == jobId }) else { return }
+
+        // Resolve the current on-disk path (a prior conversion/rename may have moved it).
+        let liveVideo = job.videoDatabaseId.flatMap { dbId in videos.first { $0.databaseId == dbId } }
+        let sourcePath = liveVideo?.filePath ?? job.sourcePath
+        let sourceName = liveVideo?.fileName ?? job.sourceFileName
+        let duration = liveVideo?.duration ?? job.durationSeconds
+
+        let videoURL = URL(fileURLWithPath: sourcePath)
         let stem = videoURL.deletingPathExtension().lastPathComponent
         let ext = videoURL.pathExtension
         let dir = videoURL.deletingLastPathComponent().path
-        let backupName = ext.isEmpty ? "\(stem)_original" : "\(stem)_original.\(ext)"
-        let backupURL = URL(fileURLWithPath: (dir as NSString).appendingPathComponent(backupName))
-        let outputURL = URL(fileURLWithPath: (dir as NSString).appendingPathComponent("\(stem).mp4"))
+        func inDir(_ name: String) -> URL { URL(fileURLWithPath: (dir as NSString).appendingPathComponent(name)) }
+        let convertURL = inDir("\(stem)_convert.mp4")
+        let backupURL = inDir(ext.isEmpty ? "\(stem)_backup" : "\(stem)_backup.\(ext)")
+        let finalURL = inDir("\(stem).mp4")
         let fm = FileManager.default
 
+        // Preconditions. The original is never touched until ffmpeg succeeds.
+        guard fm.fileExists(atPath: videoURL.path) else {
+            updateJobStatus(jobId, .failed(reason: "Source file is missing"))
+            return
+        }
         guard !fm.fileExists(atPath: backupURL.path) else {
-            conversionProgress = "Skipped '\(video.fileName)': backup already exists"
-            try? await Task.sleep(for: .seconds(3))
+            updateJobStatus(jobId, .failed(reason: "A backup (\(backupURL.lastPathComponent)) already exists"))
             return
         }
-        if outputURL.path != video.filePath, fm.fileExists(atPath: outputURL.path) {
-            conversionProgress = "Skipped '\(video.fileName)': output already exists"
-            try? await Task.sleep(for: .seconds(3))
+        if finalURL.path != videoURL.path, fm.fileExists(atPath: finalURL.path) {
+            updateJobStatus(jobId, .failed(reason: "\(finalURL.lastPathComponent) already exists"))
             return
         }
+        // Clear any stale temp from a prior interrupted run.
+        try? fm.removeItem(at: convertURL)
 
-        do {
-            try fm.moveItem(at: videoURL, to: backupURL)
-        } catch {
-            conversionProgress = "Failed to rename '\(video.fileName)': \(error.localizedDescription)"
-            try? await Task.sleep(for: .seconds(4))
-            return
-        }
-
-        let duration = video.duration
-        let name = video.fileName
         let progressPipe = Pipe()
-
-        // Read ffmpeg's -progress output and update the status bar with a percentage.
-        // Falls back to a plain spinner message when duration is unknown.
+        // Read ffmpeg's -progress stream and push a live percentage into the job (in-memory only).
         let progressTask = Task.detached(priority: .utility) { [weak self] in
-            guard let self else { return }
             let handle = progressPipe.fileHandleForReading
             var buffer = ""
             while true {
@@ -2299,55 +2342,217 @@ final class LibraryViewModel {
                     else { continue }
                     let pct = min(99, Int(us / (dur * 1_000_000) * 100))
                     await MainActor.run { [weak self] in
-                        self?.conversionProgress = "Re-encoding '\(name)'… \(pct)%"
+                        self?.updateJobStatus(jobId, .converting(pct: pct), persist: false)
                     }
                 }
             }
         }
 
-        let exitCode = await Task.detached(priority: .userInitiated) {
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: ffmpegPath)
-            proc.arguments = ["-i", backupURL.path, "-c:v", "libx264", "-c:a", "aac",
-                              "-movflags", "+faststart", "-y", "-progress", "pipe:1", outputURL.path]
-            proc.standardOutput = progressPipe
-            proc.standardError = FileHandle.nullDevice
-            return await withCheckedContinuation { continuation in
-                proc.terminationHandler = { p in continuation.resume(returning: p.terminationStatus) }
-                guard (try? proc.run()) != nil else {
-                    continuation.resume(returning: Int32(-1))
-                    return
-                }
-            }
-        }.value
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: job.ffmpegPath)
+        proc.arguments = ["-i", videoURL.path, "-c:v", "libx264", "-c:a", "aac",
+                          "-movflags", "+faststart", "-y", "-progress", "pipe:1", convertURL.path]
+        proc.standardOutput = progressPipe
+        proc.standardError = FileHandle.nullDevice
+        currentConversionProcess = proc
 
+        let exitCode: Int32 = await withCheckedContinuation { continuation in
+            proc.terminationHandler = { p in continuation.resume(returning: p.terminationStatus) }
+            guard (try? proc.run()) != nil else {
+                continuation.resume(returning: Int32(-1))
+                return
+            }
+        }
+        currentConversionProcess = nil
         // Wait for the progress reader to drain the pipe before continuing.
         await progressTask.value
 
-        if exitCode == 0 {
-            try? fm.trashItem(at: backupURL, resultingItemURL: nil)
-            await videoConvertedToMP4(video, newPath: outputURL.path)
-            addRecentlyConverted(path: outputURL.path)
-        } else {
-            // Delete ffmpeg's partial/0-byte output before restoring. Skip when re-encoding
-            // in place (source already .mp4), where outputURL == the file we're restoring.
-            if outputURL.path != video.filePath {
-                try? fm.removeItem(at: outputURL)
+        // The job may have been aborted (and removed) while ffmpeg ran.
+        let stillTracked = conversionJobs.contains { $0.id == jobId }
+
+        guard exitCode == 0 else {
+            try? fm.removeItem(at: convertURL) // discard partial; original untouched
+            if stillTracked {
+                updateJobStatus(jobId, .failed(reason: "Re-encoding failed"))
             }
-            // Restore original
-            try? fm.moveItem(at: backupURL, to: videoURL)
-            conversionProgress = "Re-encoding failed for '\(video.fileName)'"
-            try? await Task.sleep(for: .seconds(4))
+            return
+        }
+
+        // Success: move the original aside, promote the converted file to the final name.
+        do {
+            try fm.moveItem(at: videoURL, to: backupURL)
+        } catch {
+            try? fm.removeItem(at: convertURL)
+            if stillTracked { updateJobStatus(jobId, .failed(reason: "Couldn't rename original: \(error.localizedDescription)")) }
+            return
+        }
+        do {
+            try fm.moveItem(at: convertURL, to: finalURL)
+        } catch {
+            try? fm.moveItem(at: backupURL, to: videoURL) // roll back
+            if stillTracked { updateJobStatus(jobId, .failed(reason: "Couldn't finalize output: \(error.localizedDescription)")) }
+            return
+        }
+
+        // Point the DB record at the new file (handles path/extension change and metadata refresh).
+        if let video = liveVideo {
+            await videoConvertedToMP4(video, newPath: finalURL.path)
+        }
+
+        // Record completion. If the job was aborted mid-flight the file work is already
+        // done, so still trash the just-created backup to leave a clean result.
+        if let idx = conversionJobs.firstIndex(where: { $0.id == jobId }) {
+            conversionJobs[idx].status = .completed
+            conversionJobs[idx].completedAt = Date()
+            conversionJobs[idx].convertedPath = finalURL.path
+            conversionJobs[idx].backupPath = backupURL.path
+            conversionJobs[idx].sourcePath = finalURL.path
+            conversionJobs[idx].sourceFileName = finalURL.lastPathComponent
+            persistConversionJobs()
+        } else {
+            try? fm.trashItem(at: backupURL, resultingItemURL: nil)
+        }
+        _ = sourceName // (retained for potential status messaging)
+        updateLibraryCounts()
+        recomputeFilteredVideos()
+    }
+
+    // MARK: - Queue management actions
+
+    /// Abort a queued job (remove it) or the running one (terminate ffmpeg, discard partial).
+    func abortConversion(_ id: UUID) {
+        guard let idx = conversionJobs.firstIndex(where: { $0.id == id }) else { return }
+        let wasRunning: Bool = { if case .converting = conversionJobs[idx].status { return true }; return false }()
+        conversionJobs.remove(at: idx)
+        persistConversionJobs()
+        if wasRunning {
+            currentConversionProcess?.terminate() // performReencode will discard the partial
         }
     }
 
-    private func addRecentlyConverted(path: String) {
-        recentlyConvertedEntries.append(ConvertedEntry(path: path, date: Date()))
-        if let data = try? JSONEncoder().encode(recentlyConvertedEntries) {
-            UserDefaults.standard.set(data, forKey: Self.recentlyConvertedEntriesKey)
+    /// Move a queued job ahead of the other queued jobs (can't jump the running one).
+    func moveConversionToTop(_ id: UUID) {
+        guard let from = conversionJobs.firstIndex(where: { $0.id == id }),
+              conversionJobs[from].status == .queued else { return }
+        let job = conversionJobs.remove(at: from)
+        let insertAt = conversionJobs.firstIndex(where: { $0.status == .queued }) ?? conversionJobs.count
+        conversionJobs.insert(job, at: insertAt)
+        persistConversionJobs()
+    }
+
+    /// Remove a finished/failed row (and its partial, if any) from the history.
+    func dismissConversion(_ id: UUID) {
+        guard let idx = conversionJobs.firstIndex(where: { $0.id == id }),
+              !conversionJobs[idx].isActive else { return }
+        let wasCompleted = conversionJobs[idx].isCompleted
+        conversionJobs.remove(at: idx)
+        persistConversionJobs()
+        if wasCompleted {
+            // Dropped from the "recently converted" smart filter/count.
+            updateLibraryCounts()
+            recomputeFilteredVideos()
         }
+    }
+
+    /// Re-queue a failed job. No-op if ffmpeg can't be resolved.
+    func retryConversion(_ id: UUID) {
+        guard let idx = conversionJobs.firstIndex(where: { $0.id == id }),
+              case .failed = conversionJobs[idx].status,
+              let ffmpeg = resolvedFFmpegPath else { return }
+        conversionJobs[idx].status = .queued
+        conversionJobs[idx].ffmpegPath = ffmpeg
+        persistConversionJobs()
+        startDrainingIfNeeded()
+    }
+
+    /// Trash the kept-aside backup for a completed job; the row stays (video is still converted).
+    func deleteConversionBackup(_ id: UUID) {
+        guard let idx = conversionJobs.firstIndex(where: { $0.id == id }),
+              let backupPath = conversionJobs[idx].backupPath else { return }
+        try? FileManager.default.trashItem(at: URL(fileURLWithPath: backupPath), resultingItemURL: nil)
+        conversionJobs[idx].backupPath = nil
+        persistConversionJobs()
+    }
+
+    func deleteAllConversionBackups() {
+        let fm = FileManager.default
+        for idx in conversionJobs.indices where conversionJobs[idx].backupPath != nil {
+            if let path = conversionJobs[idx].backupPath {
+                try? fm.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: nil)
+            }
+            conversionJobs[idx].backupPath = nil
+        }
+        persistConversionJobs()
+    }
+
+    /// Undo a conversion: trash the converted `.mp4`, rename the backup back to the original
+    /// name, and revert the DB record. Drops the job row on success.
+    func restoreConversionBackup(_ id: UUID) async {
+        guard let idx = conversionJobs.firstIndex(where: { $0.id == id }),
+              conversionJobs[idx].isCompleted,
+              let backupPath = conversionJobs[idx].backupPath,
+              let convertedPath = conversionJobs[idx].convertedPath else { return }
+
+        let fm = FileManager.default
+        let backupURL = URL(fileURLWithPath: backupPath)
+        guard fm.fileExists(atPath: backupPath) else {
+            conversionJobs[idx].status = .failed(reason: "Backup file is missing")
+            conversionJobs[idx].backupPath = nil
+            persistConversionJobs()
+            return
+        }
+        // Restored name drops the "_backup" suffix: clip_backup.mov -> clip.mov
+        let backupStem = backupURL.deletingPathExtension().lastPathComponent
+        let restoredStem = backupStem.hasSuffix("_backup") ? String(backupStem.dropLast("_backup".count)) : backupStem
+        let dir = backupURL.deletingLastPathComponent()
+        let restoredURL = dir.appendingPathComponent(
+            backupURL.pathExtension.isEmpty ? restoredStem : "\(restoredStem).\(backupURL.pathExtension)")
+
+        if restoredURL.path != convertedPath, fm.fileExists(atPath: restoredURL.path) {
+            updateJobStatus(id, .failed(reason: "\(restoredURL.lastPathComponent) already exists"))
+            return
+        }
+
+        // Trash the converted output, then restore the original name.
+        try? fm.trashItem(at: URL(fileURLWithPath: convertedPath), resultingItemURL: nil)
+        do {
+            try fm.moveItem(at: backupURL, to: restoredURL)
+        } catch {
+            updateJobStatus(id, .failed(reason: "Couldn't restore backup: \(error.localizedDescription)"))
+            return
+        }
+
+        if let dbId = conversionJobs.first(where: { $0.id == id })?.videoDatabaseId,
+           let video = videos.first(where: { $0.databaseId == dbId }) {
+            await videoConvertedToMP4(video, newPath: restoredURL.path)
+        }
+
+        conversionJobs.removeAll { $0.id == id }
+        persistConversionJobs()
         updateLibraryCounts()
         recomputeFilteredVideos()
+    }
+
+    /// On launch: re-queue any job interrupted mid-encode, sweep stray `_convert.mp4`
+    /// partials, and restart the drain loop. Called after the DB observation starts.
+    func resumePendingConversions() {
+        let fm = FileManager.default
+        var changed = false
+        for i in conversionJobs.indices {
+            if case .converting = conversionJobs[i].status {
+                conversionJobs[i].status = .queued
+                changed = true
+            }
+        }
+        // Orphan sweep: remove leftover temp files for any not-yet-completed job.
+        for job in conversionJobs where !job.isCompleted {
+            let url = URL(fileURLWithPath: job.sourcePath)
+            let stem = url.deletingPathExtension().lastPathComponent
+            let convertURL = url.deletingLastPathComponent().appendingPathComponent("\(stem)_convert.mp4")
+            try? fm.removeItem(at: convertURL)
+        }
+        if changed { persistConversionJobs() }
+        startDrainingIfNeeded()
     }
 
     func refreshMissingCount() async {

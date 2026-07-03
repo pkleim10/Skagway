@@ -31,6 +31,13 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.22.0 (build 597) - 2026-07-02
+
+- **Reworked "Re-encode to MP4" for safety and control.** The original file now stays fully intact under its real name until the encode provably succeeds: ffmpeg writes a temporary `<name>_convert.mp4`, and only on success is the original renamed to `<name>_backup.<ext>` and the temp promoted to the final `<name>.mp4`. A crash or abort mid-encode can no longer cost you the source. Backups are now **kept** (not silently trashed) so you can restore or delete them later.
+- **New: Re-encode Queue manager.** A status pill in the header (live spinner + percentage while encoding) opens a queue dialog listing every job. Per-item actions: **Abort** (queued or in-progress — terminates ffmpeg and discards the partial), **Move to Top** (reorder pending jobs), **Restore** (undo a conversion: trash the `.mp4`, rename the backup back to the original), **Delete Backup** / **Delete All Backups**, **Retry** (for failed jobs), and **Dismiss**. Conversions run one at a time.
+- **New: queue survives relaunch.** Pending jobs are persisted and resume automatically on next launch; a job interrupted mid-encode is re-queued and its stray temp file swept. Completed entries age out of the list after 30 days (backup files are left untouched).
+- Previously the re-encode status was computed but shown nowhere — it now surfaces in the header pill.
+
 ## 0.21.0 (build 594) - 2026-07-02
 
 - **New: "Play from Beginning" (⌥-Space)**: starts the selected video from 0, ignoring any saved resume position. When a video is already playing, ⌥-Space restarts it from the beginning — this replaces the old ⌥⌘B "Restart from Beginning" shortcut (the menu item remains, without a shortcut). Plain Space is unchanged (resume / play-pause).

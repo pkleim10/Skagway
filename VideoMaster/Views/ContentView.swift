@@ -27,6 +27,7 @@ private struct LibraryContentView: View {
     @State private var keyDownMonitor: Any?
     @State private var fullScreenController: FullscreenInlinePlayerWindowController?
     @State private var showListColumnsSheet = false
+    @State private var showConversionQueue = false
     @FocusState private var isSearchFocused: Bool
 
     /// Local presentation flag for the filters drawer (discrete).
@@ -119,6 +120,39 @@ private struct LibraryContentView: View {
         let total = "\(vm.filteredVideos.count) videos"
         let sel = vm.selectedVideoIds.count
         return sel > 1 ? "\(total), \(sel) selected" : total
+    }
+
+    /// True while any re-encode job is queued or running (drives the spinner in the pill).
+    private var isConversionActive: Bool {
+        vm.conversionJobs.contains { $0.isActive }
+    }
+
+    /// Clickable status pill that opens the re-encode queue manager.
+    private var conversionPill: some View {
+        Button {
+            showConversionQueue = true
+        } label: {
+            HStack(spacing: 5) {
+                if isConversionActive {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+                Text(vm.conversionStatusText)
+                    .font(.system(size: 10))
+                    .monospacedDigit()
+            }
+            .foregroundStyle(isConversionActive ? Color.appAccent : Color.appTextSecondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                Capsule().fill(Color.appAccent.opacity(isConversionActive ? 0.14 : 0.08))
+            )
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, 4)
+        .help("Re-encode queue — click to manage")
     }
 
     private var sortCluster: some View {
@@ -253,6 +287,11 @@ private struct LibraryContentView: View {
                 .foregroundStyle(Color.appTextTertiary)
                 .monospacedDigit()
                 .padding(.trailing, 4)
+
+            // Re-encode queue pill — click to open the queue manager.
+            if vm.hasConversionActivity {
+                conversionPill
+            }
 
             // The single toggle for the top filters drawer.
             // Closed -> filter icon; Open -> close (X) icon. Always live filters, no Apply step.
@@ -465,6 +504,9 @@ private struct LibraryContentView: View {
             if let window = NSApp.keyWindow, window.firstResponder is NSText {
                 window.makeFirstResponder(nil)
             }
+        }
+        .sheet(isPresented: $showConversionQueue) {
+            ConversionQueueView(vm: vm)
         }
         .onChange(of: vm.focusSearchFieldToken) { _, _ in
             isSearchFocused = true
