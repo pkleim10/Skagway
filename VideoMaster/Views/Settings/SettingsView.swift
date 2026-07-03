@@ -179,6 +179,18 @@ struct VideoSettingsView: View {
             }
 
             Section {
+                Picker("Tag blind default state", selection: $viewModel.tagBlindDefaultState) {
+                    ForEach(TagBlindDefaultState.allCases) { state in
+                        Text(state.label).tag(state)
+                    }
+                }
+            } header: {
+                Text("Tags")
+            } footer: {
+                Text("Controls the Inspector's \u{201c}Add tags\u{201d} blind (the unassigned-tags list) each time you select a different video: always start closed, always start open, or leave it exactly as you last set it.")
+            }
+
+            Section {
                 Picker("Player opens at", selection: $viewModel.playerStartPreference) {
                     ForEach(PlayerStartPreference.allCases) { pref in
                         Text(pref.label).tag(pref)

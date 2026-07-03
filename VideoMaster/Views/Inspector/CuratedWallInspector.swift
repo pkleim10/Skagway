@@ -77,8 +77,13 @@ struct CuratedWallInspector: View {
             loadCustomFieldValues()
             hero = nil
             filmstrip = nil
-            // The unassigned-tags "blind" is transient — collapse it on each new selection.
-            showUnassigned = false
+            // The unassigned-tags "blind" behavior on selection change is user-configurable
+            // (Settings → Tags); `.lastUsed` intentionally leaves `showUnassigned` untouched.
+            switch viewModel.tagBlindDefaultState {
+            case .alwaysClosed: showUnassigned = false
+            case .alwaysOpen: showUnassigned = true
+            case .lastUsed: break
+            }
             newTagText = ""
         }
         .onChange(of: viewModel.selectedVideoIds) { _, _ in loadCustomFieldValues() }
@@ -718,26 +723,30 @@ private struct InspectorTagChip: View {
         fullTextWidth > visibleTextWidth + 1
     }
 
+    // Assigned tags read as "active": bolder weight + a stronger fill/border of the same accent
+    // color (no new color introduced, matching the app's existing selected-state convention).
+    private var chipFont: Font { applied ? .caption.weight(.semibold) : .caption }
+
     var body: some View {
         Button(action: onToggle) {
             Text(tag.name)
-                .font(.caption)
+                .font(chipFont)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 // Measure rendered width vs. the full intrinsic width to detect truncation.
                 .background(widthReader($visibleTextWidth))
                 .background(
                     Text(tag.name)
-                        .font(.caption)
+                        .font(chipFont)
                         .fixedSize()
                         .hidden()
                         .background(widthReader($fullTextWidth))
                 )
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
-                .background(applied ? Color.appAccent.opacity(0.18) : Color.appSurface.opacity(0.65))
+                .background(applied ? Color.appAccent.opacity(0.32) : Color.appSurface.opacity(0.65))
                 .overlay(
-                    Capsule().stroke(applied ? Color.appAccent.opacity(0.5) : Color.clear, lineWidth: 1)
+                    Capsule().stroke(applied ? Color.appAccent : Color.clear, lineWidth: 1)
                 )
                 .clipShape(Capsule())
         }
@@ -754,7 +763,7 @@ private struct InspectorTagChip: View {
             arrowEdge: .top
         ) {
             Text(tag.name)
-                .font(.caption)
+                .font(chipFont)
                 .foregroundStyle(Color.appTextPrimary)
                 .fixedSize()
                 .padding(.horizontal, 10)

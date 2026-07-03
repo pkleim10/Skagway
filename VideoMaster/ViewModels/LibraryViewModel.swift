@@ -307,6 +307,7 @@ final class LibraryViewModel {
     private static let playerLastWasFullScreenKey = "VideoMaster.playerLastWasFullScreen"
     private static let fadeResumeBannerAutomaticallyKey = "VideoMaster.fadeResumeBannerAutomatically"
     private static let resumeBannerFadeDelaySecondsKey = "VideoMaster.resumeBannerFadeDelaySeconds"
+    private static let tagBlindDefaultStateKey = "VideoMaster.tagBlindDefaultState"
     private static let recentlyAddedDaysKey = "VideoMaster.recentlyAddedDays"
     private static let recentlyPlayedDaysKey = "VideoMaster.recentlyPlayedDays"
     private static let topRatedMinRatingKey = "VideoMaster.topRatedMinRating"
@@ -513,6 +514,14 @@ final class LibraryViewModel {
         didSet {
             guard playerStartPreference != oldValue else { return }
             UserDefaults.standard.set(playerStartPreference.rawValue, forKey: Self.playerStartPreferenceKey)
+        }
+    }
+
+    /// How the Inspector's "Add tags" blind behaves on each new selection.
+    var tagBlindDefaultState: TagBlindDefaultState = .alwaysClosed {
+        didSet {
+            guard tagBlindDefaultState != oldValue else { return }
+            UserDefaults.standard.set(tagBlindDefaultState.rawValue, forKey: Self.tagBlindDefaultStateKey)
         }
     }
 
@@ -924,6 +933,10 @@ final class LibraryViewModel {
         if let raw = defaults.string(forKey: Self.playerStartPreferenceKey),
            let pref = PlayerStartPreference(rawValue: raw) {
             playerStartPreference = pref
+        }
+        if let raw = defaults.string(forKey: Self.tagBlindDefaultStateKey),
+           let state = TagBlindDefaultState(rawValue: raw) {
+            tagBlindDefaultState = state
         }
         if defaults.object(forKey: Self.playerSizeIsCompactKey) != nil {
             playerSizeIsCompact = defaults.bool(forKey: Self.playerSizeIsCompactKey)
