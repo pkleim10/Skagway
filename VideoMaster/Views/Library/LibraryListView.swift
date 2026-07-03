@@ -186,6 +186,12 @@ struct LibraryListView: View {
                         video.filePath, inFileViewerRootedAtPath: ""
                     )
                 }
+                if ids.count == 1 {
+                    Button("Rename") {
+                        viewModel.renameText = video.fileName
+                        viewModel.renamingVideoId = video.id
+                    }
+                }
                 Menu("Open With") {
                     // If the right-clicked row is part of a multi-selection,
                     // send the whole selection; otherwise just this one video.
@@ -217,12 +223,7 @@ struct LibraryListView: View {
                 }
                 .disabled(isMoving)
                 .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "")
-                if ids.count == 1 {
-                    Button("Rename") {
-                        viewModel.renameText = video.fileName
-                        viewModel.renamingVideoId = video.id
-                    }
-                }
+                Divider()
                 Button("Re-encode to MP4\u{2026}") {
                     if let ffmpeg = ffmpegPath {
                         let selected = viewModel.filteredVideos.filter { ids.contains($0.id) }

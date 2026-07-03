@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **List view context menu reordered to match the Wall grid's.** Was Play → Show in Finder → Open With → Rename → Re-encode → Move Files (no divider between Open With and Re-encode); now Play → Show in Finder → Rename → Open With → *divider* → Re-encode → Move Files, same as the grid. The rest (Modify Filmstrip / Regenerate Thumbnail, Remove from Library / Delete Video…, and their dividers) already matched.
+
 ## 0.23.0 (build 605) - 2026-07-03
 
 - **New: Move queue + safety for cross-volume "Move Files…".** Same-volume moves are still an instant atomic rename, unchanged. A move onto a different volume is a real copy + delete and previously gave zero feedback (the `isMoving`/`moveProgress` state existed but nothing rendered it) — worse, it operated on the real source file with no crash safety. Now: the copy lands at a `<name>.moving` temp at the destination first, is size-verified, promoted to the final name, and only then is the source deleted — a crash mid-copy leaves at worst an orphaned temp file, swept automatically on next launch; the original is never at risk. Progress surfaces in a new header status pill (next to the re-encode pill) that opens a Move Queue manager (abort / move-to-top / retry / dismiss, one move at a time). While a move is active, that video's Delete / Move / Re-encode / Remove-from-Library / Open With are disabled in both the Wall grid and List context menus, and the Wall card shows a dimmed spinner badge over the thumbnail so it's visibly "frozen" without needing to right-click.
