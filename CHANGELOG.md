@@ -31,6 +31,9 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Restored drag-and-drop file import.** Dropped during the Curated Wall redesign along with the old nav bar; dropping video files (or folders) onto the main window now imports them again, same as `main`. Drop target covers the whole Wall + Inspector split (broader than the old grid-only target), so a drop landing on the Inspector panel still imports.
+- **Fix: "Delete Video…" from the Wall grid's context menu did nothing.** The confirmation dialog was only mounted in the (dead) legacy `LibraryGridView` and in `LibraryListView` — triggering delete from the Wall grid set the confirmation flag with nothing listening, so it silently no-oped until you switched to List view. Added the same `.confirmationDialog` to `CuratedWallGrid`. Also renamed the Wall grid's menu item from "Delete" to "Delete Video…" to match List view.
+
 ## 0.22.0 (build 597) - 2026-07-02
 
 - **Reworked "Re-encode to MP4" for safety and control.** The original file now stays fully intact under its real name until the encode provably succeeds: ffmpeg writes a temporary `<name>_convert.mp4`, and only on success is the original renamed to `<name>_backup.<ext>` and the temp promoted to the final `<name>.mp4`. A crash or abort mid-encode can no longer cost you the source. Backups are now **kept** (not silently trashed) so you can restore or delete them later.

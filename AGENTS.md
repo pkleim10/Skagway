@@ -46,6 +46,7 @@ This document defines how AI agents (Cursor, Claude, etc.) should work on the Vi
 
 5. **Testing Changes**
    - For UI/behavior changes, you are expected to build + run the app (or guide the user to run it) rather than only describing changes.
+   - **Do not drive the GUI yourself.** Launching/activating the app is fine, but do not attempt to simulate clicks, drags, keystrokes, or otherwise control the mouse/keyboard (`osascript`/System Events, `cliclick`, or similar) to click through the running app. The user does interactive testing themselves — hand off with clear repro steps ("right-click a card → Delete Video… → confirm the dialog appears") instead of trying to automate it.
 
 ## Key Architectural Principles
 

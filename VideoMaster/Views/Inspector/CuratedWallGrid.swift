@@ -164,7 +164,7 @@ struct CuratedWallGrid: View {
                             Button("Remove from Library") {
                                 Task { await viewModel.removeVideosFromLibrary([video.id]) }
                             }
-                            Button("Delete", role: .destructive) {
+                            Button("Delete Video…", role: .destructive) {
                                 viewModel.pendingDeleteIds = [video.id]
                                 viewModel.showDeleteConfirmation = true
                             }
@@ -218,6 +218,26 @@ struct CuratedWallGrid: View {
                 defaultColumns: viewModel.defaultFilmstripColumns
             ) { _ in
                 viewModel.filmstripRefreshId &+= 1
+            }
+        }
+        .confirmationDialog(
+            "Delete \(viewModel.pendingDeleteIds.count == 1 ? "Video" : "\(viewModel.pendingDeleteIds.count) Videos")",
+            isPresented: $viewModel.showDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                let ids = viewModel.pendingDeleteIds
+                viewModel.pendingDeleteIds = []
+                Task { await viewModel.deleteVideos(ids) }
+            }
+            Button("Cancel", role: .cancel) {
+                viewModel.pendingDeleteIds = []
+            }
+        } message: {
+            if viewModel.pendingDeleteIds.count == 1 {
+                Text("The file will be moved to Trash.")
+            } else {
+                Text("\(viewModel.pendingDeleteIds.count) files will be moved to Trash.")
             }
         }
     }

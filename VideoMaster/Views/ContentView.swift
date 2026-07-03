@@ -396,6 +396,30 @@ private struct LibraryContentView: View {
                     CuratedWallInspector(video: selectedVideo, viewModel: vm, thumbnailService: thumbService)
                 }
             )
+            .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+                guard !providers.isEmpty else { return true }
+                let group = DispatchGroup()
+                var urls: [URL] = []
+                let lock = NSLock()
+                for provider in providers {
+                    group.enter()
+                    _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
+                        defer { group.leave() }
+                        if let data = data,
+                           let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                           let url = URL(string: path)
+                        {
+                            lock.lock()
+                            urls.append(url)
+                            lock.unlock()
+                        }
+                    }
+                }
+                group.notify(queue: .main) {
+                    Task { await vm.importDroppedFiles(urls) }
+                }
+                return true
+            }
             .overlay {
                 // The single resizable player: one surface anchored top-right, shown whenever
                 // playback is active. Hidden while in true full-screen (the borderless window hosts
