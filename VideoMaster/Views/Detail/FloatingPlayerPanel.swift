@@ -122,7 +122,14 @@ struct FloatingPlayerPanel: View {
                 DragGesture(minimumDistance: 4, coordinateSpace: .global)
                     .onChanged { value in
                         if dragStartCenter == nil {
-                            dragStartCenter = baseCenter
+                            dragStartCenter = baseCenter   // snapshot before exiting compact
+                            if viewModel.playerSizeIsCompact {
+                                // Freeze the current (compact) size as the new floating size so
+                                // dragging doesn't also cause a visual resize jump.
+                                viewModel.playerFloatingSize = size
+                                viewModel.playerSizeIsCompact = false
+                                viewModel.playerLastWasFullScreen = false
+                            }
                         }
                         let tw = totalSize.width; let th = totalSize.height
                         let proposed = CGPoint(
