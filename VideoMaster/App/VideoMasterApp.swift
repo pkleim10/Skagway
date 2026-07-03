@@ -73,6 +73,12 @@ struct VideoMasterApp: App {
                     appState.libraryViewModel?.playback.restartFromBeginning()
                 }
                 .disabled(appState.libraryViewModel?.isPlayingInline != true)
+
+                Button("Make Thumbnail from Current Frame") {
+                    appState.libraryViewModel?.playback.makeThumbnailFromCurrentFrame()
+                }
+                .keyboardShortcut("m", modifiers: [.command, .option])
+                .disabled(appState.libraryViewModel?.isPlayingInline != true)
             }
             CommandGroup(after: .pasteboard) {
                 Button("Delete\u{2026}") {

@@ -580,13 +580,7 @@ final class ThumbnailService: @unchecked Sendable {
         }
 
         let thumbURL = thumbnailURL(for: filePath)
-        try? FileManager.default.removeItem(at: thumbURL)
-        memoryCache.removeObject(forKey: filePath as NSString)
-        for edge in Self.detailPreviewLongEdgeChoices {
-            try? FileManager.default.removeItem(at: detailPreviewURL(for: filePath, longEdge: edge))
-            memoryCache.removeObject(forKey: detailPreviewMemoryKey(filePath: filePath, longEdge: edge))
-        }
-        try? FileManager.default.removeItem(at: legacyDetailPreviewURL(for: filePath))
+        clearCachedStills(filePath: filePath)
 
         try await writeStill(
             for: video, atSeconds: targetSeconds, maxDimension: 400,
@@ -601,13 +595,66 @@ final class ThumbnailService: @unchecked Sendable {
         return thumbURL
     }
 
-    /// Shared still-frame capture for `regenerateThumbnail`: seek to `seconds`, JPEG-encode, write to
-    /// `cacheURL`, populate the memory cache. Kept separate from `generateThumbnailWork` /
-    /// `generateDetailPreviewWork` (which pick their own position and early-return when already
-    /// cached) so this always-regenerate path can't hit their "already cached" fast return.
+    /// Capture the exact frame at `atSeconds` (the current playback position) and set it as both the
+    /// small library thumbnail and the 720pt detail-preview still, replacing whatever was cached.
+    /// Unlike `regenerateThumbnail` (random position, 3s tolerance — "close enough" for an auto pick),
+    /// this uses zero tolerance so the captured frame is exactly the one on screen, matching the
+    /// precedent in `InlinePlaybackController.start(video:at:)` for filmstrip-click seeks. The "pro"
+    /// precise-control counterpart to "Regenerate Thumbnail".
+    func captureCurrentFrameAsThumbnail(for video: Video, atSeconds seconds: Double) async throws -> URL {
+        await generationGate.acquire()
+        do {
+            let url = try await performCaptureCurrentFrame(for: video, atSeconds: seconds)
+            await generationGate.release()
+            return url
+        } catch {
+            await generationGate.release()
+            throw error
+        }
+    }
+
+    private func performCaptureCurrentFrame(for video: Video, atSeconds seconds: Double) async throws -> URL {
+        let filePath = video.filePath
+        clearCachedStills(filePath: filePath)
+
+        let thumbURL = thumbnailURL(for: filePath)
+        try await writeStill(
+            for: video, atSeconds: seconds, maxDimension: 400,
+            compressionFactor: 0.75, cacheURL: thumbURL,
+            memoryKey: filePath as NSString, timeout: 10, tolerance: .zero
+        )
+        try await writeStill(
+            for: video, atSeconds: seconds, maxDimension: 720,
+            compressionFactor: 0.82, cacheURL: detailPreviewURL(for: filePath, longEdge: 720),
+            memoryKey: detailPreviewMemoryKey(filePath: filePath, longEdge: 720), timeout: 15, tolerance: .zero
+        )
+        return thumbURL
+    }
+
+    /// Deletes every cached still (thumbnail + all detail-preview long-edge variants + legacy detail
+    /// file) for `filePath`, on disk and in the memory cache, so a fresh capture can't be shadowed by
+    /// a stale file under a different long-edge setting. Shared by `regenerateThumbnail` and
+    /// `captureCurrentFrameAsThumbnail`.
+    private func clearCachedStills(filePath: String) {
+        try? FileManager.default.removeItem(at: thumbnailURL(for: filePath))
+        memoryCache.removeObject(forKey: filePath as NSString)
+        for edge in Self.detailPreviewLongEdgeChoices {
+            try? FileManager.default.removeItem(at: detailPreviewURL(for: filePath, longEdge: edge))
+            memoryCache.removeObject(forKey: detailPreviewMemoryKey(filePath: filePath, longEdge: edge))
+        }
+        try? FileManager.default.removeItem(at: legacyDetailPreviewURL(for: filePath))
+    }
+
+    /// Shared still-frame capture for `regenerateThumbnail` / `captureCurrentFrameAsThumbnail`: seek
+    /// to `seconds`, JPEG-encode, write to `cacheURL`, populate the memory cache. Kept separate from
+    /// `generateThumbnailWork` / `generateDetailPreviewWork` (which pick their own position and
+    /// early-return when already cached) so these always-regenerate paths can't hit their "already
+    /// cached" fast return. `tolerance` defaults to the auto-pick's 3s "close enough"; the precise
+    /// current-frame capture passes `.zero` so it lands on the exact frame, not a nearby keyframe.
     private func writeStill(
         for video: Video, atSeconds seconds: Double, maxDimension: CGFloat,
-        compressionFactor: CGFloat, cacheURL: URL, memoryKey: NSString, timeout: Double
+        compressionFactor: CGFloat, cacheURL: URL, memoryKey: NSString, timeout: Double,
+        tolerance: CMTime = CMTime(seconds: 3, preferredTimescale: 600)
     ) async throws {
         let url = video.url
         let nsImage: NSImage = try await withTimeout(seconds: timeout) {
@@ -615,8 +662,8 @@ final class ThumbnailService: @unchecked Sendable {
             let generator = AVAssetImageGenerator(asset: asset)
             generator.appliesPreferredTrackTransform = true
             generator.maximumSize = CGSize(width: maxDimension, height: maxDimension)
-            generator.requestedTimeToleranceBefore = CMTime(seconds: 3, preferredTimescale: 600)
-            generator.requestedTimeToleranceAfter = CMTime(seconds: 3, preferredTimescale: 600)
+            generator.requestedTimeToleranceBefore = tolerance
+            generator.requestedTimeToleranceAfter = tolerance
             let time = CMTime(seconds: seconds, preferredTimescale: 600)
             let (cgImage, _) = try await generator.image(at: time)
             return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))

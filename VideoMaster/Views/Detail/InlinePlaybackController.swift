@@ -176,6 +176,22 @@ final class InlinePlaybackController {
         player.seek(to: .zero) { _ in player.play() }
     }
 
+    /// "Make Thumbnail from Current Frame" (pro feature): capture the exact frame on screen right now
+    /// and set it as this video's library thumbnail + detail-preview still, replacing whatever was
+    /// there. Unlike "Regenerate Thumbnail" (random position), this gives the user precise control by
+    /// scrubbing to the exact moment they want first.
+    func makeThumbnailFromCurrentFrame() {
+        guard let player, let video = currentVideo else { return }
+        let seconds = player.currentTime().seconds
+        guard seconds.isFinite, seconds >= 0 else { return }
+        Task {
+            guard let url = try? await viewModel.thumbnailService.captureCurrentFrameAsThumbnail(
+                for: video, atSeconds: seconds
+            ) else { return }
+            await viewModel.setRegeneratedThumbnailPath(videoPath: video.filePath, url: url)
+        }
+    }
+
     func dismissError() {
         playerError = nil
     }

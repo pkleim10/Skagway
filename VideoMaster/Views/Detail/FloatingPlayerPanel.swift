@@ -145,6 +145,9 @@ struct FloatingPlayerPanel: View {
     /// The two semantic size states; everything in between is the drag handle's job.
     private var sizeControls: some View {
         HStack(spacing: 4) {
+            iconButton("camera.viewfinder", help: "Make thumbnail from current frame (⌥⌘M)") {
+                viewModel.playback.makeThumbnailFromCurrentFrame()
+            }
             iconButton("rectangle", help: "Compact (follows the inspector width)") {
                 viewModel.playerSizeIsCompact = true
                 viewModel.playerLastWasFullScreen = false
