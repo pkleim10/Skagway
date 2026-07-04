@@ -5,6 +5,11 @@ import SwiftUI
 /// Styled to feel part of the cinematic gallery experience (blue accents, refined materials, generous breathing).
 struct CuratedWallFiltersDrawer: View {
     @Bindable var viewModel: LibraryViewModel
+    /// Reports the drawer's natural content height (header + cards at the current width) so the
+    /// resize handle can cap the height there — dragging taller than this would just add empty
+    /// space / a pointless scroll region. Recomputed when the width (column packing) or the number
+    /// of filter items changes.
+    var onNaturalHeightChanged: ((CGFloat) -> Void)? = nil
 
     @State private var tagSearch: String = ""
     @State private var newTagText: String = ""
@@ -13,11 +18,16 @@ struct CuratedWallFiltersDrawer: View {
     @State private var editingCollection: VideoCollection?
     @State private var tagPendingRename: Tag?
     @State private var tagPendingDelete: Tag?
+    @State private var measuredHeaderHeight: CGFloat = 0
+    @State private var measuredCardsHeight: CGFloat = 0
     @State private var renameText: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
+                .background(GeometryReader { p in
+                    Color.clear.preference(key: DrawerHeaderHeightKey.self, value: p.size.height)
+                })
 
             // Cards pack column-major (stacked top→bottom within a column, columns left→right)
             // so reading order is preserved as the wall restacks: at full width the four units
@@ -31,10 +41,23 @@ struct CuratedWallFiltersDrawer: View {
                         // Fill the full drawer width (columns stay left-aligned) so the vertical
                         // scrollbar sits at the right edge of the drawer, not against the last card.
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        // Measure the cards' *natural* height (the ScrollView gives its content its
+                        // ideal size) so the call site can cap resizing at "no scrollbar needed".
+                        .background(GeometryReader { p in
+                            Color.clear.preference(key: DrawerCardsHeightKey.self, value: p.size.height)
+                        })
                 }
             }
             // Height is controlled by the presentation site (Animated well in ContentView)
             // so the drawer can participate in smooth height transitions. Capped at call site.
+        }
+        .onPreferenceChange(DrawerHeaderHeightKey.self) { h in
+            measuredHeaderHeight = h
+            reportNaturalHeight()
+        }
+        .onPreferenceChange(DrawerCardsHeightKey.self) { h in
+            measuredCardsHeight = h
+            reportNaturalHeight()
         }
         .background(
             Color.appSurface
@@ -592,6 +615,13 @@ struct CuratedWallFiltersDrawer: View {
         }
     }
 
+    /// Natural drawer height = header + padded cards. Reported once both have measured (> 0) so
+    /// the call site never caps against a transient half-measured value.
+    private func reportNaturalHeight() {
+        guard measuredHeaderHeight > 0, measuredCardsHeight > 0 else { return }
+        onNaturalHeightChanged?(measuredHeaderHeight + measuredCardsHeight)
+    }
+
     private func createNewTag() {
         let name = newTagText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
@@ -636,4 +666,14 @@ struct CuratedWallFiltersDrawer: View {
         .buttonStyle(.plain)
         .foregroundStyle(Color.appTextSecondary)
     }
+}
+
+private struct DrawerHeaderHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+private struct DrawerCardsHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }

@@ -49,6 +49,10 @@ private struct LibraryContentView: View {
     /// view invalidation on every pixel of movement). `vm.filtersDrawerHeight` is only updated
     /// once, in `onEnded`.
     @State private var filtersDrawerLiveHeight: CGFloat?
+    /// The drawer's natural content height (header + cards), reported by `CuratedWallFiltersDrawer`.
+    /// Caps how tall the drawer can be dragged — growing past its content would just add a dead
+    /// scroll region. `nil` until first measured.
+    @State private var filtersDrawerContentHeight: CGFloat?
 
     /// The video shown in the detail pane / overlay (primary selection). Shared by `detailContent` and the overlay.
     private var selectedVideo: Video? {
@@ -385,12 +389,17 @@ private struct LibraryContentView: View {
         .animation(.easeInOut(duration: Self.drawerAnimationDuration), value: drawerReveal)
     }
 
-    /// Clamps a requested drawer height to `[filtersDrawerMinHeight, availableHeight - handle]` so
-    /// the resize handle always stays on screen, even if the saved height no longer fits (e.g. the
-    /// window shrank since it was last set).
+    /// Clamps a requested drawer height. Ceiling is the smaller of: what fits in the window (so the
+    /// resize handle stays on screen) and the drawer's own natural content height (so it can't be
+    /// dragged taller than its content — past that would just be a dead scroll region). Floor is
+    /// `filtersDrawerMinHeight`, which always wins if content/window are somehow shorter.
     private func clampedFiltersDrawerHeight(_ requested: CGFloat, availableHeight: CGFloat) -> CGFloat {
-        let maxFit = max(availableHeight - Self.filtersDrawerHandleHeight, LibraryViewModel.filtersDrawerMinHeight)
-        return min(max(requested, LibraryViewModel.filtersDrawerMinHeight), maxFit)
+        var ceiling = availableHeight - Self.filtersDrawerHandleHeight
+        if let contentH = filtersDrawerContentHeight {
+            ceiling = min(ceiling, contentH)
+        }
+        ceiling = max(ceiling, LibraryViewModel.filtersDrawerMinHeight)
+        return min(max(requested, LibraryViewModel.filtersDrawerMinHeight), ceiling)
     }
 
     private static let filtersDrawerHandleHeight: CGFloat = 12
@@ -413,7 +422,11 @@ private struct LibraryContentView: View {
             let shownH = fullH * reveal
 
             ZStack(alignment: .top) {
-                CuratedWallFiltersDrawer(viewModel: vm)
+                CuratedWallFiltersDrawer(viewModel: vm, onNaturalHeightChanged: { h in
+                    // Round to avoid sub-point jitter re-triggering the clamp.
+                    let rounded = h.rounded(.up)
+                    if filtersDrawerContentHeight != rounded { filtersDrawerContentHeight = rounded }
+                })
                     .frame(height: fullH, alignment: .top)   // full layout (no squish/reflow)
                     .offset(y: shownH - fullH)               // -fullH (above, hidden) → 0 (fully visible in well)
                     .opacity(reveal)
