@@ -43,6 +43,12 @@ private struct LibraryContentView: View {
     /// `translation` can be applied against a stable baseline instead of the live (already
     /// mutating) height.
     @State private var filtersDrawerDragStartHeight: CGFloat?
+    /// Live height while actively dragging the resize handle. Kept local (not written to
+    /// `vm.filtersDrawerHeight`) until the drag ends — writing the `@Observable`/persisted
+    /// property on every drag delta caused a visible flicker (UserDefaults I/O plus broader
+    /// view invalidation on every pixel of movement). `vm.filtersDrawerHeight` is only updated
+    /// once, in `onEnded`.
+    @State private var filtersDrawerLiveHeight: CGFloat?
 
     /// The video shown in the detail pane / overlay (primary selection). Shared by `detailContent` and the overlay.
     private var selectedVideo: Video? {
@@ -403,7 +409,7 @@ private struct LibraryContentView: View {
             // - `.clipped()` hides the portion that is still "above" the visible well rect.
             // - Everything is driven from the single interpolated `drawerReveal` (0...1) so the visual slide and the layout push are perfectly synchronized.
             let reveal = drawerReveal
-            let fullH = clampedFiltersDrawerHeight(vm.filtersDrawerHeight, availableHeight: availableHeight)
+            let fullH = clampedFiltersDrawerHeight(filtersDrawerLiveHeight ?? vm.filtersDrawerHeight, availableHeight: availableHeight)
             let shownH = fullH * reveal
 
             ZStack(alignment: .top) {
@@ -454,12 +460,18 @@ private struct LibraryContentView: View {
                     .onChanged { value in
                         let start = filtersDrawerDragStartHeight ?? vm.filtersDrawerHeight
                         filtersDrawerDragStartHeight = start
-                        vm.filtersDrawerHeight = clampedFiltersDrawerHeight(
+                        filtersDrawerLiveHeight = clampedFiltersDrawerHeight(
                             start + value.translation.height,
                             availableHeight: availableHeight
                         )
                     }
-                    .onEnded { _ in filtersDrawerDragStartHeight = nil }
+                    .onEnded { _ in
+                        if let live = filtersDrawerLiveHeight {
+                            vm.filtersDrawerHeight = live
+                        }
+                        filtersDrawerDragStartHeight = nil
+                        filtersDrawerLiveHeight = nil
+                    }
             )
             .help("Drag to resize the filters drawer")
     }
