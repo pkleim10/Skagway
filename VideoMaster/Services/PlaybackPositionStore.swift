@@ -4,25 +4,27 @@ import Foundation
 ///
 /// Today this is intentionally lightweight (UserDefaults) and keyed by file path so
 /// it works even before a video has a database id (or if the DB is reset).
+///
+/// Reads are backed by an in-memory cache (loaded once, kept current on every write) rather than
+/// decoding the whole positions dictionary from UserDefaults on every call — `loadSeconds` is
+/// called once per visible grid card (for the resume-progress bar), so it needs to stay a cheap
+/// dictionary lookup even for a library with thousands of videos.
 enum PlaybackPositionStore {
     private static let defaults = UserDefaults.standard
     private static let key = "videomaster.playback.lastPositionsByPath"
+    private static var cache: [String: Double] = (defaults.dictionary(forKey: key) as? [String: Double]) ?? [:]
 
     static func loadSeconds(filePath: String) -> Double? {
-        guard let dict = defaults.dictionary(forKey: key) as? [String: Double] else { return nil }
-        return dict[filePath]
+        cache[filePath]
     }
 
     static func saveSeconds(_ seconds: Double, filePath: String) {
-        var dict = (defaults.dictionary(forKey: key) as? [String: Double]) ?? [:]
-        dict[filePath] = seconds
-        defaults.set(dict, forKey: key)
+        cache[filePath] = seconds
+        defaults.set(cache, forKey: key)
     }
 
     static func clear(filePath: String) {
-        var dict = (defaults.dictionary(forKey: key) as? [String: Double]) ?? [:]
-        dict.removeValue(forKey: filePath)
-        defaults.set(dict, forKey: key)
+        cache.removeValue(forKey: filePath)
+        defaults.set(cache, forKey: key)
     }
 }
-

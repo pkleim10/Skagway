@@ -158,7 +158,10 @@ final class InlinePlaybackController {
         didAutoResume = false
         resumedFromSeconds = nil
         resumeBannerOpacity = 1
-        if let video = currentVideo { PlaybackPositionStore.clear(filePath: video.filePath) }
+        if let video = currentVideo {
+            PlaybackPositionStore.clear(filePath: video.filePath)
+            viewModel.notifyResumePositionsChanged()
+        }
         player.pause()
         player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero) { [weak player] _ in
             player?.play()
@@ -173,6 +176,7 @@ final class InlinePlaybackController {
         didAutoResume = false
         resumedFromSeconds = nil
         PlaybackPositionStore.clear(filePath: video.filePath)
+        viewModel.notifyResumePositionsChanged()
         player.seek(to: .zero) { _ in player.play() }
     }
 
@@ -226,6 +230,7 @@ final class InlinePlaybackController {
         let seconds = player.currentTime().seconds
         guard seconds.isFinite, seconds > 0 else { return }
         PlaybackPositionStore.saveSeconds(seconds, filePath: video.filePath)
+        viewModel.notifyResumePositionsChanged()
     }
 
     // MARK: - Internals

@@ -73,6 +73,7 @@ struct CuratedWallGrid: View {
                             renameText: isRenamingRow ? $viewModel.renameText : .constant(""),
                             thumbnailService: thumbnailService,
                             isMoving: isMoving,
+                            resumeFraction: resumeFraction(for: video),
                             renameFocus: $renameFocus,
                             onCommitRename: { commitRename(video) },
                             onCancelRename: cancelRename,
@@ -294,6 +295,17 @@ struct CuratedWallGrid: View {
     private func cancelRename() {
         viewModel.renamingVideoId = nil
         viewModel.renameText = ""
+    }
+
+    /// Fraction (0...1) of the video already watched, per its saved resume position — drives the
+    /// thin progress bar on the card thumbnail, Netflix/Hulu "continue watching" style. `nil` hides
+    /// the bar (never played, or finished — the resume position is cleared in both those cases).
+    private func resumeFraction(for video: Video) -> Double? {
+        _ = viewModel.resumePositionsRevision // establishes the Observation dependency for re-renders
+        guard let seconds = PlaybackPositionStore.loadSeconds(filePath: video.filePath),
+              let duration = video.duration, duration > 0
+        else { return nil }
+        return min(max(seconds / duration, 0), 1)
     }
 
     private func play(_ video: Video) {

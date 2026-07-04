@@ -16,6 +16,9 @@ struct CuratedWallCard: View {
     /// True while this video has an active (queued or in-flight) cross-volume move — shows a
     /// spinner badge over the thumbnail so the "frozen" state is visible without right-clicking.
     var isMoving: Bool = false
+    /// Fraction (0...1) watched, from the saved resume position — draws a thin progress bar along
+    /// the bottom of the thumbnail, Netflix/Hulu "continue watching" style. `nil`/0 hides it.
+    var resumeFraction: Double? = nil
     var renameFocus: FocusState<Bool>.Binding
     var onCommitRename: () -> Void
     var onCancelRename: () -> Void
@@ -52,6 +55,16 @@ struct CuratedWallCard: View {
                                         .font(.title2)
                                         .foregroundStyle(Color.appTextTertiary.opacity(0.5))
                                 }
+                        }
+                    }
+                    .overlay(alignment: .bottom) {
+                        if let resumeFraction, resumeFraction > 0 {
+                            GeometryReader { geo in
+                                Rectangle()
+                                    .fill(Color.yellow)
+                                    .frame(width: geo.size.width * resumeFraction, height: 3)
+                            }
+                            .frame(height: 3)
                         }
                     }
                     .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))

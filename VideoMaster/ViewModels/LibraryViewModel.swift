@@ -184,6 +184,14 @@ final class LibraryViewModel {
     /// surface (in-window panel and the borderless full-screen window).
     @ObservationIgnored private(set) lazy var playback = InlinePlaybackController(viewModel: self)
 
+    /// Bumped whenever a resume position is saved or cleared (`InlinePlaybackController`). Grid
+    /// cards read this to know when to recompute their resume-progress bar — `PlaybackPositionStore`
+    /// itself isn't `@Observable`, so this is what makes the read reactive.
+    private(set) var resumePositionsRevision: Int = 0
+    func notifyResumePositionsChanged() {
+        resumePositionsRevision &+= 1
+    }
+
     /// True while a video is playing in the resizable player. The player never reshapes the wall, so
     /// this no longer needs a didSet (the full-screen-exit grid repaint lives in ContentView).
     var isPlayingInline: Bool = false
