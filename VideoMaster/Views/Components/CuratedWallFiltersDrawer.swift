@@ -10,7 +10,6 @@ struct CuratedWallFiltersDrawer: View {
     @State private var hoverRating: Int?
     @State private var showNewCollectionSheet = false
     @State private var editingCollection: VideoCollection?
-    @State private var showAllCollections = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -250,39 +249,22 @@ struct CuratedWallFiltersDrawer: View {
                     Text("No collections yet")
                         .font(.caption)
                         .foregroundStyle(Color.appTextTertiary)
-                } else {
-                    let collapsedLimit = 6
-                    let isOverflowing = viewModel.collections.count > collapsedLimit
-                    let expanded = showAllCollections || !isOverflowing
-
-                    if expanded && isOverflowing {
-                        // Explicitly expanded and long enough to need it: scroll internally
-                        // rather than growing this card past its usual visual weight.
-                        ScrollView(.vertical) {
-                            LazyVStack(alignment: .leading, spacing: 2) {
-                                ForEach(viewModel.collections, id: \.listId) { collection in
-                                    collectionRow(collection)
-                                }
+                } else if viewModel.collections.count > 6 {
+                    // Alphabetical, not ranked — there's no meaningful "top" subset to prefer,
+                    // so always show everything and scroll internally past the usual height
+                    // instead of growing this card unbounded.
+                    ScrollView(.vertical) {
+                        LazyVStack(alignment: .leading, spacing: 2) {
+                            ForEach(viewModel.collections, id: \.listId) { collection in
+                                collectionRow(collection)
                             }
                         }
-                        .frame(maxHeight: 168)
-                        .scrollIndicators(.visible)
-                    } else {
-                        ForEach(expanded ? viewModel.collections : Array(viewModel.collections.prefix(collapsedLimit)), id: \.listId) { collection in
-                            collectionRow(collection)
-                        }
                     }
-
-                    if isOverflowing {
-                        Button {
-                            showAllCollections.toggle()
-                        } label: {
-                            Text(showAllCollections ? "Show Less" : "Show All (\(viewModel.collections.count))")
-                                .font(.caption)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Color.appAccent)
-                        .padding(.top, 2)
+                    .frame(maxHeight: 168)
+                    .scrollIndicators(.visible)
+                } else {
+                    ForEach(viewModel.collections, id: \.listId) { collection in
+                        collectionRow(collection)
                     }
                 }
 

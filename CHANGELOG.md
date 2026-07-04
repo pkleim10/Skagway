@@ -31,7 +31,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
-- **Removed the 6-collection cap in the filters drawer's Collections card.** Beyond 6, collections were simply unreachable — no scroll, no indication more existed. Now shows the first 6 as before, with a **"Show All (N)"** link beneath that expands to the full list (scrolling internally past its usual height, capped at ~168pt) — with a matching "Show Less" to collapse back.
+- **Removed the 6-collection cap in the filters drawer's Collections card.** Beyond 6, collections were simply unreachable — no scroll, no indication more existed. Since collections are listed alphabetically (not ranked), there's no meaningful "top N" to prefer, so the card now always shows every collection, scrolling internally past its usual height (~168pt) instead of growing unbounded — no expand/collapse step needed.
 - **List view context menu reordered to match the Wall grid's.** Was Play → Show in Finder → Open With → Rename → Re-encode → Move Files (no divider between Open With and Re-encode); now Play → Show in Finder → Rename → Open With → *divider* → Re-encode → Move Files, same as the grid. The rest (Modify Filmstrip / Regenerate Thumbnail, Remove from Library / Delete Video…, and their dividers) already matched.
 
 ## 0.23.0 (build 605) - 2026-07-03
