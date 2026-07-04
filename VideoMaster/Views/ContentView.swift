@@ -39,6 +39,10 @@ private struct LibraryContentView: View {
     /// each frame, so the drawer grows its height gradually instead of appearing full-size instantly,
     /// and the grid/list below is pushed at a matching rate.
     @State private var drawerReveal: CGFloat = 0
+    /// Captured once at the start of a drawer-resize drag so `DragGesture`'s cumulative
+    /// `translation` can be applied against a stable baseline instead of the live (already
+    /// mutating) height.
+    @State private var filtersDrawerDragStartHeight: CGFloat?
 
     /// The video shown in the detail pane / overlay (primary selection). Shared by `detailContent` and the overlay.
     private var selectedVideo: Video? {
@@ -364,6 +368,30 @@ private struct LibraryContentView: View {
         VStack(spacing: 0) {
             curatedHeaderBar
 
+            // GeometryReader reports whatever's left after the header above — the space the
+            // drawer, its resize handle, the pills, and the grid/list all have to share.
+            GeometryReader { geo in
+                wallDrawerAndContent(availableHeight: geo.size.height)
+            }
+        }
+        // Animate the pane layout (grid/list position) in response to the reveal factor.
+        // This makes the wall content rise/fall smoothly as the well above it changes height.
+        .animation(.easeInOut(duration: Self.drawerAnimationDuration), value: drawerReveal)
+    }
+
+    /// Clamps a requested drawer height to `[filtersDrawerMinHeight, availableHeight - handle]` so
+    /// the resize handle always stays on screen, even if the saved height no longer fits (e.g. the
+    /// window shrank since it was last set).
+    private func clampedFiltersDrawerHeight(_ requested: CGFloat, availableHeight: CGFloat) -> CGFloat {
+        let maxFit = max(availableHeight - Self.filtersDrawerHandleHeight, LibraryViewModel.filtersDrawerMinHeight)
+        return min(max(requested, LibraryViewModel.filtersDrawerMinHeight), maxFit)
+    }
+
+    private static let filtersDrawerHandleHeight: CGFloat = 12
+
+    @ViewBuilder
+    private func wallDrawerAndContent(availableHeight: CGFloat) -> some View {
+        VStack(spacing: 0) {
             // Drawer well — the expanding slot directly under the thin header.
             // Goal: a clean, "wow" slide where the filter panel drops down from under the header
             // while smoothly pushing the grid/list below. No full pane flash, no "appears then pushes".
@@ -371,11 +399,11 @@ private struct LibraryContentView: View {
             // How:
             // - The drawer is *always* laid out at its full height (stable layout, no mid-animation reflow of its sections/grids).
             // - We slide it into view with a changing offset: starts fully above the well, moves downward as the well opens.
-            // - The well's own height grows from 0→320; because it's in the VStack, this reserves space and pushes the wall content down in lockstep.
+            // - The well's own height grows from 0→fullH; because it's in the VStack, this reserves space and pushes the wall content down in lockstep.
             // - `.clipped()` hides the portion that is still "above" the visible well rect.
             // - Everything is driven from the single interpolated `drawerReveal` (0...1) so the visual slide and the layout push are perfectly synchronized.
             let reveal = drawerReveal
-            let fullH: CGFloat = 320
+            let fullH = clampedFiltersDrawerHeight(vm.filtersDrawerHeight, availableHeight: availableHeight)
             let shownH = fullH * reveal
 
             ZStack(alignment: .top) {
@@ -388,6 +416,13 @@ private struct LibraryContentView: View {
             .clipped()
             .zIndex(1)   // ensure the sliding drawer draws above the grid/list during the push (prevents any "behind" flash)
             .animation(.easeInOut(duration: Self.drawerAnimationDuration), value: reveal)
+
+            // Resize handle — only meaningful once the drawer has finished opening (dragging
+            // mid-slide isn't a sensible interaction). Adjusts and persists `filtersDrawerHeight`.
+            if reveal > 0.99 {
+                filtersDrawerResizeHandle(availableHeight: availableHeight)
+                    .transition(.opacity)
+            }
 
             // Pills live in their own slot and only when the drawer is fully closed.
             // Use reveal so pills don't pop in while the drawer is still sliding away.
@@ -406,9 +441,27 @@ private struct LibraryContentView: View {
                 )
             }
         }
-        // Animate the pane layout (grid/list position) in response to the reveal factor.
-        // This makes the wall content rise/fall smoothly as the well above it changes height.
-        .animation(.easeInOut(duration: Self.drawerAnimationDuration), value: drawerReveal)
+    }
+
+    private func filtersDrawerResizeHandle(availableHeight: CGFloat) -> some View {
+        Capsule()
+            .fill(Color.appDivider.opacity(0.5))
+            .frame(width: 36, height: 4)
+            .frame(maxWidth: .infinity, minHeight: Self.filtersDrawerHandleHeight)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { value in
+                        let start = filtersDrawerDragStartHeight ?? vm.filtersDrawerHeight
+                        filtersDrawerDragStartHeight = start
+                        vm.filtersDrawerHeight = clampedFiltersDrawerHeight(
+                            start + value.translation.height,
+                            availableHeight: availableHeight
+                        )
+                    }
+                    .onEnded { _ in filtersDrawerDragStartHeight = nil }
+            )
+            .help("Drag to resize the filters drawer")
     }
 
     var body: some View {

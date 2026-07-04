@@ -133,6 +133,17 @@ final class LibraryViewModel {
     /// Controls the top-descending filters drawer for the Curated Wall variant.
     /// Always forced closed on appearance (not persisted). Toggle via header button or ⌘⇧F.
     var isCuratedWallFiltersDrawerOpen: Bool = false
+
+    /// User-adjustable, persisted height of the filters drawer (drag handle at its bottom edge).
+    /// `ContentView` clamps the *displayed* height against the current window size — this stored
+    /// value is the user's preference, not necessarily what's currently on screen.
+    static let filtersDrawerMinHeight: CGFloat = 110   // ~1.5in — fits a card header + one row; 1in (72pt) cut off too much
+    static let filtersDrawerDefaultHeight: CGFloat = 320
+    var filtersDrawerHeight: CGFloat = LibraryViewModel.filtersDrawerDefaultHeight {
+        didSet {
+            UserDefaults.standard.set(Double(filtersDrawerHeight), forKey: Self.filtersDrawerHeightKey)
+        }
+    }
     var ffmpegUserPath: String = "" {
         didSet { UserDefaults.standard.set(ffmpegUserPath, forKey: Self.ffmpegPathKey) }
     }
@@ -325,6 +336,7 @@ final class LibraryViewModel {
     private static let ffmpegPathKey = "VideoMaster.ffmpegPath"
     private static let customMetadataFieldDefinitionsKey = "VideoMaster.customMetadataFieldDefinitions"
     private static let missingCountScannedKey = "VideoMaster.missingCountScanned"
+    private static let filtersDrawerHeightKey = "VideoMaster.filtersDrawerHeight"
     private static let missingVideoIdsKey = "VideoMaster.missingVideoIds"
     private static let listColumnPreferencesKey = "VideoMaster.listColumnPreferences"
 
@@ -1013,6 +1025,9 @@ final class LibraryViewModel {
             moveJobs = decoded
         }
         if let v = defaults.object(forKey: Self.missingCountScannedKey) as? Bool { missingCountScanned = v }
+        if let v = defaults.object(forKey: Self.filtersDrawerHeightKey) as? Double {
+            filtersDrawerHeight = max(CGFloat(v), Self.filtersDrawerMinHeight)
+        }
         if let ids = defaults.stringArray(forKey: Self.missingVideoIdsKey) { missingVideoIds = Set(ids) }
         if defaults.object(forKey: Self.showThumbnailInDetailKey) != nil {
             showThumbnailInDetail = defaults.bool(forKey: Self.showThumbnailInDetailKey)
