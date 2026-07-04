@@ -7,6 +7,7 @@ struct CuratedWallFiltersDrawer: View {
     @Bindable var viewModel: LibraryViewModel
 
     @State private var tagSearch: String = ""
+    @State private var newTagText: String = ""
     @State private var hoverRating: Int?
     @State private var showNewCollectionSheet = false
     @State private var editingCollection: VideoCollection?
@@ -447,6 +448,30 @@ struct CuratedWallFiltersDrawer: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6))
                 .padding(.bottom, 4)
 
+                // New tag — creates a standalone tag (not assigned to any video yet), so it's
+                // ready to apply later. Field clears on each add so several can be created in a
+                // row without re-focusing or reopening anything.
+                HStack(spacing: 6) {
+                    TextField("Tag name", text: $newTagText)
+                        .textFieldStyle(.plain)
+                        .font(.caption)
+                        .foregroundStyle(Color.appTextPrimary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 4)
+                        .background(Color.appSurface.opacity(0.6))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .onSubmit { createNewTag() }
+
+                    Button { createNewTag() } label: {
+                        Label("New Tag", systemImage: "plus")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.appAccent)
+                    .disabled(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                .padding(.bottom, 4)
+
                 // Tags in a compact grid suitable for card width (wraps via outer FlowLayout of cards)
                 let filteredTags = viewModel.tags
                     .filter { t in
@@ -482,6 +507,13 @@ struct CuratedWallFiltersDrawer: View {
                 }
             }
         }
+    }
+
+    private func createNewTag() {
+        let name = newTagText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        newTagText = ""
+        Task { await viewModel.createTag(name) }
     }
 
     // MARK: - Sections (kept for any internal reuse; content now lives in the cards above)
