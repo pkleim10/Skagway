@@ -214,6 +214,53 @@ struct CuratedWallFiltersDrawer: View {
         .buttonStyle(.plain)
     }
 
+    /// Like `libraryRow`, but with a trailing rescan button — the missing-file count is a
+    /// point-in-time filesystem check (`refreshMissingCount()`), not something kept live, so it
+    /// can go stale (a drive gets reconnected, a file moves back). This lets you force a fresh
+    /// scan without switching away from and back to the Missing filter.
+    private func missingLibraryRow(count: Int) -> some View {
+        let isSelected = viewModel.sidebarFilter == .missing
+        return HStack(spacing: 4) {
+            Button {
+                viewModel.sidebarFilter = .missing
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "questionmark.circle")
+                        .foregroundStyle(isSelected ? Color.appAccent : Color.appTextSecondary)
+                        .frame(width: 16)
+                    Text("Missing")
+                        .foregroundStyle(isSelected ? Color.appTextPrimary : Color.appTextSecondary)
+                    Spacer()
+                    Text("\(count)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(Color.appTextTertiary)
+                }
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                Task { await viewModel.refreshMissingCount() }
+            } label: {
+                if viewModel.isRefreshingMissing {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.caption2)
+                }
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.appTextTertiary)
+            .disabled(viewModel.isRefreshingMissing)
+            .help("Rescan for missing files")
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(isSelected ? Color.appAccent.opacity(0.12) : Color.clear)
+        )
+    }
+
     // MARK: - Cards (horizontal wrapping layout in the drawer)
 
     private var smartLibrariesCard: some View {
@@ -237,7 +284,7 @@ struct CuratedWallFiltersDrawer: View {
                     libraryRow("Corrupt", icon: "exclamationmark.triangle", count: viewModel.libraryCounts.corrupt, filter: .corrupt)
                 }
                 if viewModel.showMissing {
-                    libraryRow("Missing", icon: "questionmark.circle", count: viewModel.libraryCounts.missing, filter: .missing)
+                    missingLibraryRow(count: viewModel.libraryCounts.missing)
                 }
                 if viewModel.showRecentlyConverted {
                     libraryRow("Recently Converted", icon: "arrow.triangle.2.circlepath", count: viewModel.libraryCounts.recentlyConverted, filter: .recentlyConverted)
