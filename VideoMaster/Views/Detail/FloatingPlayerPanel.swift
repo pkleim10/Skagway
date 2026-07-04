@@ -94,6 +94,14 @@ struct FloatingPlayerPanel: View {
         dragCenter ?? baseCenter
     }
 
+    /// `controlsVisible`, but forced true while a resize or move drag is active — the 1s hover-out
+    /// timer is driven by `.onHover`, which can report "not hovering" mid-drag if the cursor
+    /// momentarily leaves the panel's current (pre-resize) bounds. Without this, the controls
+    /// could fade out while still being actively dragged.
+    private var effectiveControlsVisible: Bool {
+        controlsVisible || dragSize != nil || dragCenter != nil
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -107,7 +115,7 @@ struct FloatingPlayerPanel: View {
     // MARK: - Panel content
 
     private var panelContent: some View {
-        OverlayInlinePlayerView(video: video, viewModel: viewModel, controlsVisible: controlsVisible)
+        OverlayInlinePlayerView(video: video, viewModel: viewModel, controlsVisible: effectiveControlsVisible)
             .frame(width: size.width, height: size.height)
             .clipShape(RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
             .overlay(
@@ -116,14 +124,18 @@ struct FloatingPlayerPanel: View {
             )
             .overlay(alignment: .bottomTrailing) {
                 sizeControls
-                    .opacity(controlsVisible ? 1 : 0)
-                    .allowsHitTesting(controlsVisible)
+                    .opacity(effectiveControlsVisible ? 1 : 0)
+                    .allowsHitTesting(effectiveControlsVisible)
             }
-            .overlay(alignment: .bottomLeading)  { resizeHandle }
+            .overlay(alignment: .bottomLeading)  {
+                resizeHandle
+                    .opacity(effectiveControlsVisible ? 1 : 0)
+                    .allowsHitTesting(effectiveControlsVisible)
+            }
             .overlay(alignment: .top)            {
                 titleBarDragArea
-                    .opacity(controlsVisible ? 1 : 0)
-                    .allowsHitTesting(controlsVisible)
+                    .opacity(effectiveControlsVisible ? 1 : 0)
+                    .allowsHitTesting(effectiveControlsVisible)
             }
             .shadow(color: .black.opacity(0.45), radius: 18, x: 0, y: 8)
             .padding(outerPadding)
@@ -222,7 +234,8 @@ struct FloatingPlayerPanel: View {
 
     private var resizeHandle: some View {
         Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
-            .font(.system(size: 11, weight: .bold))
+            // 14pt vs. the original 11pt — 25% larger, matching the other controls.
+            .font(.system(size: 14, weight: .bold))
             .foregroundStyle(Color.appTextSecondary)
             .padding(6)
             .background(Color.appSurface.opacity(0.85), in: Circle())

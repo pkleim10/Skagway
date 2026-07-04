@@ -31,7 +31,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
-- **Player window controls (title bar, Compact/Windowed/Full screen buttons) now only show on hover, fading out ~1s after the mouse leaves the panel.** Also made 25% larger (icon buttons 11pt → 14pt, title bar 24pt → 30pt) to compensate for being less persistently on-screen. The resize handle stays always visible, unaffected. Both hidden and shown states are properly hit-test-gated (`allowsHitTesting`), so a faded-out control can't still catch clicks.
+- **Player window controls (title bar, resize handle, Compact/Windowed/Full screen buttons) now only show on hover, fading out ~1s after the mouse leaves the panel.** Also made 25% larger (icon buttons 11pt → 14pt, title bar 24pt → 30pt, resize handle 11pt → 14pt) to compensate for being less persistently on-screen. All three are hit-test-gated (`allowsHitTesting`) so a faded-out control can't still catch clicks, and all three are forced visible for the duration of an active resize/move drag — `.onHover` can otherwise report "not hovering" mid-drag if the cursor briefly leaves the panel's pre-resize bounds, which without this safety net could fade the controls out while still mid-drag.
 
 - **Removed the player panel's dead close ("X") button.** It never worked: `FloatingPlayerPanel.titleBarDragArea` covers the entire header edge-to-edge with a transparent, hit-testable drag surface, drawn on top of the header — it intercepted every tap before it could reach the X underneath. Rather than carve out a hit-testing exception, removed it outright: Escape already stops playback the same way the button tried to.
 
