@@ -58,6 +58,10 @@ struct OverlayInlinePlayerView: View {
     }
 
     // Very compact header that makes the overlay read as a deliberate floating player panel.
+    // No close button here: the panel's title bar is covered edge-to-edge by
+    // `FloatingPlayerPanel.titleBarDragArea` for dragging, which intercepts taps before they
+    // reach anything underneath — a close ("X") button here was unreachable and dead weight.
+    // Escape already stops playback (see the Space/Escape key handler in ContentView).
     private var overlayHeader: some View {
         HStack(spacing: 6) {
             Text(video.fileName)
@@ -65,19 +69,6 @@ struct OverlayInlinePlayerView: View {
                 .foregroundStyle(Color.appTextSecondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
-
-            Spacer(minLength: 8)
-
-            Button {
-                viewModel.isPlayingInline = false
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .semibold))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Color.appTextTertiary)
-            .frame(width: 16, height: 16)
-            .contentShape(Rectangle())
         }
         .padding(.horizontal, 10)
         .frame(height: 24)

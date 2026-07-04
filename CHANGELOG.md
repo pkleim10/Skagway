@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Removed the player panel's dead close ("X") button.** It never worked: `FloatingPlayerPanel.titleBarDragArea` covers the entire header edge-to-edge with a transparent, hit-testable drag surface, drawn on top of the header — it intercepted every tap before it could reach the X underneath. Rather than carve out a hit-testing exception, removed it outright: Escape already stops playback the same way the button tried to.
+
 - **New: "Windowed" player size, alongside Compact and Full screen.** A third icon button in the floating player's controls recalls whatever free-floating size/position the resize handle last produced (`playerFloatingSize`/`playerFloatingPosition`, already persisted) — distinct from Compact's fixed inspector-footprint size and from true Full screen. All three now have consistent ⌃-based shortcuts: Compact (⌃⌘C), Windowed (⌃⌘W), Full screen (⌃⌘F, unchanged — still a toggle, the other two are direct "switch to this mode" actions). All three menu commands work correctly from true full-screen too (they exit it first, then apply their mode), and are disabled when nothing is playing.
 
 ## 0.25.0 (build 634) - 2026-07-03
