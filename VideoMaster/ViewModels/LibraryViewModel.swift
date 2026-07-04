@@ -164,6 +164,12 @@ final class LibraryViewModel {
             UserDefaults.standard.set(Double(inspectorHeroHeight), forKey: Self.inspectorHeroHeightKey)
         }
     }
+    /// Live value while the hero's resize handle is actively being dragged — deliberately *not*
+    /// persisted (no `didSet`/`UserDefaults` write), so dragging stays cheap. Shared on the view
+    /// model (not local `@State` on the Inspector) specifically so the compact floating player —
+    /// a separate view — can track the resize in realtime instead of only snapping to the new size
+    /// once the drag ends and `inspectorHeroHeight` commits. `nil` outside an active drag.
+    var inspectorHeroLiveHeight: CGFloat?
     var ffmpegUserPath: String = "" {
         didSet { UserDefaults.standard.set(ffmpegUserPath, forKey: Self.ffmpegPathKey) }
     }

@@ -470,7 +470,7 @@ private struct LibraryContentView: View {
 
     private func filtersDrawerResizeHandle(availableHeight: CGFloat) -> some View {
         Capsule()
-            .fill(Color.appDivider.opacity(0.5))
+            .fill(Color.appTextSecondary.opacity(0.55))
             .frame(width: 36, height: 4)
             .frame(maxWidth: .infinity, minHeight: Self.filtersDrawerHandleHeight)
             .contentShape(Rectangle())

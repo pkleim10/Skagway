@@ -19,9 +19,6 @@ struct CuratedWallInspector: View {
     /// Captured once at the start of a hero-resize drag; see the matching pattern (and the
     /// coordinate-space lesson) in `ContentView`'s filters-drawer resize handle.
     @State private var heroDragStartHeight: CGFloat?
-    /// Live height while actively dragging — kept local so the persisted, `@Observable`
-    /// `viewModel.inspectorHeroHeight` is only written once, on drag end.
-    @State private var heroLiveHeight: CGFloat?
     @State private var customFieldValues: [UUID: String] = [:]
     @State private var customFieldMixed: Set<UUID> = []
     // The selection `customFieldValues` were loaded for, and the values as loaded. Together these
@@ -33,7 +30,7 @@ struct CuratedWallInspector: View {
 
     var body: some View {
         GeometryReader { _ in
-            let heroH = max(heroLiveHeight ?? viewModel.inspectorHeroHeight, LibraryViewModel.inspectorHeroMinHeight)
+            let heroH = max(viewModel.inspectorHeroLiveHeight ?? viewModel.inspectorHeroHeight, LibraryViewModel.inspectorHeroMinHeight)
 
             VStack(spacing: 0) {
                 if let v = video {
@@ -235,7 +232,7 @@ struct CuratedWallInspector: View {
     /// drawer's resize handle (`ContentView.swift`) for the same fix and a fuller explanation.
     private func heroResizeHandle() -> some View {
         Capsule()
-            .fill(Color.appDivider.opacity(0.5))
+            .fill(Color.appTextSecondary.opacity(0.55))
             .frame(width: 36, height: 4)
             .frame(maxWidth: .infinity, minHeight: 8)
             .contentShape(Rectangle())
@@ -244,17 +241,17 @@ struct CuratedWallInspector: View {
                     .onChanged { value in
                         let start = heroDragStartHeight ?? viewModel.inspectorHeroHeight
                         heroDragStartHeight = start
-                        heroLiveHeight = max(
+                        viewModel.inspectorHeroLiveHeight = max(
                             (start + value.translation.height).rounded(),
                             LibraryViewModel.inspectorHeroMinHeight
                         )
                     }
                     .onEnded { _ in
-                        if let live = heroLiveHeight {
+                        if let live = viewModel.inspectorHeroLiveHeight {
                             viewModel.inspectorHeroHeight = live
                         }
                         heroDragStartHeight = nil
-                        heroLiveHeight = nil
+                        viewModel.inspectorHeroLiveHeight = nil
                     }
             )
             .help("Drag to resize the thumbnail/filmstrip area")
