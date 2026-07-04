@@ -11,6 +11,9 @@ struct CuratedWallFiltersDrawer: View {
     @State private var hoverRating: Int?
     @State private var showNewCollectionSheet = false
     @State private var editingCollection: VideoCollection?
+    @State private var tagPendingRename: Tag?
+    @State private var tagPendingDelete: Tag?
+    @State private var renameText: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -492,20 +495,54 @@ struct CuratedWallFiltersDrawer: View {
                     let tagColumns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 4)
                     LazyVGrid(columns: tagColumns, alignment: .leading, spacing: 4) {
                         ForEach(filteredTags, id: \.id) { tag in
-                            let id = tag.id ?? -1
-                            let isActive = viewModel.selectedTagIds.contains(id)
-                            TagToggleChip(tag: tag, isActive: isActive) { adding in
-                                if adding {
-                                    viewModel.selectedTagIds.insert(id)
-                                } else {
-                                    viewModel.selectedTagIds.remove(id)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            tagFilterRow(tag)
                         }
                     }
                 }
             }
+        }
+        .alert("Rename Tag",
+               isPresented: Binding(get: { tagPendingRename != nil },
+                                    set: { if !$0 { tagPendingRename = nil } })) {
+            TextField("Tag name", text: $renameText)
+            Button("Rename") {
+                if let tag = tagPendingRename {
+                    let name = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !name.isEmpty { Task { await viewModel.renameTag(tag, to: name) } }
+                }
+                tagPendingRename = nil
+            }
+            Button("Cancel", role: .cancel) { tagPendingRename = nil }
+        }
+        .alert("Delete tag \u{201C}\(tagPendingDelete?.name ?? "")\u{201D}?",
+               isPresented: Binding(get: { tagPendingDelete != nil },
+                                    set: { if !$0 { tagPendingDelete = nil } })) {
+            Button("Delete", role: .destructive) {
+                if let tag = tagPendingDelete { Task { await viewModel.deleteTag(tag) } }
+                tagPendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { tagPendingDelete = nil }
+        } message: {
+            Text("This removes the tag from your library and unassigns it from every video. This can\u{2019}t be undone.")
+        }
+    }
+
+    @ViewBuilder
+    private func tagFilterRow(_ tag: Tag) -> some View {
+        let id = tag.id ?? -1
+        let isActive = viewModel.selectedTagIds.contains(id)
+        TagToggleChip(tag: tag, isActive: isActive) { adding in
+            if adding {
+                viewModel.selectedTagIds.insert(id)
+            } else {
+                viewModel.selectedTagIds.remove(id)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contextMenu {
+            Button("Rename Tag\u{2026}") { renameText = tag.name; tagPendingRename = tag }
+            Divider()
+            Button("Delete Tag", role: .destructive) { tagPendingDelete = tag }
         }
     }
 

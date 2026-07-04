@@ -84,7 +84,6 @@ struct CuratedWallInspector: View {
             case .alwaysOpen: showUnassigned = true
             case .lastUsed: break
             }
-            newTagText = ""
         }
         .onChange(of: viewModel.selectedVideoIds) { _, _ in loadCustomFieldValues() }
         .onChange(of: focusedCustomFieldId) { old, _ in
@@ -591,102 +590,40 @@ struct CuratedWallInspector: View {
             .padding(.top, 10)
 
             if showUnassigned {
-                // New tag — creates it and assigns it to the current selection.
-                HStack(spacing: 4) {
-                    TextField("New tag", text: $newTagText)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 10))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 4)
-                        .background(insetFieldBackground(cornerRadius: 6))
-                        .onSubmit { createAndApplyNewTag() }
-                    Button { createAndApplyNewTag() } label: { Image(systemName: "plus.circle") }
-                        .disabled(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        .buttonStyle(.plain)
-                }
-
                 // List 2 — every tag, stable alphabetical order; tap an unapplied one to assign
-                // it. Already-applied tags stay in place, greyed out, rather than disappearing —
-                // right-click still works on any tag to rename/delete.
+                // it. Already-applied tags stay in place, greyed out, rather than disappearing.
+                // Tag creation and rename/delete now live in the filters drawer's Tags card.
                 if all.isEmpty {
-                    Text("No tags yet — create one above.")
+                    Text("No tags yet — create one from the Tags filter.")
                         .font(.caption2)
                         .foregroundStyle(Color.appTextTertiary)
                 } else {
-                    tagChipGrid(all, withMenu: true)
+                    tagChipGrid(all)
                 }
             }
-        }
-        .alert("Rename Tag",
-               isPresented: Binding(get: { tagPendingRename != nil },
-                                    set: { if !$0 { tagPendingRename = nil } })) {
-            TextField("Tag name", text: $renameText)
-            Button("Rename") {
-                if let tag = tagPendingRename {
-                    let name = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !name.isEmpty { Task { await viewModel.renameTag(tag, to: name) } }
-                }
-                tagPendingRename = nil
-            }
-            Button("Cancel", role: .cancel) { tagPendingRename = nil }
-        }
-        .alert("Delete tag \u{201C}\(tagPendingDelete?.name ?? "")\u{201D}?",
-               isPresented: Binding(get: { tagPendingDelete != nil },
-                                    set: { if !$0 { tagPendingDelete = nil } })) {
-            Button("Delete", role: .destructive) {
-                if let tag = tagPendingDelete { Task { await viewModel.deleteTag(tag) } }
-                tagPendingDelete = nil
-            }
-            Button("Cancel", role: .cancel) { tagPendingDelete = nil }
-        } message: {
-            Text("This removes the tag from your library and unassigns it from every video. This can\u{2019}t be undone.")
         }
     }
 
     /// A flexible grid of every tag in stable (alphabetical) order for the "Add tags" list.
     /// Tags already applied to the selection render greyed out and inert instead of being
     /// filtered out, so the list never reshuffles as tags are added — see `InspectorTagChip`.
-    /// `withMenu` adds the rename/delete context menu.
-    private func tagChipGrid(_ tags: [Tag], withMenu: Bool) -> some View {
+    private func tagChipGrid(_ tags: [Tag]) -> some View {
         let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 6)
         return LazyVGrid(columns: columns, alignment: .leading, spacing: 4) {
             ForEach(tags) { tag in
                 let isApplied = isTagAppliedToSelection(tag)
-                let chip = InspectorTagChip(tag: tag, applied: false, isDisabled: isApplied) {
+                InspectorTagChip(tag: tag, applied: false, isDisabled: isApplied) {
                     Task { await viewModel.addTag(tag.name, toVideos: selectedIds) }
-                }
-                if withMenu {
-                    chip.contextMenu {
-                        Button("Rename\u{2026}") { renameText = tag.name; tagPendingRename = tag }
-                        Divider()
-                        Button("Delete Tag", role: .destructive) { tagPendingDelete = tag }
-                    }
-                } else {
-                    chip
                 }
             }
         }
     }
 
-    @State private var newTagText: String = ""
     @State private var showUnassigned = false
-    @State private var tagPendingDelete: Tag?
-    @State private var tagPendingRename: Tag?
-    @State private var renameText: String = ""
 
     private func isTagAppliedToSelection(_ tag: Tag) -> Bool {
         let applied = viewModel.tagsForVideos(selectedIds)
         return applied.contains { $0.id == tag.id }
-    }
-
-    private func createAndApplyNewTag() {
-        let name = newTagText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
-        Task {
-            await viewModel.createTag(name)
-            await viewModel.addTag(name, toVideos: selectedIds)
-            newTagText = ""
-        }
     }
 
     // MARK: - Footer
