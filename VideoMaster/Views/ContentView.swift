@@ -418,7 +418,12 @@ private struct LibraryContentView: View {
             // - `.clipped()` hides the portion that is still "above" the visible well rect.
             // - Everything is driven from the single interpolated `drawerReveal` (0...1) so the visual slide and the layout push are perfectly synchronized.
             let reveal = drawerReveal
-            let fullH = clampedFiltersDrawerHeight(filtersDrawerLiveHeight ?? vm.filtersDrawerHeight, availableHeight: availableHeight)
+            // Fit-to-content: always request the natural content height (the clamp caps it to the
+            // window). Last-used: request the live drag value, else the persisted height.
+            let requestedH: CGFloat = vm.filterDrawerHeightMode == .fitToContent
+                ? (filtersDrawerContentHeight ?? LibraryViewModel.filtersDrawerDefaultHeight)
+                : (filtersDrawerLiveHeight ?? vm.filtersDrawerHeight)
+            let fullH = clampedFiltersDrawerHeight(requestedH, availableHeight: availableHeight)
             let shownH = fullH * reveal
 
             ZStack(alignment: .top) {
@@ -436,9 +441,10 @@ private struct LibraryContentView: View {
             .zIndex(1)   // ensure the sliding drawer draws above the grid/list during the push (prevents any "behind" flash)
             .animation(.easeInOut(duration: Self.drawerAnimationDuration), value: reveal)
 
-            // Resize handle — only meaningful once the drawer has finished opening (dragging
-            // mid-slide isn't a sensible interaction). Adjusts and persists `filtersDrawerHeight`.
-            if reveal > 0.99 {
+            // Resize handle — only in "Last used" mode (Fit to content sizes itself, so there's
+            // nothing to drag), and only once the drawer has finished opening (dragging mid-slide
+            // isn't a sensible interaction). Adjusts and persists `filtersDrawerHeight`.
+            if reveal > 0.99 && vm.filterDrawerHeightMode == .lastUsed {
                 filtersDrawerResizeHandle(availableHeight: availableHeight)
                     .transition(.opacity)
             }

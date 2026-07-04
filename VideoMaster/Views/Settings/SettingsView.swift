@@ -191,6 +191,18 @@ struct VideoSettingsView: View {
             }
 
             Section {
+                Picker("Filter drawer height", selection: $viewModel.filterDrawerHeightMode) {
+                    ForEach(FilterDrawerHeightMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+            } header: {
+                Text("Filters")
+            } footer: {
+                Text("How the Curated Wall filters drawer sizes itself when opened. Fit to content sizes it to just show all the filter cards (no scrollbar) and hides the resize handle; Last used reopens it at whatever height you last dragged it to.")
+            }
+
+            Section {
                 Picker("Player opens at", selection: $viewModel.playerStartPreference) {
                     ForEach(PlayerStartPreference.allCases) { pref in
                         Text(pref.label).tag(pref)

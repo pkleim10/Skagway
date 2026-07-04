@@ -144,6 +144,13 @@ final class LibraryViewModel {
             UserDefaults.standard.set(Double(filtersDrawerHeight), forKey: Self.filtersDrawerHeightKey)
         }
     }
+    /// Whether the filters drawer opens at its natural content height (and hides the resize handle)
+    /// or at the last user-dragged height. See `FilterDrawerHeightMode`.
+    var filterDrawerHeightMode: FilterDrawerHeightMode = .lastUsed {
+        didSet {
+            UserDefaults.standard.set(filterDrawerHeightMode.rawValue, forKey: Self.filterDrawerHeightModeKey)
+        }
+    }
     var ffmpegUserPath: String = "" {
         didSet { UserDefaults.standard.set(ffmpegUserPath, forKey: Self.ffmpegPathKey) }
     }
@@ -337,6 +344,7 @@ final class LibraryViewModel {
     private static let customMetadataFieldDefinitionsKey = "VideoMaster.customMetadataFieldDefinitions"
     private static let missingCountScannedKey = "VideoMaster.missingCountScanned"
     private static let filtersDrawerHeightKey = "VideoMaster.filtersDrawerHeight"
+    private static let filterDrawerHeightModeKey = "VideoMaster.filterDrawerHeightMode"
     private static let missingVideoIdsKey = "VideoMaster.missingVideoIds"
     private static let listColumnPreferencesKey = "VideoMaster.listColumnPreferences"
 
@@ -1027,6 +1035,10 @@ final class LibraryViewModel {
         if let v = defaults.object(forKey: Self.missingCountScannedKey) as? Bool { missingCountScanned = v }
         if let v = defaults.object(forKey: Self.filtersDrawerHeightKey) as? Double {
             filtersDrawerHeight = max(CGFloat(v), Self.filtersDrawerMinHeight)
+        }
+        if let v = defaults.string(forKey: Self.filterDrawerHeightModeKey),
+           let mode = FilterDrawerHeightMode(rawValue: v) {
+            filterDrawerHeightMode = mode
         }
         if let ids = defaults.stringArray(forKey: Self.missingVideoIdsKey) { missingVideoIds = Set(ids) }
         if defaults.object(forKey: Self.showThumbnailInDetailKey) != nil {
