@@ -1193,8 +1193,9 @@ final class LibraryViewModel {
     }
 
     /// One-time (per launch, until every reachable file has one) computation of content
-    /// fingerprints for videos that lack one. Runs off-main; a single DB write at the end triggers
-    /// the video observation, which refreshes `videos` and recomputes the Duplicates set.
+    /// fingerprints for videos that lack one. Runs off-main and writes in chunks so progress
+    /// persists (survives a quit mid-pass) and Duplicates fills in progressively instead of only
+    /// after the whole library has been read.
     private func backfillContentFingerprintsIfNeeded() {
         guard !isBackfillingFingerprints else { return }
         struct Row: Sendable { let dbId: Int64; let filePath: String }
@@ -1209,20 +1210,42 @@ final class LibraryViewModel {
             // Let launch settle (initial thumbnail/preview work) before doing a bunch of file
             // reads, so the backfill doesn't compete with getting the UI on screen.
             try? await Task.sleep(for: .seconds(3))
-            let updates: [(videoId: Int64, fingerprint: String)] = await Task.detached(priority: .utility) {
-                var out: [(Int64, String)] = []
-                out.reserveCapacity(pending.count)
-                for row in pending {
-                    if let fp = ContentFingerprint.compute(url: URL(fileURLWithPath: row.filePath)) {
-                        out.append((row.dbId, fp))
+            let chunkSize = 300
+            var index = 0
+            while index < pending.count {
+                let end = min(index + chunkSize, pending.count)
+                let chunk = Array(pending[index..<end])
+                // Compute this chunk's fingerprints off-main, in parallel (bounded), so the pass
+                // isn't gated on one file at a time.
+                let updates: [(videoId: Int64, fingerprint: String)] = await Task.detached(priority: .utility) {
+                    await withTaskGroup(of: (Int64, String)?.self) { group in
+                        let maxConcurrent = 6
+                        var iterator = chunk.makeIterator()
+                        var inFlight = 0
+                        func addNext() {
+                            guard let row = iterator.next() else { return }
+                            inFlight += 1
+                            group.addTask {
+                                ContentFingerprint.compute(url: URL(fileURLWithPath: row.filePath)).map { (row.dbId, $0) }
+                            }
+                        }
+                        for _ in 0..<maxConcurrent { addNext() }
+                        var out: [(Int64, String)] = []
+                        while inFlight > 0 {
+                            let result = await group.next()
+                            inFlight -= 1
+                            if let pair = result ?? nil { out.append(pair) }
+                            addNext()
+                        }
+                        return out.map { (videoId: $0.0, fingerprint: $0.1) }
                     }
+                }.value
+                if !updates.isEmpty {
+                    // Each chunk write triggers one observation delivery → one recompute, so
+                    // Duplicates updates as the pass proceeds and the work is saved incrementally.
+                    try? await videoRepo.updateContentFingerprint(updates: updates)
                 }
-                return out.map { (videoId: $0.0, fingerprint: $0.1) }
-            }.value
-            if !updates.isEmpty {
-                // One write → one observation delivery → one recompute (rather than a per-chunk
-                // storm). `videos` didSet then rebuilds the Duplicates set with fingerprints.
-                try? await videoRepo.updateContentFingerprint(updates: updates)
+                index = end
             }
             isBackfillingFingerprints = false
         }
