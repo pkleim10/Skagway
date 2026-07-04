@@ -122,6 +122,59 @@ struct VideoRepository {
         }
     }
 
+    /// Bulk write of computed content fingerprints in one transaction (used by the backfill).
+    /// Each tuple is `(videoId, fingerprint)`. No-op for an empty array.
+    func updateContentFingerprint(updates: [(videoId: Int64, fingerprint: String)]) async throws {
+        guard !updates.isEmpty else { return }
+        try await dbPool.write { db in
+            for (id, fp) in updates {
+                try db.execute(
+                    sql: "UPDATE video SET contentFingerprint = ? WHERE id = ?",
+                    arguments: [fp, id]
+                )
+            }
+        }
+    }
+
+    /// Clear the stored fingerprint for a video (e.g. after a re-encode replaces the file) so the
+    /// backfill recomputes it from the new content.
+    func clearContentFingerprint(videoId: Int64) async throws {
+        try await dbPool.write { db in
+            try db.execute(
+                sql: "UPDATE video SET contentFingerprint = NULL WHERE id = ?",
+                arguments: [videoId]
+            )
+        }
+    }
+
+    // MARK: - "Not a duplicate" pairs
+
+    func fetchNotDuplicatePairs() async throws -> [VideoNotDuplicatePair] {
+        try await dbPool.read { db in
+            try VideoNotDuplicatePair.fetchAll(db)
+        }
+    }
+
+    /// Insert confirmed-distinct pairs (idempotent — existing rows are ignored). Pairs are
+    /// normalized by `VideoNotDuplicatePair.init`, so order doesn't matter.
+    func insertNotDuplicatePairs(_ pairs: [VideoNotDuplicatePair]) async throws {
+        guard !pairs.isEmpty else { return }
+        try await dbPool.write { db in
+            for pair in pairs {
+                try db.execute(
+                    sql: "INSERT OR IGNORE INTO video_not_duplicate (videoIdA, videoIdB) VALUES (?, ?)",
+                    arguments: [pair.videoIdA, pair.videoIdB]
+                )
+            }
+        }
+    }
+
+    func deleteAllNotDuplicatePairs() async throws {
+        try await dbPool.write { db in
+            try db.execute(sql: "DELETE FROM video_not_duplicate")
+        }
+    }
+
     func recordPlay(videoId: Int64) async throws {
         try await dbPool.write { db in
             try db.execute(

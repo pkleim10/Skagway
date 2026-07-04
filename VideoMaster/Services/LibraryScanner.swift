@@ -87,7 +87,8 @@ actor LibraryScanner {
                 dateAdded: Date(),
                 rating: 0,
                 playCount: 0,
-                hasSubtitles: hasSRT
+                hasSubtitles: hasSRT,
+                contentFingerprint: ContentFingerprint.compute(url: fileURL)
             )
 
             let video = try await videoRepo.insert(videoInput)
@@ -238,7 +239,8 @@ actor LibraryScanner {
                 dateAdded: Date(),
                 rating: 0,
                 playCount: 0,
-                hasSubtitles: hasSRT
+                hasSubtitles: hasSRT,
+                contentFingerprint: ContentFingerprint.compute(url: fileURL)
             )
 
             let video = try await videoRepo.insert(videoInput)

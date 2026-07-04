@@ -31,6 +31,10 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Duplicates smart library reworked to be accurate and correctable.**
+  - **Detection now uses a content fingerprint** instead of the old file-size + rounded-duration heuristic (which flagged two genuinely different clips that happened to share both). Each video gets a cheap SHA-256 of its byte size + first/last 64 KB (whole file if under 128 KB) — no full-file read — so a match is a near-certain byte-identical duplicate. Computed at import for new videos and backfilled in the background for existing ones on launch; stored on the video, so it's stable across rename/move and recomputed after a re-encode.
+  - **New "Not a Duplicate" action** (right-click, grid + list, shown only for videos currently in Duplicates). Marks the selected video(s) as confirmed-distinct from their current look-alikes: they leave Duplicates and stay out across recomputes and relaunches — but if a genuinely new matching file is added later, they reappear for review automatically. It's per-pair, so in a group where two files are real duplicates and a third is a coincidence, clearing the odd one out leaves the real pair still flagged. Persisted in a new `video_not_duplicate` table (FK-cascades away when a video is deleted).
+
 ## 0.26.0 (build 639) - 2026-07-04
 
 - **New: "Windowed" player size, alongside Compact and Full screen.** A third icon button in the floating player's controls recalls whatever free-floating size/position the resize handle last produced (`playerFloatingSize`/`playerFloatingPosition`, already persisted) — distinct from Compact's fixed inspector-footprint size and from true Full screen. All three now have consistent ⌃-based shortcuts: Compact (⌃⌘C), Windowed (⌃⌘W), Full screen (⌃⌘F, unchanged — still a toggle, the other two are direct "switch to this mode" actions). All three menu commands work correctly from true full-screen too (they exit it first, then apply their mode), and are disabled when nothing is playing.

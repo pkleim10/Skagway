@@ -118,6 +118,25 @@ enum DatabaseMigration {
             }
         }
 
+        migrator.registerMigration("v7_contentFingerprint") { db in
+            try db.alter(table: "video") { t in
+                // Nullable: unknown until computed (unreachable files, or not yet backfilled).
+                // Cheap content hash (size + first/last 64 KB) — see `ContentFingerprint`.
+                t.add(column: "contentFingerprint", .text)
+            }
+        }
+
+        migrator.registerMigration("v8_notDuplicatePairs") { db in
+            // "These two videos are confirmed NOT duplicates of each other." Stored normalized
+            // (videoIdA < videoIdB). FK cascade auto-cleans when either video is removed, like
+            // `video_tag`. See `VideoNotDuplicatePair` and the Duplicates recompute in the VM.
+            try db.create(table: "video_not_duplicate") { t in
+                t.column("videoIdA", .integer).notNull().references("video", onDelete: .cascade)
+                t.column("videoIdB", .integer).notNull().references("video", onDelete: .cascade)
+                t.primaryKey(["videoIdA", "videoIdB"])
+            }
+        }
+
         try migrator.migrate(pool)
     }
 }

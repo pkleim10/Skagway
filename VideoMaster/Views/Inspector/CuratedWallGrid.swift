@@ -169,6 +169,16 @@ struct CuratedWallGrid: View {
                             }
                             .disabled(isMoving)
                             .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "")
+                            if viewModel.isDuplicate(video.id) {
+                                Divider()
+                                Button("Not a Duplicate") {
+                                    let ids = viewModel.selectedVideoIds.contains(video.id)
+                                        ? viewModel.selectedVideoIds : [video.id]
+                                    let selected = viewModel.filteredVideos.filter { ids.contains($0.id) }
+                                    Task { await viewModel.markNotDuplicate(selected) }
+                                }
+                                .help("Confirm this isn't a duplicate — it leaves the Duplicates library and stays out unless a genuinely new matching file is added")
+                            }
                             Divider()
                             Button("Remove from Library") {
                                 Task { await viewModel.removeVideosFromLibrary([video.id]) }

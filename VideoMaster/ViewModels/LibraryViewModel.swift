@@ -296,6 +296,19 @@ final class LibraryViewModel {
     private(set) var isRefreshingMissing: Bool = false
     private var filterGeneration: Int = 0
 
+    /// Normalized (`lo`, `hi`) key for a confirmed "not a duplicate" pair of video database ids.
+    struct NotDuplicateKey: Hashable {
+        let lo: Int64
+        let hi: Int64
+        init(_ a: Int64, _ b: Int64) { lo = min(a, b); hi = max(a, b) }
+    }
+    /// In-memory copy of the `video_not_duplicate` table, loaded on `startObserving`. A pair here
+    /// means the user marked those two videos as not duplicates of each other; the Duplicates
+    /// recompute treats them as a confirmed-distinct edge. See `updateLibraryCounts`.
+    private var notDuplicatePairs: Set<NotDuplicateKey> = []
+    /// Guards the one-time content-fingerprint backfill from running concurrently.
+    private var isBackfillingFingerprints = false
+
     let dbPool: DatabasePool
     let videoRepo: VideoRepository
     let tagRepo: TagRepository
@@ -1149,10 +1162,51 @@ final class LibraryViewModel {
         Task {
             await loadTags()
             await loadCollections()
+            await loadNotDuplicatePairs()
         }
 
         resumePendingConversions()
         resumePendingMoves()
+        backfillContentFingerprintsIfNeeded()
+    }
+
+    private func loadNotDuplicatePairs() async {
+        let pairs = (try? await videoRepo.fetchNotDuplicatePairs()) ?? []
+        notDuplicatePairs = Set(pairs.map { NotDuplicateKey($0.videoIdA, $0.videoIdB) })
+        updateLibraryCounts()
+        recomputeFilteredVideos()
+    }
+
+    /// One-time (per launch, until every reachable file has one) computation of content
+    /// fingerprints for videos that lack one. Runs off-main; a single DB write at the end triggers
+    /// the video observation, which refreshes `videos` and recomputes the Duplicates set.
+    private func backfillContentFingerprintsIfNeeded() {
+        guard !isBackfillingFingerprints else { return }
+        struct Row: Sendable { let dbId: Int64; let filePath: String }
+        let pending: [Row] = videos.compactMap { v in
+            guard v.contentFingerprint == nil, let id = v.databaseId else { return nil }
+            return Row(dbId: id, filePath: v.filePath)
+        }
+        guard !pending.isEmpty else { return }
+        isBackfillingFingerprints = true
+
+        Task { [videoRepo] in
+            let updates: [(videoId: Int64, fingerprint: String)] = await Task.detached(priority: .utility) {
+                var out: [(Int64, String)] = []
+                out.reserveCapacity(pending.count)
+                for row in pending {
+                    if let fp = ContentFingerprint.compute(url: URL(fileURLWithPath: row.filePath)) {
+                        out.append((row.dbId, fp))
+                    }
+                }
+                return out.map { (videoId: $0.0, fingerprint: $0.1) }
+            }.value
+            if !updates.isEmpty {
+                try? await videoRepo.updateContentFingerprint(updates: updates)
+                // The video observation delivers the refreshed rows → `videos` didSet recomputes.
+            }
+            isBackfillingFingerprints = false
+        }
     }
 
     func stopObserving() {
@@ -1592,8 +1646,11 @@ final class LibraryViewModel {
         let playedCutoff = Calendar.current.date(byAdding: .day, value: -recentlyPlayedDays, to: Date()) ?? Date()
         let convertedPaths = Set(recentlyConvertedDates.keys)
 
+        // Bucket by content fingerprint (byte-identical videos land together). Members carry their
+        // stable databaseId so the pairwise "not a duplicate" decisions can be applied below.
         typealias DupKey = String
-        var buckets: [DupKey: [String]] = [:]
+        struct DupMember { let id: String; let dbId: Int64? }
+        var buckets: [DupKey: [DupMember]] = [:]
         for video in videos {
             let isCorrupt = Self.isCorrupt(video, thumbnailsSettled: thumbnailsSettled)
             if isCorrupt { corrupt += 1 }
@@ -1606,16 +1663,23 @@ final class LibraryViewModel {
                 if video.rating > 0 {
                     byRating[video.rating, default: 0] += 1
                 }
-                if let duration = video.duration {
-                    let key = "\(video.fileSize)_\(Int(duration))"
-                    buckets[key, default: []].append(video.id)
+                if let key = Self.duplicateSignature(video) {
+                    buckets[key, default: []].append(DupMember(id: video.id, dbId: video.databaseId))
                 }
             }
         }
 
+        // A member is a duplicate iff it shares a fingerprint with at least one other member it has
+        // NOT been confirmed-distinct from. A newly-imported match has no confirmation yet, so it
+        // re-flags itself and its mates automatically (the "re-open on a truly new duplicate" rule).
         var dupIds = Set<String>()
-        for ids in buckets.values where ids.count > 1 {
-            dupIds.formUnion(ids)
+        for members in buckets.values where members.count > 1 {
+            for v in members {
+                let hasUnconfirmedMate = members.contains { w in
+                    w.id != v.id && !isConfirmedDistinct(v.dbId, w.dbId)
+                }
+                if hasUnconfirmedMate { dupIds.insert(v.id) }
+            }
         }
         duplicateVideoIds = dupIds
 
@@ -1632,6 +1696,70 @@ final class LibraryViewModel {
             recentlyConverted: recentlyConverted,
             byRating: byRating
         )
+    }
+
+    // MARK: - Duplicates
+
+    /// Whether a video is currently in the Duplicates smart library (drives the context-menu item).
+    func isDuplicate(_ videoId: String) -> Bool {
+        duplicateVideoIds.contains(videoId)
+    }
+
+    /// The grouping key for duplicate detection: the content fingerprint (byte-identical files
+    /// share it). `nil` when not yet computed (unreachable / not backfilled) — such videos aren't
+    /// grouped, so they never appear in Duplicates until a fingerprint is available. Single source
+    /// of truth, used by both the recompute above and `markNotDuplicate`.
+    static func duplicateSignature(_ video: Video) -> String? {
+        video.contentFingerprint
+    }
+
+    /// True when the user has confirmed these two videos are not duplicates of each other. Unknown
+    /// ids (nil databaseId) can't be confirmed, so they stay treated as potential duplicates.
+    private func isConfirmedDistinct(_ a: Int64?, _ b: Int64?) -> Bool {
+        guard let a, let b else { return false }
+        return notDuplicatePairs.contains(NotDuplicateKey(a, b))
+    }
+
+    /// "Not a Duplicate" action: mark each target video as confirmed-distinct from every other
+    /// video that currently shares its fingerprint. Clears the target(s) from Duplicates while
+    /// leaving genuine duplicates among the *remaining* members flagged. Persisted so it survives
+    /// recomputes and relaunches; a later genuinely-new match re-opens review automatically.
+    func markNotDuplicate(_ targets: [Video]) async {
+        // Group all videos by fingerprint once so each target's current mates are cheap to find.
+        var bySignature: [String: [Video]] = [:]
+        for v in videos {
+            guard let sig = Self.duplicateSignature(v) else { continue }
+            bySignature[sig, default: []].append(v)
+        }
+
+        var newPairs: [VideoNotDuplicatePair] = []
+        var newKeys: [NotDuplicateKey] = []
+        for target in targets {
+            guard let tId = target.databaseId, let sig = Self.duplicateSignature(target) else { continue }
+            for mate in bySignature[sig] ?? [] {
+                guard let mId = mate.databaseId, mId != tId else { continue }
+                let key = NotDuplicateKey(tId, mId)
+                if !notDuplicatePairs.contains(key) {
+                    newKeys.append(key)
+                    newPairs.append(VideoNotDuplicatePair(tId, mId))
+                }
+            }
+        }
+        guard !newPairs.isEmpty else { return }
+
+        try? await videoRepo.insertNotDuplicatePairs(newPairs)
+        notDuplicatePairs.formUnion(newKeys)
+        updateLibraryCounts()
+        recomputeFilteredVideos()
+    }
+
+    /// Escape hatch (Settings): forget every "not a duplicate" decision so all fingerprint groups
+    /// are re-flagged for review.
+    func resetNotDuplicateDecisions() async {
+        try? await videoRepo.deleteAllNotDuplicatePairs()
+        notDuplicatePairs.removeAll()
+        updateLibraryCounts()
+        recomputeFilteredVideos()
     }
 
     private func updateTagCounts() {
@@ -2288,6 +2416,9 @@ final class LibraryViewModel {
         if let height = metadata.height { updated[idx].height = height }
         if let codec = metadata.codec { updated[idx].codec = codec }
         if let frameRate = metadata.frameRate { updated[idx].frameRate = frameRate }
+        // Re-encoding rewrote the file, so the old fingerprint is stale — recompute from the new
+        // content (falls back to nil → backfill picks it up if the file isn't readable right now).
+        updated[idx].contentFingerprint = ContentFingerprint.compute(url: newURL)
 
         let updatedVideo = updated[idx]
         videos = updated

@@ -20,6 +20,10 @@ struct Video: Codable, Equatable, Hashable, Identifiable {
     /// True when a sidecar `.srt` was detected at import or during the detail/playback flow.
     /// Surfaced as a subtle CC icon in list rows and a Subtitles attribute in the detail pane.
     var hasSubtitles: Bool = false
+    /// Cheap content fingerprint (SHA-256 of file size + first/last 64 KB) used to detect
+    /// byte-identical duplicates far more reliably than the old size+duration heuristic. `nil`
+    /// until computed (unreachable files, or not yet backfilled). See `ContentFingerprint`.
+    var contentFingerprint: String? = nil
 
     var id: String { filePath }
 
@@ -28,6 +32,7 @@ struct Video: Codable, Equatable, Hashable, Identifiable {
         case filePath, fileName, fileSize, duration, width, height
         case codec, frameRate, creationDate, dateAdded, rating
         case thumbnailPath, lastPlayed, playCount, hasSubtitles
+        case contentFingerprint
     }
 }
 
