@@ -61,6 +61,25 @@ struct VideoMasterApp: App {
 
                 Divider()
 
+                Button("Compact") {
+                    guard let vm = appState.libraryViewModel else { return }
+                    if vm.isPlayerFullScreen { vm.isPlayerFullScreen = false }
+                    vm.playerSizeIsCompact = true
+                    vm.playerLastWasFullScreen = false
+                    vm.playerFloatingPosition = nil   // compact always anchors top-right
+                }
+                .keyboardShortcut("c", modifiers: [.command, .control])
+                .disabled(appState.libraryViewModel?.isPlayingInline != true)
+
+                Button("Windowed") {
+                    guard let vm = appState.libraryViewModel else { return }
+                    if vm.isPlayerFullScreen { vm.isPlayerFullScreen = false }
+                    vm.playerSizeIsCompact = false
+                    vm.playerLastWasFullScreen = false
+                }
+                .keyboardShortcut("w", modifiers: [.command, .control])
+                .disabled(appState.libraryViewModel?.isPlayingInline != true)
+
                 Button("Toggle Full Screen") {
                     appState.libraryViewModel?.isPlayerFullScreen.toggle()
                 }

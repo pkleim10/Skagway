@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **New: "Windowed" player size, alongside Compact and Full screen.** A third icon button in the floating player's controls recalls whatever free-floating size/position the resize handle last produced (`playerFloatingSize`/`playerFloatingPosition`, already persisted) — distinct from Compact's fixed inspector-footprint size and from true Full screen. All three now have consistent ⌃-based shortcuts: Compact (⌃⌘C), Windowed (⌃⌘W), Full screen (⌃⌘F, unchanged — still a toggle, the other two are direct "switch to this mode" actions). All three menu commands work correctly from true full-screen too (they exit it first, then apply their mode), and are disabled when nothing is playing.
+
 ## 0.25.0 (build 634) - 2026-07-03
 
 - **New: user-adjustable, persisted height for the Inspector's thumbnail/filmstrip (hero) area.** Same drag-handle pattern as the filters drawer. Minimum 72pt (1in); no maximum — the Inspector body already scrolls, so an oversized hero just pushes the rest of the panel down instead of overflowing. Persists across launches (`inspectorHeroHeight`, default 220pt); previously the hero height was recomputed live every time from 40% of the Inspector's available height (clamped 140–260pt) and wasn't adjustable at all.

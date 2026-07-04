@@ -155,16 +155,21 @@ struct FloatingPlayerPanel: View {
 
     // MARK: - Size controls
 
-    /// The two semantic size states; everything in between is the drag handle's job.
+    /// The three semantic size states; everything in between (a manual drag) is the resize
+    /// handle's job — Windowed just recalls whatever size/position that last produced.
     private var sizeControls: some View {
         HStack(spacing: 4) {
             iconButton("camera.viewfinder", help: "Make thumbnail from current frame (⌥⌘M)") {
                 viewModel.playback.makeThumbnailFromCurrentFrame()
             }
-            iconButton("rectangle", help: "Compact (follows the inspector width)") {
+            iconButton("rectangle", help: "Compact (follows the inspector width) (⌃⌘C)") {
                 viewModel.playerSizeIsCompact = true
                 viewModel.playerLastWasFullScreen = false
                 viewModel.playerFloatingPosition = nil   // compact always anchors top-right
+            }
+            iconButton("macwindow", help: "Windowed — last used size (⌃⌘W)") {
+                viewModel.playerSizeIsCompact = false
+                viewModel.playerLastWasFullScreen = false
             }
             iconButton("arrow.up.left.and.arrow.down.right", help: "Full screen (⌃⌘F)") {
                 viewModel.isPlayerFullScreen = true
