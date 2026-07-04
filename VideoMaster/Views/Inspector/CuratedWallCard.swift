@@ -134,6 +134,19 @@ struct CuratedWallCard: View {
                         .font(.system(size: 9))
                         .foregroundStyle(Color.appTextTertiary)
 
+                    if video.hasSubtitles {
+                        // Same badge as the List view's subtitles indicator, scaled to this card's
+                        // smaller metadata row.
+                        Image(systemName: "captions.bubble.fill")
+                            .font(.system(size: 7, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.appAccent, in: RoundedRectangle(cornerRadius: AppRadius.xs, style: .continuous))
+                            .help("Subtitles available")
+                            .accessibilityLabel("Subtitles available")
+                    }
+
                     Spacer()
 
                     if video.rating > 0 {
