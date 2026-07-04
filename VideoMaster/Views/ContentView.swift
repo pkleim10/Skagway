@@ -456,12 +456,18 @@ private struct LibraryContentView: View {
             .frame(maxWidth: .infinity, minHeight: Self.filtersDrawerHandleHeight)
             .contentShape(Rectangle())
             .gesture(
-                DragGesture(minimumDistance: 1)
+                // Global coordinate space avoids a feedback loop: the handle is laid out below the
+                // drawer it resizes, so it moves as the drawer grows/shrinks. In the default *local*
+                // space the moving frame makes `translation` drift even without mouse movement →
+                // oscillating flicker. Global space measures against the fixed window frame instead.
+                // Round to whole points to avoid sub-pixel layout thrash (same as the player handle).
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
                     .onChanged { value in
-                        let start = filtersDrawerDragStartHeight ?? vm.filtersDrawerHeight
+                        let start = filtersDrawerDragStartHeight
+                            ?? clampedFiltersDrawerHeight(vm.filtersDrawerHeight, availableHeight: availableHeight)
                         filtersDrawerDragStartHeight = start
                         filtersDrawerLiveHeight = clampedFiltersDrawerHeight(
-                            start + value.translation.height,
+                            (start + value.translation.height).rounded(),
                             availableHeight: availableHeight
                         )
                     }
