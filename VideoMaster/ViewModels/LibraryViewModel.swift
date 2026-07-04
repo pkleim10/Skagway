@@ -308,6 +308,8 @@ final class LibraryViewModel {
     private var notDuplicatePairs: Set<NotDuplicateKey> = []
     /// Guards the one-time content-fingerprint backfill from running concurrently.
     private var isBackfillingFingerprints = false
+    /// Ensures the backfill is kicked off only once per session (see `kickOffFingerprintBackfillIfNeeded`).
+    private var didKickOffFingerprintBackfill = false
 
     let dbPool: DatabasePool
     let videoRepo: VideoRepository
@@ -1150,6 +1152,11 @@ final class LibraryViewModel {
                 for try await videos in observation.values(in: dbPool) {
                     await MainActor.run {
                         self.videos = videos
+                        // Kick off the fingerprint backfill from *here* — the first delivery is when
+                        // `videos` is actually populated. Calling it from `startObserving` ran it
+                        // against an empty array (observation is async), so it silently no-op'd and
+                        // existing videos never got fingerprinted → Duplicates couldn't match them.
+                        self.kickOffFingerprintBackfillIfNeeded()
                     }
                 }
             } catch {
@@ -1167,6 +1174,14 @@ final class LibraryViewModel {
 
         resumePendingConversions()
         resumePendingMoves()
+    }
+
+    /// Once per app session (after videos first load), start the fingerprint backfill. The
+    /// once-per-session flag prevents an unreachable-file loop: files whose fingerprint can't be
+    /// computed stay nil, and re-running on every observation delivery would keep retrying them.
+    private func kickOffFingerprintBackfillIfNeeded() {
+        guard !didKickOffFingerprintBackfill, !videos.isEmpty else { return }
+        didKickOffFingerprintBackfill = true
         backfillContentFingerprintsIfNeeded()
     }
 
@@ -1191,6 +1206,9 @@ final class LibraryViewModel {
         isBackfillingFingerprints = true
 
         Task { [videoRepo] in
+            // Let launch settle (initial thumbnail/preview work) before doing a bunch of file
+            // reads, so the backfill doesn't compete with getting the UI on screen.
+            try? await Task.sleep(for: .seconds(3))
             let updates: [(videoId: Int64, fingerprint: String)] = await Task.detached(priority: .utility) {
                 var out: [(Int64, String)] = []
                 out.reserveCapacity(pending.count)
@@ -1202,8 +1220,9 @@ final class LibraryViewModel {
                 return out.map { (videoId: $0.0, fingerprint: $0.1) }
             }.value
             if !updates.isEmpty {
+                // One write → one observation delivery → one recompute (rather than a per-chunk
+                // storm). `videos` didSet then rebuilds the Duplicates set with fingerprints.
                 try? await videoRepo.updateContentFingerprint(updates: updates)
-                // The video observation delivers the refreshed rows → `videos` didSet recomputes.
             }
             isBackfillingFingerprints = false
         }
