@@ -8,62 +8,67 @@ struct ActiveFilterPills: View {
 
     var body: some View {
         if viewModel.hasActiveFilters {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    // Sidebar / smart filter pill
-                    if let f = viewModel.sidebarFilter, f != .all {
-                        pill(text: pillText(for: f), systemImage: icon(for: f)) {
-                            viewModel.sidebarFilter = .all
-                        }
-                    } else if case .collection(let c) = viewModel.sidebarFilter {
-                        pill(text: "Collection: \(c.name)", systemImage: "folder") {
-                            viewModel.sidebarFilter = .all
-                        }
-                    }
-
-                    // Rating
-                    if let rating = viewModel.selectedRatingStars.first {
-                        pill(text: "Rating \(rating)", systemImage: "star") {
-                            viewModel.clearRatingFilter()
-                        }
-                    }
-
-                    // Tags
-                    if !viewModel.selectedTagIds.isEmpty {
-                        let count = viewModel.selectedTagIds.count
-                        pill(text: count == 1 ? "1 tag" : "\(count) tags", systemImage: "tag") {
-                            viewModel.clearTagFilters()
-                        }
-                    }
-
-                    // Duration
-                    if viewModel.minDurationSeconds != nil || viewModel.maxDurationSeconds != nil {
-                        let txt: String = {
-                            if let mn = viewModel.minDurationSeconds, let mx = viewModel.maxDurationSeconds {
-                                return "\(Int(mn/60))–\(Int(mx/60)) min"
-                            } else if let mn = viewModel.minDurationSeconds {
-                                return "≥\(Int(mn/60)) min"
-                            } else if let mx = viewModel.maxDurationSeconds {
-                                return "≤\(Int(mx/60)) min"
+            HStack(spacing: 6) {
+                // Scrollable pills only — "Clear all" lives outside this ScrollView (below) so it
+                // stays reachable even when there are enough pills to overflow the visible width,
+                // instead of scrolling out of view as just another trailing item.
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        // Sidebar / smart filter pill
+                        if let f = viewModel.sidebarFilter, f != .all {
+                            pill(text: pillText(for: f), systemImage: icon(for: f)) {
+                                viewModel.sidebarFilter = .all
                             }
-                            return "Duration"
-                        }()
-                        pill(text: txt, systemImage: "clock") {
-                            viewModel.clearDurationFilter()
+                        } else if case .collection(let c) = viewModel.sidebarFilter {
+                            pill(text: "Collection: \(c.name)", systemImage: "folder") {
+                                viewModel.sidebarFilter = .all
+                            }
+                        }
+
+                        // Rating
+                        if let rating = viewModel.selectedRatingStars.first {
+                            pill(text: "Rating \(rating)", systemImage: "star") {
+                                viewModel.clearRatingFilter()
+                            }
+                        }
+
+                        // Tags
+                        if !viewModel.selectedTagIds.isEmpty {
+                            let count = viewModel.selectedTagIds.count
+                            pill(text: count == 1 ? "1 tag" : "\(count) tags", systemImage: "tag") {
+                                viewModel.clearTagFilters()
+                            }
+                        }
+
+                        // Duration
+                        if viewModel.minDurationSeconds != nil || viewModel.maxDurationSeconds != nil {
+                            let txt: String = {
+                                if let mn = viewModel.minDurationSeconds, let mx = viewModel.maxDurationSeconds {
+                                    return "\(Int(mn/60))–\(Int(mx/60)) min"
+                                } else if let mn = viewModel.minDurationSeconds {
+                                    return "≥\(Int(mn/60)) min"
+                                } else if let mx = viewModel.maxDurationSeconds {
+                                    return "≤\(Int(mx/60)) min"
+                                }
+                                return "Duration"
+                            }()
+                            pill(text: txt, systemImage: "clock") {
+                                viewModel.clearDurationFilter()
+                            }
                         }
                     }
-
-                    Button("Clear all") {
-                        viewModel.resetAllFilters()
-                    }
-                    .font(.caption)
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.appAccent)
-                    .padding(.leading, 6)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
+
+                Button("Clear all") {
+                    viewModel.resetAllFilters()
+                }
+                .font(.caption)
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.appAccent)
+                .fixedSize()
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
             .background(Color.appSurface.opacity(0.4))
             .transition(.opacity)
         }
