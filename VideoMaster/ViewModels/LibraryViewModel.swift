@@ -162,11 +162,6 @@ final class LibraryViewModel {
     var scanTotal: Int = 0
     var selectedVideoIds: Set<String> = [] {
         didSet {
-            if let pending = pendingSurpriseScrollVideoId {
-                if selectedVideoIds.count != 1 || selectedVideoIds.first != pending {
-                    pendingSurpriseScrollVideoId = nil
-                }
-            }
             let added = selectedVideoIds.subtracting(oldValue)
             if let newId = added.first {
                 lastSelectedVideoId = newId
@@ -206,8 +201,6 @@ final class LibraryViewModel {
     var renamingTagId: Int64?
     var tagRenameText: String = ""
     var scrollToVideoId: String?
-    /// Surprise Me: scroll browsing pane only after detail has finished (see `finishSurpriseScrollIfNeeded`).
-    private(set) var pendingSurpriseScrollVideoId: String?
     var scrollToSelectedOnViewSwitch: Bool = false
 
     /// Imperative top/bottom/page scroll requests from the list/grid nav bar. The token de-dupes so the
@@ -1753,28 +1746,16 @@ final class LibraryViewModel {
         }
     }
 
-    /// Picks a random video from the current filtered list and selects it. Scroll is deferred until
-    /// `VideoDetailView` finishes loading/generating the filmstrip (`finishSurpriseScrollIfNeeded`).
+    /// Picks a random video from the current filtered list, selects it, and scrolls it into view.
+    /// Both List and the Wall grid already scroll-into-view whenever `scrollToVideoId` changes
+    /// (List via its `Table`'s native selection scroll, Wall grid via its own `scrollToVideoId`
+    /// handler), so this is the same mechanism Home/End and rename-completion use.
     func surpriseMePickRandom() {
         guard let random = filteredVideos.randomElement() else { return }
         selectedVideoIds = [random.id]
         lastSelectedVideoId = random.id
         pendingAutoPlay = surpriseMeAutoPlays
-        pendingSurpriseScrollVideoId = random.id
-    }
-
-    /// Schedules grid/list scroll after a short delay so playback and input are not blocked by LazyVGrid/layout work.
-    func finishSurpriseScrollIfNeeded(for videoId: String) {
-        guard pendingSurpriseScrollVideoId == videoId,
-              lastSelectedVideoId == videoId
-        else { return }
-        pendingSurpriseScrollVideoId = nil
-        let id = videoId
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(500))
-            guard lastSelectedVideoId == id else { return }
-            scrollToVideoId = id
-        }
+        scrollToVideoId = random.id
     }
 
     /// Grid keyboard navigation: move selection along `filteredVideos` (same order as list). List relies on `Table` arrow handling.
