@@ -31,6 +31,9 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **New: user-adjustable, persisted height for the Inspector's thumbnail/filmstrip (hero) area.** Same drag-handle pattern as the filters drawer (`ContentView`'s handle uses `coordinateSpace: .global` for the same "handle moves as it resizes" reason — applied here too). Minimum 72pt (1in); no maximum — the Inspector body already scrolls, so an oversized hero just pushes the rest of the panel down instead of overflowing. Persists across launches (`inspectorHeroHeight`, default 220pt); previously the hero height was recomputed live every time from 40% of the Inspector's available height (clamped 140–260pt) and wasn't adjustable at all.
+- **Compact playback now matches whatever hero height you've set.** `FloatingPlayerPanel`'s "Compact" size used to independently recompute the same 40%-of-height formula the hero used — now it reads `viewModel.inspectorHeroHeight` directly, so Compact always snaps to the footprint you've actually resized the hero to, not a separately-derived guess.
+
 ## 0.24.0 (build 629) - 2026-07-03
 
 - **New: user-adjustable, persisted height for the filters drawer**, with a resize handle at its bottom edge (shown once the drawer is fully open). Height persists across launches (default 320pt, same as before); minimum 110pt (~1.5in) — 1in was tried first but cuts off a card's header plus its first row, making the drawer useless at the floor. Two ceilings apply: the drawer can't be dragged taller than its own content (the point where its internal scrollbar disappears — growing past that would just add empty space) and can't exceed what fits in the window (so the handle always stays reachable). The content ceiling is measured live, tracking filter count/column-packing changes.

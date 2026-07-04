@@ -24,7 +24,10 @@ struct FloatingPlayerPanel: View {
 
     private var compactSize: CGSize {
         let detailWidth = CGFloat(viewModel.browsingLayout.detailColumnWidth(for: viewModel.viewMode))
-        let heroHeight = max(140, min(available.height * 0.40, 260))
+        // Matches the Inspector's user-adjustable, persisted hero height exactly (see
+        // `LibraryViewModel.inspectorHeroHeight`), so Compact always snaps to whatever footprint
+        // the user has actually set the hero to, not an independently-recomputed guess.
+        let heroHeight = viewModel.inspectorHeroHeight
         let w = min(max(detailWidth - 24, minSize.width), maxSize.width)
         let h = min(max(heroHeight + 4, minSize.height), maxSize.height)
         return CGSize(width: w, height: h)

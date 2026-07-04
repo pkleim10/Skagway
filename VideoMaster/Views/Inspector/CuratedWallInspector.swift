@@ -16,6 +16,12 @@ struct CuratedWallInspector: View {
 
     @State private var hero: NSImage?
     @State private var filmstrip: NSImage?
+    /// Captured once at the start of a hero-resize drag; see the matching pattern (and the
+    /// coordinate-space lesson) in `ContentView`'s filters-drawer resize handle.
+    @State private var heroDragStartHeight: CGFloat?
+    /// Live height while actively dragging — kept local so the persisted, `@Observable`
+    /// `viewModel.inspectorHeroHeight` is only written once, on drag end.
+    @State private var heroLiveHeight: CGFloat?
     @State private var customFieldValues: [UUID: String] = [:]
     @State private var customFieldMixed: Set<UUID> = []
     // The selection `customFieldValues` were loaded for, and the values as loaded. Together these
@@ -26,8 +32,8 @@ struct CuratedWallInspector: View {
 
 
     var body: some View {
-        GeometryReader { geo in
-            let heroH = max(140, min(geo.size.height * 0.40, 260))
+        GeometryReader { _ in
+            let heroH = max(heroLiveHeight ?? viewModel.inspectorHeroHeight, LibraryViewModel.inspectorHeroMinHeight)
 
             VStack(spacing: 0) {
                 if let v = video {
@@ -35,6 +41,8 @@ struct CuratedWallInspector: View {
                         VStack(alignment: .leading, spacing: 22) {
                             // Medium hero (the visual weight from the mock)
                             heroView(for: v, height: heroH)
+
+                            heroResizeHandle()
 
                             // Title + icon actions
                             titleAndActions(for: v)
@@ -216,6 +224,37 @@ struct CuratedWallInspector: View {
         // Center the (decorated) media in the inspector width.
         return decorated
             .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    /// Drag handle just below the hero. Global coordinate space is required here (not the
+    /// default local space): the handle sits below the hero and moves as it resizes, so in local
+    /// space `translation` drifts against the moving frame and oscillates — see the filters
+    /// drawer's resize handle (`ContentView.swift`) for the same fix and a fuller explanation.
+    private func heroResizeHandle() -> some View {
+        Capsule()
+            .fill(Color.appDivider.opacity(0.5))
+            .frame(width: 36, height: 4)
+            .frame(maxWidth: .infinity, minHeight: 12)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { value in
+                        let start = heroDragStartHeight ?? viewModel.inspectorHeroHeight
+                        heroDragStartHeight = start
+                        heroLiveHeight = max(
+                            (start + value.translation.height).rounded(),
+                            LibraryViewModel.inspectorHeroMinHeight
+                        )
+                    }
+                    .onEnded { _ in
+                        if let live = heroLiveHeight {
+                            viewModel.inspectorHeroHeight = live
+                        }
+                        heroDragStartHeight = nil
+                        heroLiveHeight = nil
+                    }
+            )
+            .help("Drag to resize the thumbnail/filmstrip area")
     }
 
     private func filmstripSeekAndPlay(at location: CGPoint, size: CGSize, video: Video) {
