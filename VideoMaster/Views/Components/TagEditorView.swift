@@ -36,6 +36,9 @@ struct TagChip: View {
 struct TagToggleChip: View {
     let tag: Tag
     let isActive: Bool
+    /// Video count for this tag under the currently active filters (excluding the tag filter
+    /// itself). Omit to hide the count entirely.
+    var count: Int? = nil
     let onToggle: (_ isAdding: Bool) -> Void
 
     // Tag chips truncate to a single line, so hovering reveals the full name in a small
@@ -75,6 +78,11 @@ struct TagToggleChip: View {
                             .hidden()
                             .background(widthReader($fullTextWidth))
                     )
+                if let count {
+                    Text("\(count)")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(isActive ? Color.white.opacity(0.75) : Color.appTextTertiary)
+                }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)

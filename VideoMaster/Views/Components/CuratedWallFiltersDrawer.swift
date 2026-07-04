@@ -531,7 +531,7 @@ struct CuratedWallFiltersDrawer: View {
     private func tagFilterRow(_ tag: Tag) -> some View {
         let id = tag.id ?? -1
         let isActive = viewModel.selectedTagIds.contains(id)
-        TagToggleChip(tag: tag, isActive: isActive) { adding in
+        TagToggleChip(tag: tag, isActive: isActive, count: viewModel.tagCounts[id] ?? 0) { adding in
             if adding {
                 viewModel.selectedTagIds.insert(id)
             } else {
