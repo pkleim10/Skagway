@@ -165,12 +165,17 @@ struct CuratedWallFiltersDrawer: View {
 
     // Reusable card container for a filter category.
     // Used so Smart Libraries / Collections / Rating / Duration / Tags appear as distinct cards.
-    private func makeFilterCard<Content: View>(
+    private func makeFilterCard<Content: View, Accessory: View>(
         title: String,
+        @ViewBuilder accessory: () -> Accessory = { EmptyView() },
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            sectionLabel(title)
+            HStack(spacing: 6) {
+                sectionLabel(title)
+                Spacer()
+                accessory()
+            }
             content()
         }
         .padding(10)
@@ -294,7 +299,13 @@ struct CuratedWallFiltersDrawer: View {
     }
 
     private var collectionsCard: some View {
-        makeFilterCard(title: "COLLECTIONS") {
+        makeFilterCard(title: "COLLECTIONS", accessory: {
+            clearFilterAccessory {
+                if case .collection = viewModel.sidebarFilter {
+                    viewModel.sidebarFilter = .all
+                }
+            }
+        }) {
             VStack(alignment: .leading, spacing: 2) {
                 if viewModel.collections.isEmpty {
                     Text("No collections yet")
@@ -319,27 +330,13 @@ struct CuratedWallFiltersDrawer: View {
                     }
                 }
 
-                HStack(spacing: 12) {
-                    // Add a new (smart) collection.
-                    Button { showNewCollectionSheet = true } label: {
-                        Label("New Collection", systemImage: "plus")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.appAccent)
-
-                    // Quick clear for the collection filter (kept local to the card for convenience)
-                    Button {
-                        if case .collection = viewModel.sidebarFilter {
-                            viewModel.sidebarFilter = .all
-                        }
-                    } label: {
-                        Label("Clear filter", systemImage: "xmark")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.appTextSecondary)
+                // Add a new (smart) collection.
+                Button { showNewCollectionSheet = true } label: {
+                    Label("New Collection", systemImage: "plus")
+                        .font(.caption)
                 }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.appAccent)
                 .padding(.top, 4)
             }
         }
@@ -473,7 +470,9 @@ struct CuratedWallFiltersDrawer: View {
     }
 
     private var tagsCard: some View {
-        makeFilterCard(title: "TAGS") {
+        makeFilterCard(title: "TAGS", accessory: {
+            clearFilterAccessory { viewModel.clearTagFilters() }
+        }) {
             VStack(alignment: .leading, spacing: 6) {
                 // Any / All mode
                 Picker("Match", selection: $viewModel.tagFilterMode) {
@@ -625,5 +624,16 @@ struct CuratedWallFiltersDrawer: View {
             .font(.caption.weight(.semibold))
             .foregroundStyle(Color.appAccent)
             .padding(.leading, 4)
+    }
+
+    /// Small "Clear filter" link for a card's header row, right-aligned next to its title.
+    private func clearFilterAccessory(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label("Clear filter", systemImage: "xmark")
+                .font(.caption2)
+                .labelStyle(.titleAndIcon)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.appTextSecondary)
     }
 }
