@@ -473,6 +473,10 @@ private struct LibraryContentView: View {
             .fill(Color.appTextSecondary.opacity(0.55))
             .frame(width: 36, height: 4)
             .frame(maxWidth: .infinity, minHeight: Self.filtersDrawerHandleHeight)
+            // Matches the Inspector hero handle's backdrop exactly (same dark navy) — without an
+            // explicit background here, this row shows the plain wall/window background instead,
+            // a visibly lighter charcoal that breaks the otherwise-consistent dark surroundings.
+            .background(CuratedWallInspector.inspectorBackground)
             .contentShape(Rectangle())
             .gesture(
                 // Global coordinate space avoids a feedback loop: the handle is laid out below the
