@@ -31,6 +31,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Fix: excess space around the Inspector hero's resize handle.** It was just another child of the section VStack (22pt spacing), so it got a full 22pt gap on *both* sides instead of hugging the hero it resizes. Grouped the hero and its handle into their own tightly-spaced sub-stack (2pt) so the 22pt section gap only applies once, between the hero+handle group and the title below; also trimmed the handle's own hit-target padding (12pt → 8pt).
 - **New: user-adjustable, persisted height for the Inspector's thumbnail/filmstrip (hero) area.** Same drag-handle pattern as the filters drawer (`ContentView`'s handle uses `coordinateSpace: .global` for the same "handle moves as it resizes" reason — applied here too). Minimum 72pt (1in); no maximum — the Inspector body already scrolls, so an oversized hero just pushes the rest of the panel down instead of overflowing. Persists across launches (`inspectorHeroHeight`, default 220pt); previously the hero height was recomputed live every time from 40% of the Inspector's available height (clamped 140–260pt) and wasn't adjustable at all.
 - **Compact playback now matches whatever hero height you've set.** `FloatingPlayerPanel`'s "Compact" size used to independently recompute the same 40%-of-height formula the hero used — now it reads `viewModel.inspectorHeroHeight` directly, so Compact always snaps to the footprint you've actually resized the hero to, not a separately-derived guess.
 

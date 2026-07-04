@@ -39,10 +39,13 @@ struct CuratedWallInspector: View {
                 if let v = video {
                     ScrollView(.vertical, showsIndicators: false) {
                         VStack(alignment: .leading, spacing: 22) {
-                            // Medium hero (the visual weight from the mock)
-                            heroView(for: v, height: heroH)
-
-                            heroResizeHandle()
+                            // Hero + its resize handle grouped tightly (own sub-stack) so the
+                            // handle hugs the hero's bottom edge — the outer 22pt section spacing
+                            // would otherwise add a full gap on *both* sides of the handle.
+                            VStack(alignment: .leading, spacing: 2) {
+                                heroView(for: v, height: heroH)
+                                heroResizeHandle()
+                            }
 
                             // Title + icon actions
                             titleAndActions(for: v)
@@ -234,7 +237,7 @@ struct CuratedWallInspector: View {
         Capsule()
             .fill(Color.appDivider.opacity(0.5))
             .frame(width: 36, height: 4)
-            .frame(maxWidth: .infinity, minHeight: 12)
+            .frame(maxWidth: .infinity, minHeight: 8)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 1, coordinateSpace: .global)
