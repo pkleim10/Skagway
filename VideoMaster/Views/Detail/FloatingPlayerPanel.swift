@@ -17,6 +17,11 @@ struct FloatingPlayerPanel: View {
     /// Center snapshot at the start of any drag, used to compute the delta.
     @State private var dragStartCenter: CGPoint?
 
+    /// The title bar (drag) and size-control buttons only show while the mouse is over the
+    /// panel, fading out ~1s after it leaves (the resize handle stays always visible).
+    @State private var controlsVisible = false
+    @State private var controlsHideTask: Task<Void, Never>?
+
     private let minSize = CGSize(width: 240, height: 140)
     private let outerPadding: CGFloat = 12
 
@@ -102,27 +107,49 @@ struct FloatingPlayerPanel: View {
     // MARK: - Panel content
 
     private var panelContent: some View {
-        OverlayInlinePlayerView(video: video, viewModel: viewModel)
+        OverlayInlinePlayerView(video: video, viewModel: viewModel, controlsVisible: controlsVisible)
             .frame(width: size.width, height: size.height)
             .clipShape(RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
                     .stroke(Color.appAccent.opacity(0.3), lineWidth: 1)
             )
-            .overlay(alignment: .bottomTrailing) { sizeControls }
+            .overlay(alignment: .bottomTrailing) {
+                sizeControls
+                    .opacity(controlsVisible ? 1 : 0)
+                    .allowsHitTesting(controlsVisible)
+            }
             .overlay(alignment: .bottomLeading)  { resizeHandle }
-            .overlay(alignment: .top)            { titleBarDragArea }
+            .overlay(alignment: .top)            {
+                titleBarDragArea
+                    .opacity(controlsVisible ? 1 : 0)
+                    .allowsHitTesting(controlsVisible)
+            }
             .shadow(color: .black.opacity(0.45), radius: 18, x: 0, y: 8)
             .padding(outerPadding)
+            .onHover { hovering in
+                controlsHideTask?.cancel()
+                if hovering {
+                    controlsHideTask = nil
+                    withAnimation(.easeInOut(duration: 0.15)) { controlsVisible = true }
+                } else {
+                    controlsHideTask = Task {
+                        try? await Task.sleep(for: .seconds(1))
+                        guard !Task.isCancelled else { return }
+                        withAnimation(.easeInOut(duration: 0.3)) { controlsVisible = false }
+                    }
+                }
+            }
     }
 
     // MARK: - Title bar drag
 
-    /// Transparent 24 pt overlay on the header; drag moves the panel, taps pass through to the
-    /// underlying close button (DragGesture fires only after minimumDistance movement).
+    /// Transparent 30 pt (25% larger than the original 24pt) overlay on the header; drag moves
+    /// the panel. Only hit-testable while `controlsVisible` (see `panelContent`), which also means
+    /// it's never active unless the mouse is already over the panel to begin with.
     private var titleBarDragArea: some View {
         Color.clear
-            .frame(height: 24 + outerPadding)
+            .frame(height: 30 + outerPadding)
             .contentShape(Rectangle())
             .simultaneousGesture(
                 DragGesture(minimumDistance: 4, coordinateSpace: .global)
@@ -181,11 +208,12 @@ struct FloatingPlayerPanel: View {
     private func iconButton(_ systemName: String, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.caption2.weight(.semibold))
+                // 14pt vs. the original .caption2 (~11pt) — 25% larger, matching the drag bar.
+                .font(.system(size: 14, weight: .semibold))
         }
         .buttonStyle(.plain)
         .foregroundStyle(Color.appTextSecondary)
-        .padding(.horizontal, 6).padding(.vertical, 2)
+        .padding(.horizontal, 8).padding(.vertical, 3)
         .background(Color.appSurface.opacity(0.85), in: Capsule())
         .help(help)
     }

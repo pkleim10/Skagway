@@ -9,6 +9,9 @@ import SwiftUI
 struct OverlayInlinePlayerView: View {
     let video: Video
     @Bindable var viewModel: LibraryViewModel
+    /// Whether the title bar is currently shown — driven by `FloatingPlayerPanel`'s hover
+    /// tracking, so this fades in/out together with the panel's other controls.
+    let controlsVisible: Bool
 
     private var playback: InlinePlaybackController { viewModel.playback }
 
@@ -24,7 +27,8 @@ struct OverlayInlinePlayerView: View {
                                    onRestartFromBeginning: { playback.restartFromBeginning() })
                     .appMediaFrame(cornerRadius: AppRadius.lg)
                     .padding(.horizontal, 10)
-                    .padding(.top, 28)   // leave room for the compact header
+                    .padding(.top, 34)   // leave room for the (25%-larger) header, always — it
+                                         // occupies this space whether visible or faded out
                     .padding(.bottom, 10)
 
                 SubtitleOverlayContainer(track: playback.subtitleTrack)
@@ -35,14 +39,16 @@ struct OverlayInlinePlayerView: View {
                     }
                     .opacity(playback.resumeBannerOpacity)
                     .padding(.horizontal, 10)
-                    .padding(.top, 34)   // clear the compact header strip
+                    .padding(.top, 40)   // clear the header strip
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
             }
 
             // Minimal header bar — signals that this is a placed, first-class player panel
-            // rather than video that just happens to be here.
+            // rather than video that just happens to be here. Only shown on hover (see
+            // `FloatingPlayerPanel`), fading with the rest of the panel's controls.
             overlayHeader
+                .opacity(controlsVisible ? 1 : 0)
 
             if let playerError = playback.playerError {
                 errorOverlay(playerError)
@@ -65,13 +71,15 @@ struct OverlayInlinePlayerView: View {
     private var overlayHeader: some View {
         HStack(spacing: 6) {
             Text(video.fileName)
-                .font(.system(size: 11, weight: .medium))
+                // 14pt / 30pt bar — 25% larger than the original 11pt / 24pt, matching the
+                // size-control buttons in FloatingPlayerPanel.
+                .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(Color.appTextSecondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
         .padding(.horizontal, 10)
-        .frame(height: 24)
+        .frame(height: 30)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             Rectangle()
