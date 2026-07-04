@@ -132,6 +132,9 @@ private struct LibraryContentView: View {
             return vm.scanProgress.isEmpty ? "Importing…" : vm.scanProgress
         }
         if !vm.scanProgress.isEmpty { return vm.scanProgress }
+        if vm.isFingerprintingInProgress {
+            return "Fingerprinting for duplicates \(vm.fingerprintBackfillDone)/\(vm.fingerprintBackfillTotal)"
+        }
         let total = "\(vm.filteredVideos.count) videos"
         let sel = vm.selectedVideoIds.count
         return sel > 1 ? "\(total), \(sel) selected" : total

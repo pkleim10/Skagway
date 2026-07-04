@@ -310,6 +310,11 @@ final class LibraryViewModel {
     private var isBackfillingFingerprints = false
     /// Ensures the backfill is kicked off only once per session (see `kickOffFingerprintBackfillIfNeeded`).
     private var didKickOffFingerprintBackfill = false
+    /// Live progress of the fingerprint backfill, surfaced in the header status while it runs.
+    /// `total == 0` means not currently running.
+    private(set) var fingerprintBackfillTotal: Int = 0
+    private(set) var fingerprintBackfillDone: Int = 0
+    var isFingerprintingInProgress: Bool { fingerprintBackfillTotal > 0 }
 
     let dbPool: DatabasePool
     let videoRepo: VideoRepository
@@ -1210,6 +1215,9 @@ final class LibraryViewModel {
             // Let launch settle (initial thumbnail/preview work) before doing a bunch of file
             // reads, so the backfill doesn't compete with getting the UI on screen.
             try? await Task.sleep(for: .seconds(3))
+            fingerprintBackfillTotal = pending.count
+            fingerprintBackfillDone = 0
+            defer { fingerprintBackfillTotal = 0; fingerprintBackfillDone = 0 }
             let chunkSize = 300
             var index = 0
             while index < pending.count {
@@ -1246,6 +1254,7 @@ final class LibraryViewModel {
                     try? await videoRepo.updateContentFingerprint(updates: updates)
                 }
                 index = end
+                fingerprintBackfillDone = end   // processed so far (drives the header status)
             }
             isBackfillingFingerprints = false
         }

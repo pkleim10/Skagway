@@ -31,6 +31,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **The fingerprint backfill now shows live progress in the header status** ("Fingerprinting for duplicates 3,300/11,994") while it runs, so the background pass is visible instead of silent.
 - **Fix: the Duplicates fingerprint backfill never ran, so existing videos were never detected as duplicates.** It was kicked off from `startObserving()` while the video list was still empty (the DB observation is async), so it no-op'd and every pre-existing video kept a null fingerprint — meaning a freshly-imported file (fingerprinted at import) could never match its already-in-library twin. Now the backfill fires from the observation's first non-empty delivery (once per session) and reads unfingerprinted files off-main after a short launch-settle delay. It writes in chunks (300 at a time, ~6 reads in parallel) so progress persists if you quit mid-pass and the Duplicates set fills in progressively rather than only after the whole library has been read.
 
 - **Duplicates smart library reworked to be accurate and correctable.**
