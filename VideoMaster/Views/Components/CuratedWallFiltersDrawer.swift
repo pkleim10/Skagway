@@ -10,6 +10,7 @@ struct CuratedWallFiltersDrawer: View {
     @State private var hoverRating: Int?
     @State private var showNewCollectionSheet = false
     @State private var editingCollection: VideoCollection?
+    @State private var showAllCollections = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -250,39 +251,38 @@ struct CuratedWallFiltersDrawer: View {
                         .font(.caption)
                         .foregroundStyle(Color.appTextTertiary)
                 } else {
-                    let maxShow = 6
-                    let shown = Array(viewModel.collections.prefix(maxShow))
-                    ForEach(shown, id: \.listId) { collection in
-                        let isSelected: Bool = {
-                            if case .collection(let c) = viewModel.sidebarFilter, c.id == collection.id { return true }
-                            return false
-                        }()
-                        Button {
-                            viewModel.sidebarFilter = .collection(collection)
-                        } label: {
-                            HStack {
-                                Text(collection.name)
-                                    .foregroundStyle(isSelected ? Color.appTextPrimary : Color.appTextSecondary)
-                                Spacer()
-                                if let id = collection.id, let c = viewModel.collectionCounts[id] {
-                                    Text("\(c)").font(.caption.monospacedDigit()).foregroundStyle(Color.appTextTertiary)
+                    let collapsedLimit = 6
+                    let isOverflowing = viewModel.collections.count > collapsedLimit
+                    let expanded = showAllCollections || !isOverflowing
+
+                    if expanded && isOverflowing {
+                        // Explicitly expanded and long enough to need it: scroll internally
+                        // rather than growing this card past its usual visual weight.
+                        ScrollView(.vertical) {
+                            LazyVStack(alignment: .leading, spacing: 2) {
+                                ForEach(viewModel.collections, id: \.listId) { collection in
+                                    collectionRow(collection)
                                 }
                             }
-                            .padding(.vertical, 3)
-                            .padding(.horizontal, 8)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(isSelected ? Color.appAccent.opacity(0.12) : .clear)
-                            )
+                        }
+                        .frame(maxHeight: 168)
+                        .scrollIndicators(.visible)
+                    } else {
+                        ForEach(expanded ? viewModel.collections : Array(viewModel.collections.prefix(collapsedLimit)), id: \.listId) { collection in
+                            collectionRow(collection)
+                        }
+                    }
+
+                    if isOverflowing {
+                        Button {
+                            showAllCollections.toggle()
+                        } label: {
+                            Text(showAllCollections ? "Show Less" : "Show All (\(viewModel.collections.count))")
+                                .font(.caption)
                         }
                         .buttonStyle(.plain)
-                        .contextMenu {
-                            Button("Edit Collection\u{2026}") { editingCollection = collection }
-                            Divider()
-                            Button("Delete Collection", role: .destructive) {
-                                Task { await viewModel.deleteCollection(collection) }
-                            }
-                        }
+                        .foregroundStyle(Color.appAccent)
+                        .padding(.top, 2)
                     }
                 }
 
@@ -308,6 +308,40 @@ struct CuratedWallFiltersDrawer: View {
                     .foregroundStyle(Color.appTextSecondary)
                 }
                 .padding(.top, 4)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func collectionRow(_ collection: VideoCollection) -> some View {
+        let isSelected: Bool = {
+            if case .collection(let c) = viewModel.sidebarFilter, c.id == collection.id { return true }
+            return false
+        }()
+        Button {
+            viewModel.sidebarFilter = .collection(collection)
+        } label: {
+            HStack {
+                Text(collection.name)
+                    .foregroundStyle(isSelected ? Color.appTextPrimary : Color.appTextSecondary)
+                Spacer()
+                if let id = collection.id, let c = viewModel.collectionCounts[id] {
+                    Text("\(c)").font(.caption.monospacedDigit()).foregroundStyle(Color.appTextTertiary)
+                }
+            }
+            .padding(.vertical, 3)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isSelected ? Color.appAccent.opacity(0.12) : .clear)
+            )
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button("Edit Collection\u{2026}") { editingCollection = collection }
+            Divider()
+            Button("Delete Collection", role: .destructive) {
+                Task { await viewModel.deleteCollection(collection) }
             }
         }
     }
