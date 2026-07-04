@@ -77,6 +77,11 @@ struct CuratedWallInspector: View {
             loadCustomFieldValues()
             hero = nil
             filmstrip = nil
+            // Re-validate a corrupt video on reselect — covers files repaired externally after
+            // import (no-ops instantly unless the video is currently flagged corrupt).
+            if let video {
+                Task { await viewModel.refreshMetadataIfCorrupt(for: video) }
+            }
             // The unassigned-tags "blind" behavior on selection change is user-configurable
             // (Settings → Tags); `.lastUsed` intentionally leaves `showUnassigned` untouched.
             switch viewModel.tagBlindDefaultState {
