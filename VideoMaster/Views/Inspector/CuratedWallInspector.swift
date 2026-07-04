@@ -605,13 +605,15 @@ struct CuratedWallInspector: View {
                         .buttonStyle(.plain)
                 }
 
-                // List 2 — unassigned tags; tap to assign, right-click to rename/delete.
-                if unassigned.isEmpty {
-                    Text("Every tag is already assigned to this video.")
+                // List 2 — every tag, stable alphabetical order; tap an unapplied one to assign
+                // it. Already-applied tags stay in place, greyed out, rather than disappearing —
+                // right-click still works on any tag to rename/delete.
+                if all.isEmpty {
+                    Text("No tags yet — create one above.")
                         .font(.caption2)
                         .foregroundStyle(Color.appTextTertiary)
                 } else {
-                    tagChipGrid(unassigned, applied: false, withMenu: true)
+                    tagChipGrid(all, withMenu: true)
                 }
             }
         }
@@ -641,20 +643,17 @@ struct CuratedWallInspector: View {
         }
     }
 
-    /// A flexible grid of tag chips. `applied` sets the tap action (unassign vs assign) and styling;
-    /// `withMenu` adds the rename/delete context menu (used on the unassigned list only).
-    private func tagChipGrid(_ tags: [Tag], applied: Bool, withMenu: Bool) -> some View {
+    /// A flexible grid of every tag in stable (alphabetical) order for the "Add tags" list.
+    /// Tags already applied to the selection render greyed out and inert instead of being
+    /// filtered out, so the list never reshuffles as tags are added — see `InspectorTagChip`.
+    /// `withMenu` adds the rename/delete context menu.
+    private func tagChipGrid(_ tags: [Tag], withMenu: Bool) -> some View {
         let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 6)
         return LazyVGrid(columns: columns, alignment: .leading, spacing: 4) {
             ForEach(tags) { tag in
-                let chip = InspectorTagChip(tag: tag, applied: applied) {
-                    Task {
-                        if applied {
-                            await viewModel.removeTag(tag, fromVideos: selectedIds)
-                        } else {
-                            await viewModel.addTag(tag.name, toVideos: selectedIds)
-                        }
-                    }
+                let isApplied = isTagAppliedToSelection(tag)
+                let chip = InspectorTagChip(tag: tag, applied: false, isDisabled: isApplied) {
+                    Task { await viewModel.addTag(tag.name, toVideos: selectedIds) }
                 }
                 if withMenu {
                     chip.contextMenu {
@@ -711,6 +710,10 @@ struct CuratedWallInspector: View {
 private struct InspectorTagChip: View {
     let tag: Tag
     let applied: Bool
+    /// True for a tag already applied to the selection when shown in the "Add tags" list —
+    /// greyed out and inert (tap does nothing) rather than removed, so that list's ordering
+    /// never reshuffles as tags are added. Unassigning still happens via the assigned list.
+    var isDisabled: Bool = false
     /// Fill the container width (grid cells) vs. hug the content (packed flow layout).
     var fillWidth: Bool = true
     let onToggle: () -> Void
@@ -728,7 +731,10 @@ private struct InspectorTagChip: View {
     private var chipFont: Font { applied ? .caption.weight(.semibold) : .caption }
 
     var body: some View {
-        Button(action: onToggle) {
+        Button {
+            guard !isDisabled else { return }
+            onToggle()
+        } label: {
             Text(tag.name)
                 .font(chipFont)
                 .lineLimit(1)
@@ -749,6 +755,7 @@ private struct InspectorTagChip: View {
                     Capsule().stroke(applied ? Color.appAccent : Color.clear, lineWidth: 1)
                 )
                 .clipShape(Capsule())
+                .opacity(isDisabled ? 0.35 : 1.0)
         }
         .buttonStyle(.plain)
         .frame(maxWidth: fillWidth ? .infinity : nil, alignment: .leading)
