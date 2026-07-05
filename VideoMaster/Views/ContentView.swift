@@ -140,6 +140,12 @@ private struct LibraryContentView: View {
         return sel > 1 ? "\(total), \(sel) selected" : total
     }
 
+    /// True while the header status is showing a failure (`reportTransientError`/scan `.error`),
+    /// so it can be styled to actually draw the eye instead of blending in with normal status text.
+    private var isHeaderStatusError: Bool {
+        headerStatusText.hasPrefix("Error:")
+    }
+
     /// True while any re-encode job is queued or running (drives the spinner in the pill).
     private var isConversionActive: Bool {
         vm.conversionJobs.contains { $0.isActive }
@@ -332,12 +338,19 @@ private struct LibraryContentView: View {
 
             Spacer()
 
-            // Video count (light) — replaced by scan progress while importing.
+            // Video count (light) — replaced by scan progress while importing, or a red error pill
+            // (reportTransientError / scan .error) so a failure actually draws the eye.
             Text(headerStatusText)
-                .font(.system(size: 10))
-                .foregroundStyle(Color.appTextTertiary)
+                .font(.system(size: 10, weight: isHeaderStatusError ? .semibold : .regular))
+                .foregroundStyle(isHeaderStatusError ? .white : Color.appTextTertiary)
                 .monospacedDigit()
+                .padding(.horizontal, isHeaderStatusError ? 8 : 0)
+                .padding(.vertical, isHeaderStatusError ? 3 : 0)
+                .background(
+                    Capsule().fill(isHeaderStatusError ? Color.red : Color.clear)
+                )
                 .padding(.trailing, 4)
+                .animation(.easeInOut(duration: 0.15), value: isHeaderStatusError)
 
             // Re-encode queue pill — click to open the queue manager.
             if vm.hasConversionActivity {
