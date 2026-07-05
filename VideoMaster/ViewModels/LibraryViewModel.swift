@@ -2804,6 +2804,19 @@ final class LibraryViewModel {
         persistConversionJobs()
     }
 
+    /// Bulk-removes queue rows for completed jobs whose backup is already gone (deleted
+    /// individually or via "Delete All Backups") — nothing left to Restore/Delete Backup for
+    /// them, so they're just clutter. Narrower than "remove every completed job": one still
+    /// holding its backup stays, since Restore/Delete Backup remain meaningful actions for it.
+    func clearConvertedJobsWithDeletedBackup() {
+        let hasAny = conversionJobs.contains { $0.isCompleted && $0.backupPath == nil }
+        guard hasAny else { return }
+        conversionJobs.removeAll { $0.isCompleted && $0.backupPath == nil }
+        persistConversionJobs()
+        updateLibraryCounts()
+        recomputeFilteredVideos()
+    }
+
     /// Undo a conversion: trash the converted `.mp4`, rename the backup back to the original
     /// name, and revert the DB record. Drops the job row on success.
     func restoreConversionBackup(_ id: UUID) async {

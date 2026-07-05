@@ -11,6 +11,11 @@ struct ConversionQueueView: View {
         vm.conversionJobs.contains { $0.isCompleted && $0.backupPath != nil }
     }
 
+    /// Completed jobs whose backup is already gone — nothing left to manage, just clutter.
+    private var hasClearableJobs: Bool {
+        vm.conversionJobs.contains { $0.isCompleted && $0.backupPath == nil }
+    }
+
     private var firstQueuedId: UUID? {
         vm.conversionJobs.first { $0.status == .queued }?.id
     }
@@ -45,6 +50,12 @@ struct ConversionQueueView: View {
                 .font(.headline)
                 .foregroundStyle(Color.appTextPrimary)
             Spacer()
+            if hasClearableJobs {
+                Button("Clear") { vm.clearConvertedJobsWithDeletedBackup() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.appTextSecondary)
+            }
             if hasAnyBackup {
                 Button("Delete All Backups") { vm.deleteAllConversionBackups() }
                     .buttonStyle(.plain)
