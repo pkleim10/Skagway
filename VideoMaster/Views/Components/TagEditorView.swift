@@ -1,38 +1,5 @@
 import SwiftUI
 
-struct TagChip: View {
-    let tag: Tag
-    let onRemove: () -> Void
-
-    @State private var isHovering = false
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Text(tag.name)
-                .font(.caption)
-
-            if isHovering {
-                Button(action: onRemove) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .transition(.scale.combined(with: .opacity))
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Color.appAccent.opacity(0.18))
-        .clipShape(Capsule())
-        .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) {
-                isHovering = hovering
-            }
-        }
-    }
-}
-
 struct TagToggleChip: View {
     let tag: Tag
     let isActive: Bool
