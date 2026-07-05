@@ -34,17 +34,42 @@ extension VideoCollection: FetchableRecord, MutablePersistableRecord {
     }
 }
 
+// MARK: - Collection Rule Group
+
+/// A cluster of rules within a collection. Rules inside a group combine with `matchMode`; groups
+/// themselves combine with the parent `VideoCollection.matchMode` — the "OR of AND-groups" (and
+/// vice versa) two-level scheme that lets a collection express mixed AND/OR logic.
+struct CollectionRuleGroup: Codable, Identifiable, Equatable, Hashable {
+    var id: Int64?
+    var collectionId: Int64
+    var orderIndex: Int
+    var matchMode: MatchMode
+
+    private enum CodingKeys: String, CodingKey {
+        case id, collectionId, orderIndex, matchMode
+    }
+}
+
+extension CollectionRuleGroup: FetchableRecord, MutablePersistableRecord {
+    static let databaseTableName = "collection_rule_group"
+
+    mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
+    }
+}
+
 // MARK: - Collection Rule
 
 struct CollectionRule: Codable, Identifiable, Equatable, Hashable {
     var id: Int64?
     var collectionId: Int64
+    var groupId: Int64
     var attribute: RuleAttribute
     var comparison: RuleComparison
     var value: String
 
     private enum CodingKeys: String, CodingKey {
-        case id, collectionId, attribute, comparison, value
+        case id, collectionId, groupId, attribute, comparison, value
     }
 }
 

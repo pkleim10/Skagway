@@ -137,6 +137,41 @@ enum DatabaseMigration {
             }
         }
 
+        migrator.registerMigration("v9_collectionRuleGroups") { db in
+            // Two-level AND/OR grouping: rules now cluster into groups (mode within a group), and
+            // the collection's existing `matchMode` becomes the mode *between* groups. Every
+            // existing collection's flat rule list is backfilled into a single default group so
+            // behavior is unchanged (a lone group's outer combination mode is a no-op).
+            try db.create(table: "collection_rule_group") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("collectionId", .integer).notNull().references("collection", onDelete: .cascade)
+                t.column("orderIndex", .integer).notNull()
+                t.column("matchMode", .text).notNull().defaults(to: "all")
+            }
+            try db.create(
+                index: "idx_collection_rule_group_collectionId",
+                on: "collection_rule_group",
+                columns: ["collectionId"]
+            )
+
+            try db.alter(table: "collection_rule") { t in
+                t.add(column: "groupId", .integer).references("collection_rule_group", onDelete: .cascade)
+            }
+
+            let collectionIds = try Int64.fetchAll(db, sql: "SELECT id FROM collection")
+            for collectionId in collectionIds {
+                try db.execute(
+                    sql: "INSERT INTO collection_rule_group (collectionId, orderIndex, matchMode) VALUES (?, 0, 'all')",
+                    arguments: [collectionId]
+                )
+                let groupId = db.lastInsertedRowID
+                try db.execute(
+                    sql: "UPDATE collection_rule SET groupId = ? WHERE collectionId = ?",
+                    arguments: [groupId, collectionId]
+                )
+            }
+        }
+
         try migrator.migrate(pool)
     }
 }

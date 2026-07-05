@@ -287,6 +287,7 @@ final class LibraryViewModel {
     private(set) var filteredVideosVersion: Int = 0
     var libraryCounts = LibraryCounts()
     private var cachedCollectionRules: [Int64: [CollectionRule]] = [:]
+    private var cachedCollectionRuleGroups: [Int64: [CollectionRuleGroup]] = [:]
     private var collectionCountTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
     private var ftsMatchIds: Set<String>?
@@ -1325,6 +1326,7 @@ final class LibraryViewModel {
             videos: videos,
             tagsByVideoId: tagsByVideoId,
             cachedCollectionRules: cachedCollectionRules,
+            cachedCollectionRuleGroups: cachedCollectionRuleGroups,
             sidebarFilter: sidebarFilter,
             selectedTagIds: selectedTagIds,
             tagFilterMode: tagFilterMode,
@@ -1362,6 +1364,7 @@ final class LibraryViewModel {
         let videos: [Video]
         let tagsByVideoId: [Int64: [Tag]]
         let cachedCollectionRules: [Int64: [CollectionRule]]
+        let cachedCollectionRuleGroups: [Int64: [CollectionRuleGroup]]
         let sidebarFilter: SidebarFilter?
         let selectedTagIds: Set<Int64>
         let tagFilterMode: MatchMode
@@ -1574,11 +1577,13 @@ final class LibraryViewModel {
             guard let collectionId = collection.id else {
                 return ([], [:])
             }
-            let rules = snapshot.cachedCollectionRules[collectionId] ?? []
-            if rules.isEmpty {
+            let groups = snapshot.cachedCollectionRuleGroups[collectionId] ?? []
+            if groups.isEmpty {
                 return ([], [:])
             }
-            let matcher = collectionRepo.compile(rules: rules, mode: collection.matchMode)
+            let rules = snapshot.cachedCollectionRules[collectionId] ?? []
+            let rulesByGroup = Dictionary(grouping: rules, by: \.groupId)
+            let matcher = collectionRepo.compileMatcher(for: collection, groups: groups, rulesByGroup: rulesByGroup)
             baseResult = baseResult.filter { video in
                 matcher.matches(video, tags: snapshot.tagsByVideoId[video.databaseId ?? -1] ?? [])
             }
@@ -1854,15 +1859,13 @@ final class LibraryViewModel {
             result = result.filter { missingVideoIds.contains($0.id) }
         case .collection(let collection):
             guard let collectionId = collection.id else { return [] }
+            let groups = cachedCollectionRuleGroups[collectionId] ?? []
+            if groups.isEmpty { return [] }
             let rules = cachedCollectionRules[collectionId] ?? []
-            if rules.isEmpty { return [] }
+            let rulesByGroup = Dictionary(grouping: rules, by: \.groupId)
+            let matcher = collectionRepo.compileMatcher(for: collection, groups: groups, rulesByGroup: rulesByGroup)
             result = result.filter { video in
-                collectionRepo.matchesRules(
-                    video: video,
-                    rules: rules,
-                    tags: tagsByVideoId[video.databaseId ?? -1] ?? [],
-                    mode: collection.matchMode
-                )
+                matcher.matches(video, tags: tagsByVideoId[video.databaseId ?? -1] ?? [])
             }
         default:
             break
@@ -3365,6 +3368,7 @@ final class LibraryViewModel {
     func loadCollections() async {
         collections = (try? await collectionRepo.fetchAll()) ?? []
         cachedCollectionRules = (try? await collectionRepo.fetchAllRulesGrouped()) ?? [:]
+        cachedCollectionRuleGroups = (try? await collectionRepo.fetchAllRuleGroupsGrouped()) ?? [:]
         await refreshTagsByVideoId()
         await refreshCollectionCounts()
         recomputeFilteredVideos()
@@ -3385,6 +3389,7 @@ final class LibraryViewModel {
         let baseVideos = excludeCorrupt ? videos.filter { !Self.isCorrupt($0, thumbnailsSettled: thumbnailsSettled) } : videos
         let currentTags = tagsByVideoId
         let allRules = cachedCollectionRules
+        let allGroups = cachedCollectionRuleGroups
         let cols = collections
         let repo = collectionRepo
 
@@ -3392,9 +3397,10 @@ final class LibraryViewModel {
             var counts: [Int64: Int] = [:]
             for collection in cols {
                 guard let id = collection.id else { continue }
-                let rules = allRules[id] ?? []
-                if rules.isEmpty { continue }
-                let matcher = repo.compile(rules: rules, mode: collection.matchMode)
+                let groups = allGroups[id] ?? []
+                if groups.isEmpty { continue }
+                let rulesByGroup = Dictionary(grouping: allRules[id] ?? [], by: \.groupId)
+                let matcher = repo.compileMatcher(for: collection, groups: groups, rulesByGroup: rulesByGroup)
                 counts[id] = baseVideos.filter { video in
                     matcher.matches(video, tags: currentTags[video.databaseId ?? -1] ?? [])
                 }.count

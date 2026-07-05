@@ -33,7 +33,16 @@ struct CollectionRepository {
         }
     }
 
-    // MARK: - Rules CRUD
+    // MARK: - Rule Groups CRUD
+
+    func fetchRuleGroups(for collectionId: Int64) async throws -> [CollectionRuleGroup] {
+        try await dbPool.read { db in
+            try CollectionRuleGroup
+                .filter(Column("collectionId") == collectionId)
+                .order(Column("orderIndex").asc)
+                .fetchAll(db)
+        }
+    }
 
     func fetchRules(for collectionId: Int64) async throws -> [CollectionRule] {
         try await dbPool.read { db in
@@ -43,17 +52,10 @@ struct CollectionRepository {
         }
     }
 
-    func replaceRules(for collectionId: Int64, with rules: [CollectionRule]) async throws {
-        try await dbPool.write { db in
-            try CollectionRule
-                .filter(Column("collectionId") == collectionId)
-                .deleteAll(db)
-
-            for rule in rules {
-                var r = rule
-                r.collectionId = collectionId
-                try r.insert(db)
-            }
+    func fetchAllRuleGroupsGrouped() async throws -> [Int64: [CollectionRuleGroup]] {
+        try await dbPool.read { db in
+            let groups = try CollectionRuleGroup.order(Column("orderIndex").asc).fetchAll(db)
+            return Dictionary(grouping: groups, by: \.collectionId)
         }
     }
 
@@ -64,18 +66,28 @@ struct CollectionRepository {
         }
     }
 
-    // MARK: - Matching
+    /// Replaces every rule group (and its rules) for a collection in one transaction. Deleting the
+    /// old groups cascades to delete their rules (`collection_rule.groupId` FK `onDelete: .cascade`).
+    func replaceRuleGroups(
+        for collectionId: Int64,
+        with groups: [(mode: MatchMode, rules: [CollectionRule])]
+    ) async throws {
+        try await dbPool.write { db in
+            try CollectionRuleGroup
+                .filter(Column("collectionId") == collectionId)
+                .deleteAll(db)
 
-    func filterVideos(
-        _ videos: [Video],
-        for collection: VideoCollection,
-        tagsByVideoId: [Int64: [Tag]]
-    ) async throws -> [Video] {
-        guard let collectionId = collection.id else { return [] }
-        let rules = try await fetchRules(for: collectionId)
-        if rules.isEmpty { return [] }
-        return videos.filter { video in
-            matchesAllRules(video: video, rules: rules, tags: tagsByVideoId[video.databaseId ?? -1] ?? [])
+            for (index, group) in groups.enumerated() {
+                var g = CollectionRuleGroup(collectionId: collectionId, orderIndex: index, matchMode: group.mode)
+                try g.insert(db)
+                guard let groupId = g.id else { continue }
+                for rule in group.rules {
+                    var r = rule
+                    r.collectionId = collectionId
+                    r.groupId = groupId
+                    try r.insert(db)
+                }
+            }
         }
     }
 }
@@ -83,33 +95,48 @@ struct CollectionRepository {
 // MARK: - Rule Matching Engine
 
 extension CollectionRepository {
-    /// A rule set compiled once into per-rule predicates. Rule values are parsed, comparison strings
-    /// lowercased, and regexes compiled a single time here — the old per-video path re-did all of that on
-    /// every one of ~12k calls (~90ms/rule). Build once per rule set, then evaluate per video.
-    struct CompiledMatcher {
-        fileprivate let mode: MatchMode
-        fileprivate let predicates: [(Video, [Tag]) -> Bool]
+    /// A collection's rule groups compiled once into per-rule predicates, clustered by group.
+    /// Rules within a group combine via the group's mode; groups combine via `outerMode`. Rule
+    /// values are parsed, comparison strings lowercased, and regexes compiled a single time here —
+    /// the old per-video path re-did all of that on every one of ~12k calls (~90ms/rule). Build
+    /// once per rule set, then evaluate per video.
+    struct GroupedMatcher {
+        fileprivate let outerMode: MatchMode
+        fileprivate let groups: [(mode: MatchMode, predicates: [(Video, [Tag]) -> Bool])]
 
         func matches(_ video: Video, tags: [Tag]) -> Bool {
-            switch mode {
-            case .all: return predicates.allSatisfy { $0(video, tags) }
-            case .any: return predicates.contains { $0(video, tags) }
+            guard !groups.isEmpty else { return false }
+            func groupMatches(_ group: (mode: MatchMode, predicates: [(Video, [Tag]) -> Bool])) -> Bool {
+                guard !group.predicates.isEmpty else { return false }
+                switch group.mode {
+                case .all: return group.predicates.allSatisfy { $0(video, tags) }
+                case .any: return group.predicates.contains { $0(video, tags) }
+                }
+            }
+            switch outerMode {
+            case .all: return groups.allSatisfy(groupMatches)
+            case .any: return groups.contains(where: groupMatches)
             }
         }
     }
 
-    func compile(rules: [CollectionRule], mode: MatchMode) -> CompiledMatcher {
-        CompiledMatcher(mode: mode, predicates: rules.map { Self.compileRule($0) })
+    func compile(groups: [(mode: MatchMode, rules: [CollectionRule])], outerMode: MatchMode) -> GroupedMatcher {
+        GroupedMatcher(
+            outerMode: outerMode,
+            groups: groups.map { (mode: $0.mode, predicates: $0.rules.map { Self.compileRule($0) }) }
+        )
     }
 
-    // Back-compat single-video entry points (used outside the hot filter loops). They delegate to a one-off
-    // compiled matcher so all rule evaluation shares one implementation.
-    func matchesRules(video: Video, rules: [CollectionRule], tags: [Tag], mode: MatchMode) -> Bool {
-        compile(rules: rules, mode: mode).matches(video, tags: tags)
-    }
-
-    func matchesAllRules(video: Video, rules: [CollectionRule], tags: [Tag]) -> Bool {
-        compile(rules: rules, mode: .all).matches(video, tags: tags)
+    /// Assembles a collection's already-fetched groups + rules into a compiled matcher. Groups are
+    /// sorted by `orderIndex`; a group with no rules of its own is skipped from lookups via `rulesByGroup`.
+    func compileMatcher(
+        for collection: VideoCollection,
+        groups: [CollectionRuleGroup],
+        rulesByGroup: [Int64: [CollectionRule]]
+    ) -> GroupedMatcher {
+        let ordered = groups.sorted { $0.orderIndex < $1.orderIndex }
+        let groupInputs = ordered.map { g in (mode: g.matchMode, rules: rulesByGroup[g.id ?? -1] ?? []) }
+        return compile(groups: groupInputs, outerMode: collection.matchMode)
     }
 
     // MARK: - Rule compilation
