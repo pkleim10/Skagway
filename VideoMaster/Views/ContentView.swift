@@ -347,7 +347,7 @@ private struct LibraryContentView: View {
                 .padding(.horizontal, isHeaderStatusError ? 8 : 0)
                 .padding(.vertical, isHeaderStatusError ? 3 : 0)
                 .background(
-                    Capsule().fill(isHeaderStatusError ? Color.red : Color.clear)
+                    Capsule().fill(isHeaderStatusError ? Color.red.opacity(0.75) : Color.clear)
                 )
                 .padding(.trailing, 4)
                 .animation(.easeInOut(duration: 0.15), value: isHeaderStatusError)
