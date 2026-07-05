@@ -31,6 +31,9 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Failures that used to only print to console now surface briefly in the header status bar** (tag create/rename/delete/add/remove, file rename conflicts, post-conversion library-record update failures, and a paused-library-updates notice if the background video observation errors out). Each message auto-clears after ~4 seconds unless replaced by a newer one — same transient-status channel already used for scan progress.
+- **Import scans now report partial failures instead of swallowing them.** If some files in a folder/drag-drop/"Import New" scan fail to process (unreadable file, extraction error, etc.) while the rest succeed, the header status now shows e.g. "Imported 338/340 — 2 failed (see console)" instead of silently finishing as if everything succeeded. Per-file details still go to console.
+
 ## 0.28.0 (build 646) - 2026-07-04
 
 - **Collections support two-level AND/OR grouping.** A collection's rules now cluster into groups: rules within a group combine with the group's own ALL/ANY toggle, and groups combine with each other via the collection's outer ALL/ANY toggle — e.g. "(Tag is Vacation AND Rating is at least 4) OR (Tag is Favorite)". The editor lets you add/remove groups alongside rules, each group rendered as its own bordered card with its own mode toggle. Existing collections are migrated automatically into a single default group per collection, preserving their current behavior exactly.

@@ -197,6 +197,17 @@ final class LibraryViewModel {
     var scanProgress: String = ""
     var scanCurrent: Int = 0
     var scanTotal: Int = 0
+
+    /// Surfaces a transient failure in the header status text (same channel scan progress/errors
+    /// use), auto-clearing after a few seconds unless a newer message has since replaced it.
+    func reportTransientError(_ message: String) {
+        let text = "Error: \(message)"
+        scanProgress = text
+        Task { [text] in
+            try? await Task.sleep(for: .seconds(4))
+            if scanProgress == text { scanProgress = "" }
+        }
+    }
     var selectedVideoIds: Set<String> = [] {
         didSet {
             let added = selectedVideoIds.subtracting(oldValue)
@@ -1168,6 +1179,9 @@ final class LibraryViewModel {
             } catch {
                 if !Task.isCancelled {
                     print("Video observation error: \(error)")
+                    await MainActor.run {
+                        self.reportTransientError("Library updates paused: \(error.localizedDescription)")
+                    }
                 }
             }
         }
@@ -1901,6 +1915,7 @@ final class LibraryViewModel {
 
         let knownPaths = (try? await videoRepo.fetchAllFilePaths()) ?? []
         let folders = dataSources.map(\.url)
+        var failureCount = 0
 
         for await update in await scanner.scanForNewFiles(folders: folders, knownPaths: knownPaths) {
             switch update {
@@ -1915,11 +1930,20 @@ final class LibraryViewModel {
             case .progress(let current, let total, _):
                 scanCurrent = current
                 scanTotal = total
+            case .partialFailure(let count):
+                failureCount = count
             case .completed:
                 if scanTotal == 0 {
                     Task {
                         try? await Task.sleep(for: .seconds(2))
                         if scanProgress == "No new files found" { scanProgress = "" }
+                    }
+                } else if failureCount > 0 {
+                    let message = "Imported \(scanTotal - failureCount)/\(scanTotal) — \(failureCount) failed (see console)"
+                    scanProgress = message
+                    Task { [message] in
+                        try? await Task.sleep(for: .seconds(4))
+                        if scanProgress == message { scanProgress = "" }
                     }
                 } else {
                     scanProgress = ""
@@ -1957,6 +1981,7 @@ final class LibraryViewModel {
         isScanning = true
         scanProgress = "Importing dropped files..."
         stopObserving()
+        var failureCount = 0
 
         for await update in await scanner.scanFiles(videoUrls) {
             switch update {
@@ -1966,8 +1991,19 @@ final class LibraryViewModel {
             case .progress(let current, let total, _):
                 scanCurrent = current
                 scanTotal = total
+            case .partialFailure(let count):
+                failureCount = count
             case .completed:
-                scanProgress = ""
+                if failureCount > 0 {
+                    let message = "Imported \(scanTotal - failureCount)/\(scanTotal) — \(failureCount) failed (see console)"
+                    scanProgress = message
+                    Task { [message] in
+                        try? await Task.sleep(for: .seconds(4))
+                        if scanProgress == message { scanProgress = "" }
+                    }
+                } else {
+                    scanProgress = ""
+                }
                 isScanning = false
                 await refreshAfterScan()
             case .error(let message):
@@ -2064,6 +2100,7 @@ final class LibraryViewModel {
             try? await dataSourceRepo.insert(source)
         }
 
+        var failureCount = 0
         for await update in await scanner.scan(folder: url) {
             switch update {
             case .started(let total):
@@ -2072,8 +2109,19 @@ final class LibraryViewModel {
             case .progress(let current, let total, _):
                 scanCurrent = current
                 scanTotal = total
+            case .partialFailure(let count):
+                failureCount = count
             case .completed:
-                scanProgress = ""
+                if failureCount > 0 {
+                    let message = "Imported \(scanTotal - failureCount)/\(scanTotal) — \(failureCount) failed (see console)"
+                    scanProgress = message
+                    Task { [message] in
+                        try? await Task.sleep(for: .seconds(4))
+                        if scanProgress == message { scanProgress = "" }
+                    }
+                } else {
+                    scanProgress = ""
+                }
                 isScanning = false
                 await refreshAfterScan()
             case .error(let message):
@@ -2330,6 +2378,7 @@ final class LibraryViewModel {
         if !isCaseOnlyRename {
             guard !FileManager.default.fileExists(atPath: newFilePath) else {
                 print("Rename failed: file already exists at \(newFilePath)")
+                reportTransientError("A file named \"\(trimmed)\" already exists here")
                 return nil
             }
         }
@@ -2355,6 +2404,7 @@ final class LibraryViewModel {
             return newFilePath
         } catch {
             print("Rename failed: \(error)")
+            reportTransientError("Couldn't rename \"\(video.fileName)\"")
             return nil
         }
     }
@@ -2442,6 +2492,7 @@ final class LibraryViewModel {
             try await videoRepo.renameVideo(videoId: dbId, newFilePath: newPath, newFileName: newFileName)
         } catch {
             print("videoConvertedToMP4 DB update failed: \(error)")
+            reportTransientError("Converted \"\(newFileName)\" but couldn't update the library record")
             return
         }
 
@@ -3208,6 +3259,7 @@ final class LibraryViewModel {
             await reloadTagState()
         } catch {
             print("Failed to create tag: \(error)")
+            reportTransientError("Couldn't create tag \"\(name)\"")
         }
     }
 
@@ -3221,6 +3273,7 @@ final class LibraryViewModel {
             }
         } catch {
             print("Failed to add tag: \(error)")
+            reportTransientError("Couldn't add tag \"\(name)\"")
         }
     }
 
@@ -3238,6 +3291,7 @@ final class LibraryViewModel {
             await reloadTagState()
         } catch {
             print("Failed to add tag: \(error)")
+            reportTransientError("Couldn't add tag \"\(name)\"")
         }
     }
 
@@ -3248,6 +3302,7 @@ final class LibraryViewModel {
             await reloadTagState()
         } catch {
             print("Failed to remove tag: \(error)")
+            reportTransientError("Couldn't remove tag \"\(tag.name)\"")
         }
     }
 
@@ -3270,6 +3325,7 @@ final class LibraryViewModel {
             await loadTags()
         } catch {
             print("Failed to rename tag: \(error)")
+            reportTransientError("Couldn't rename tag \"\(tag.name)\"")
         }
     }
 
@@ -3328,6 +3384,7 @@ final class LibraryViewModel {
             await reloadTagState()
         } catch {
             print("Failed to delete tag: \(error)")
+            reportTransientError("Couldn't delete tag \"\(tag.name)\"")
         }
     }
 

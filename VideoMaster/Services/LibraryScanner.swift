@@ -6,6 +6,9 @@ enum ScanUpdate: Sendable {
     case progress(current: Int, total: Int, fileName: String)
     case completed
     case error(String)
+    /// Non-fatal: some individual files failed to process but the scan otherwise completed normally.
+    /// Yielded before `.completed`; per-file details are logged to console.
+    case partialFailure(count: Int)
 }
 
 actor LibraryScanner {
@@ -38,11 +41,12 @@ actor LibraryScanner {
 
         let concurrencyLimit = 4
         var processed = 0
+        var failures = 0
 
-        await withTaskGroup(of: Void.self) { group in
+        await withTaskGroup(of: Bool.self) { group in
             for (index, fileURL) in videoFiles.enumerated() {
-                if index >= concurrencyLimit {
-                    await group.next()
+                if index >= concurrencyLimit, let ok = await group.next(), !ok {
+                    failures += 1
                 }
 
                 group.addTask { [self] in
@@ -59,17 +63,23 @@ actor LibraryScanner {
                 )
             }
 
-            await group.waitForAll()
+            for await ok in group where !ok {
+                failures += 1
+            }
         }
 
+        if failures > 0 {
+            continuation.yield(.partialFailure(count: failures))
+        }
         continuation.yield(.completed)
         continuation.finish()
     }
 
-    private func processFile(_ fileURL: URL) async {
+    @discardableResult
+    private func processFile(_ fileURL: URL) async -> Bool {
         do {
             let exists = try await videoRepo.videoExists(filePath: fileURL.path)
-            guard !exists else { return }
+            guard !exists else { return true }
 
             let metadata = await metadataExtractor.extract(from: fileURL)
             let hasSRT = SubtitleTrack.findSidecarSRT(for: fileURL) != nil
@@ -100,8 +110,10 @@ actor LibraryScanner {
                     try? await videoRepo.updateThumbnailPath(videoId: dbId, path: url.path)
                 }
             }
+            return true
         } catch {
             print("Failed to process \(fileURL.lastPathComponent): \(error)")
+            return false
         }
     }
 
@@ -130,11 +142,12 @@ actor LibraryScanner {
 
         let concurrencyLimit = 4
         var processed = 0
+        var failures = 0
 
-        await withTaskGroup(of: Void.self) { group in
+        await withTaskGroup(of: Bool.self) { group in
             for (index, fileURL) in videoFiles.enumerated() {
-                if index >= concurrencyLimit {
-                    await group.next()
+                if index >= concurrencyLimit, let ok = await group.next(), !ok {
+                    failures += 1
                 }
 
                 group.addTask { [self] in
@@ -151,9 +164,14 @@ actor LibraryScanner {
                 )
             }
 
-            await group.waitForAll()
+            for await ok in group where !ok {
+                failures += 1
+            }
         }
 
+        if failures > 0 {
+            continuation.yield(.partialFailure(count: failures))
+        }
         continuation.yield(.completed)
         continuation.finish()
     }
@@ -193,11 +211,12 @@ actor LibraryScanner {
 
         let concurrencyLimit = 4
         var processed = 0
+        var failures = 0
 
-        await withTaskGroup(of: Void.self) { group in
+        await withTaskGroup(of: Bool.self) { group in
             for (index, fileURL) in newFiles.enumerated() {
-                if index >= concurrencyLimit {
-                    await group.next()
+                if index >= concurrencyLimit, let ok = await group.next(), !ok {
+                    failures += 1
                 }
 
                 group.addTask { [self] in
@@ -214,14 +233,20 @@ actor LibraryScanner {
                 )
             }
 
-            await group.waitForAll()
+            for await ok in group where !ok {
+                failures += 1
+            }
         }
 
+        if failures > 0 {
+            continuation.yield(.partialFailure(count: failures))
+        }
         continuation.yield(.completed)
         continuation.finish()
     }
 
-    private func importFile(_ fileURL: URL) async {
+    @discardableResult
+    private func importFile(_ fileURL: URL) async -> Bool {
         do {
             let metadata = await metadataExtractor.extract(from: fileURL)
             let hasSRT = SubtitleTrack.findSidecarSRT(for: fileURL) != nil
@@ -252,8 +277,10 @@ actor LibraryScanner {
                     try? await videoRepo.updateThumbnailPath(videoId: dbId, path: url.path)
                 }
             }
+            return true
         } catch {
             print("Failed to import \(fileURL.lastPathComponent): \(error)")
+            return false
         }
     }
 
