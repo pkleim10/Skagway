@@ -151,6 +151,13 @@ private struct LibraryContentView: View {
         vm.conversionJobs.contains { $0.isActive }
     }
 
+    /// True when nothing's currently running but at least one job ended in `.failed` — draws the
+    /// eye the same way the header status error pill does, instead of blending in with a plain
+    /// success summary that happens to have different text.
+    private var hasConversionFailure: Bool {
+        !isConversionActive && vm.conversionJobs.contains { if case .failed = $0.status { return true }; return false }
+    }
+
     /// Clickable status pill that opens the re-encode queue manager.
     private var conversionPill: some View {
         Button {
@@ -160,18 +167,20 @@ private struct LibraryContentView: View {
                 if isConversionActive {
                     ProgressView().controlSize(.mini)
                 } else {
-                    Image(systemName: "arrow.triangle.2.circlepath")
+                    Image(systemName: hasConversionFailure ? "exclamationmark.triangle.fill" : "arrow.triangle.2.circlepath")
                         .font(.system(size: 9, weight: .semibold))
                 }
                 Text(vm.conversionStatusText)
-                    .font(.system(size: 10))
+                    .font(.system(size: 10, weight: hasConversionFailure ? .semibold : .regular))
                     .monospacedDigit()
             }
-            .foregroundStyle(isConversionActive ? Color.appAccent : Color.appTextSecondary)
+            .foregroundStyle(hasConversionFailure ? .white : (isConversionActive ? Color.appAccent : Color.appTextSecondary))
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(
-                Capsule().fill(Color.appAccent.opacity(isConversionActive ? 0.14 : 0.08))
+                Capsule().fill(
+                    hasConversionFailure ? Color.red.opacity(0.75) : Color.appAccent.opacity(isConversionActive ? 0.14 : 0.08)
+                )
             )
         }
         .buttonStyle(.plain)
@@ -184,6 +193,11 @@ private struct LibraryContentView: View {
         vm.moveJobs.contains { $0.isActive }
     }
 
+    /// Same failure-highlighting rationale as `hasConversionFailure`.
+    private var hasMoveFailure: Bool {
+        !isMoveActive && vm.moveJobs.contains { if case .failed = $0.status { return true }; return false }
+    }
+
     /// Clickable status pill that opens the move queue manager.
     private var movePill: some View {
         Button {
@@ -193,18 +207,20 @@ private struct LibraryContentView: View {
                 if isMoveActive {
                     ProgressView().controlSize(.mini)
                 } else {
-                    Image(systemName: "arrow.right.doc.on.clipboard")
+                    Image(systemName: hasMoveFailure ? "exclamationmark.triangle.fill" : "arrow.right.doc.on.clipboard")
                         .font(.system(size: 9, weight: .semibold))
                 }
                 Text(vm.moveStatusText)
-                    .font(.system(size: 10))
+                    .font(.system(size: 10, weight: hasMoveFailure ? .semibold : .regular))
                     .monospacedDigit()
             }
-            .foregroundStyle(isMoveActive ? Color.appAccent : Color.appTextSecondary)
+            .foregroundStyle(hasMoveFailure ? .white : (isMoveActive ? Color.appAccent : Color.appTextSecondary))
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(
-                Capsule().fill(Color.appAccent.opacity(isMoveActive ? 0.14 : 0.08))
+                Capsule().fill(
+                    hasMoveFailure ? Color.red.opacity(0.75) : Color.appAccent.opacity(isMoveActive ? 0.14 : 0.08)
+                )
             )
         }
         .buttonStyle(.plain)

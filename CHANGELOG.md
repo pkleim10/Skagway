@@ -33,6 +33,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 - **Failures that used to only print to console now surface briefly in the header status bar** (tag create/rename/delete/add/remove, file rename conflicts, post-conversion library-record update failures, and a paused-library-updates notice if the background video observation errors out). Each message auto-clears after ~4 seconds unless replaced by a newer one — same transient-status channel already used for scan progress.
 - **Import scans now report partial failures instead of swallowing them.** If some files in a folder/drag-drop/"Import New" scan fail to process (unreadable file, extraction error, etc.) while the rest succeed, the header status now shows e.g. "Imported 338/340 — 2 failed (see console)" instead of silently finishing as if everything succeeded. Per-file details still go to console.
+- **Re-encode and Move queue status pills now turn red (with a warning icon) when a job has failed**, instead of rendering in the same neutral gray as a normal success summary — "2 re-encodes failed" previously looked identical to "2 re-encoded" at a glance.
+- Fixed a stale doc comment on `CustomMetadataSettingsView` claiming per-video custom metadata values weren't implemented yet — they have been for a while, edited from the Inspector.
 
 ## 0.28.0 (build 646) - 2026-07-04
 

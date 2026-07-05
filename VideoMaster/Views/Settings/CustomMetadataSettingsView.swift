@@ -1,13 +1,14 @@
 import SwiftUI
 
-/// Defines custom metadata **fields** (name + type). Per-video values are not implemented here yet.
+/// Defines custom metadata **fields** (name + type). Per-video values are edited in the Inspector
+/// (`CuratedWallInspector`), which reads these definitions to render the right control per field.
 struct CustomMetadataSettingsView: View {
     @Bindable var viewModel: LibraryViewModel
     @State private var selectedFieldIds: Set<UUID> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Define fields for custom metadata. Per-video editing will use these types in a later update.")
+            Text("Define fields for custom metadata. Edit per-video values in the Inspector.")
                 .font(.caption)
                 .foregroundStyle(Color.appTextSecondary)
                 .padding(.bottom, 8)
