@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.28.0 (build 646) - 2026-07-04
+
 - **Collections support two-level AND/OR grouping.** A collection's rules now cluster into groups: rules within a group combine with the group's own ALL/ANY toggle, and groups combine with each other via the collection's outer ALL/ANY toggle — e.g. "(Tag is Vacation AND Rating is at least 4) OR (Tag is Favorite)". The editor lets you add/remove groups alongside rules, each group rendered as its own bordered card with its own mode toggle. Existing collections are migrated automatically into a single default group per collection, preserving their current behavior exactly.
 
 ## 0.27.0 (build 644) - 2026-07-04
