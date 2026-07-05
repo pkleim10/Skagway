@@ -158,6 +158,14 @@ private struct LibraryContentView: View {
         !isConversionActive && vm.conversionJobs.contains { if case .failed = $0.status { return true }; return false }
     }
 
+    /// True when there's something timely to say (active / queued / failed). The passive "N
+    /// re-encoded" completed-only summary is suppressed otherwise, so the pill doesn't linger
+    /// with text forever once everything's done — it collapses to an icon-only button that still
+    /// opens the queue, until the jobs are actually cleared and the pill disappears entirely.
+    private var hasTimelyConversionStatus: Bool {
+        isConversionActive || hasConversionFailure || vm.conversionJobs.contains { $0.status == .queued }
+    }
+
     /// Clickable status pill that opens the re-encode queue manager.
     private var conversionPill: some View {
         Button {
@@ -170,9 +178,11 @@ private struct LibraryContentView: View {
                     Image(systemName: hasConversionFailure ? "exclamationmark.triangle.fill" : "arrow.triangle.2.circlepath")
                         .font(.system(size: 9, weight: .semibold))
                 }
-                Text(vm.conversionStatusText)
-                    .font(.system(size: 10, weight: hasConversionFailure ? .semibold : .regular))
-                    .monospacedDigit()
+                if hasTimelyConversionStatus {
+                    Text(vm.conversionStatusText)
+                        .font(.system(size: 10, weight: hasConversionFailure ? .semibold : .regular))
+                        .monospacedDigit()
+                }
             }
             .foregroundStyle(hasConversionFailure ? .white : (isConversionActive ? Color.appAccent : Color.appTextSecondary))
             .padding(.horizontal, 8)
@@ -198,6 +208,11 @@ private struct LibraryContentView: View {
         !isMoveActive && vm.moveJobs.contains { if case .failed = $0.status { return true }; return false }
     }
 
+    /// Same rationale as `hasTimelyConversionStatus`.
+    private var hasTimelyMoveStatus: Bool {
+        isMoveActive || hasMoveFailure || vm.moveJobs.contains { $0.status == .queued }
+    }
+
     /// Clickable status pill that opens the move queue manager.
     private var movePill: some View {
         Button {
@@ -210,9 +225,11 @@ private struct LibraryContentView: View {
                     Image(systemName: hasMoveFailure ? "exclamationmark.triangle.fill" : "arrow.right.doc.on.clipboard")
                         .font(.system(size: 9, weight: .semibold))
                 }
-                Text(vm.moveStatusText)
-                    .font(.system(size: 10, weight: hasMoveFailure ? .semibold : .regular))
-                    .monospacedDigit()
+                if hasTimelyMoveStatus {
+                    Text(vm.moveStatusText)
+                        .font(.system(size: 10, weight: hasMoveFailure ? .semibold : .regular))
+                        .monospacedDigit()
+                }
             }
             .foregroundStyle(hasMoveFailure ? .white : (isMoveActive ? Color.appAccent : Color.appTextSecondary))
             .padding(.horizontal, 8)

@@ -36,6 +36,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 - **Re-encode and Move queue status pills now turn red (with a warning icon) when a job has failed**, instead of rendering in the same neutral gray as a normal success summary — "2 re-encodes failed" previously looked identical to "2 re-encoded" at a glance.
 - Fixed a stale doc comment on `CustomMetadataSettingsView` claiming per-video custom metadata values weren't implemented yet — they have been for a while, edited from the Inspector.
 - **New "Clear" button in the Re-encode Queue manager** for completed jobs whose backup has already been deleted (individually or via "Delete All Backups") — removes just those rows, which had no further actions available. A completed job that still has its backup intact is left alone, since Restore/Delete Backup remain meaningful for it.
+- **Re-encode/Move header pills no longer show a lingering "N re-encoded"/"N moved" text once everything's finished.** That passive summary only appears while something's active, queued, or failed; otherwise the pill collapses to an icon-only button that still opens the queue manager on click — the pill itself only disappears once the queue is actually cleared.
 
 ## 0.28.0 (build 646) - 2026-07-04
 
