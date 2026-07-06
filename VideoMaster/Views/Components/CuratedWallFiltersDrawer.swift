@@ -238,6 +238,7 @@ struct CuratedWallFiltersDrawer: View {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(isSelected ? Color.appAccent.opacity(0.12) : Color.clear)
             )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -263,6 +264,7 @@ struct CuratedWallFiltersDrawer: View {
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(Color.appTextTertiary)
                 }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
@@ -357,6 +359,7 @@ struct CuratedWallFiltersDrawer: View {
                 Button { showNewCollectionSheet = true } label: {
                     Label("New Collection", systemImage: "plus")
                         .font(.caption)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.appAccent)
@@ -388,6 +391,7 @@ struct CuratedWallFiltersDrawer: View {
                 RoundedRectangle(cornerRadius: 6)
                     .fill(isSelected ? Color.appAccent.opacity(0.12) : .clear)
             )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .contextMenu {
@@ -537,6 +541,7 @@ struct CuratedWallFiltersDrawer: View {
                     Button { createNewTag() } label: {
                         Label("New Tag", systemImage: "plus")
                             .font(.caption)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(Color.appAccent)
@@ -633,20 +638,27 @@ struct CuratedWallFiltersDrawer: View {
 
     private func durationPreset(_ label: String, min: Double?, max: Double?) -> some View {
         let isActive = (viewModel.minDurationSeconds == min) && (viewModel.maxDurationSeconds == max)
-        return Button(label) {
+        // Restructured from the `Button(label) { action }` shorthand to an explicit label closure
+        // so `.contentShape` can be applied directly to the label content — a `.plain` button's
+        // hit-testing otherwise only covers the rendered text glyphs, not the padded capsule
+        // around it, leaving a dead zone a user would expect to be clickable.
+        return Button {
             viewModel.minDurationSeconds = min
             viewModel.maxDurationSeconds = max
+        } label: {
+            Text(label)
+                .font(.caption)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule().fill(isActive ? Color.appAccent.opacity(0.18) : Color.appSurface.opacity(0.6))
+                )
+                .overlay(
+                    Capsule().stroke(isActive ? Color.appAccent.opacity(0.5) : Color.clear, lineWidth: 1)
+                )
+                .contentShape(Rectangle())
         }
-        .font(.caption)
         .buttonStyle(.plain)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(
-            Capsule().fill(isActive ? Color.appAccent.opacity(0.18) : Color.appSurface.opacity(0.6))
-        )
-        .overlay(
-            Capsule().stroke(isActive ? Color.appAccent.opacity(0.5) : Color.clear, lineWidth: 1)
-        )
     }
 
     private func sectionLabel(_ text: String) -> some View {
@@ -662,6 +674,7 @@ struct CuratedWallFiltersDrawer: View {
             Label("Clear filter", systemImage: "xmark")
                 .font(.caption2)
                 .labelStyle(.titleAndIcon)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .foregroundStyle(Color.appTextSecondary)

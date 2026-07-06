@@ -222,11 +222,15 @@ struct FloatingPlayerPanel: View {
             Image(systemName: systemName)
                 // 14pt vs. the original .caption2 (~11pt) — 25% larger, matching the drag bar.
                 .font(.system(size: 14, weight: .semibold))
+                // Padding/background moved inside the label (were outside .buttonStyle below) so
+                // .contentShape covers the full capsule — a .plain button otherwise only hit-tests
+                // the icon glyph itself, leaving the visible padded circle around it unclickable.
+                .padding(.horizontal, 8).padding(.vertical, 3)
+                .background(Color.appSurface.opacity(0.85), in: Capsule())
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .foregroundStyle(Color.appTextSecondary)
-        .padding(.horizontal, 8).padding(.vertical, 3)
-        .background(Color.appSurface.opacity(0.85), in: Capsule())
         .help(help)
     }
 

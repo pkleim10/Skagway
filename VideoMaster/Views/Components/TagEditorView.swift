@@ -55,6 +55,7 @@ struct TagToggleChip: View {
             .padding(.vertical, 4)
             .background(isActive ? Color.appAccent : Color.appSurface.opacity(0.6))
             .clipShape(Capsule())
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { hovering in

@@ -192,6 +192,9 @@ private struct LibraryContentView: View {
                     hasConversionFailure ? Color.red.opacity(0.75) : Color.appAccent.opacity(isConversionActive ? 0.14 : 0.08)
                 )
             )
+            // Without this, .plain hit-tests against rendered content (icon/text glyphs) only —
+            // the gap between the icon and status text would be a dead click zone.
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .padding(.trailing, 4)
@@ -239,6 +242,7 @@ private struct LibraryContentView: View {
                     hasMoveFailure ? Color.red.opacity(0.75) : Color.appAccent.opacity(isMoveActive ? 0.14 : 0.08)
                 )
             )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .padding(.trailing, 4)
@@ -917,13 +921,13 @@ private struct LibraryContentView: View {
         }
 
         // ⌘⇧A — Deselect All. Works in both List and grid (unlike ⌘A, `Table` has no native
-        // "deselect all" to defer to, so this needs to be handled here for List too).
+        // "deselect all" to defer to, so this needs to be handled here for List too). Unlike ⌘A,
+        // there's no native text-editing meaning for ⌘⇧A to defer to, so — unless actively renaming
+        // a file — this always claims the shortcut, even while a field (e.g. in the Inspector) is
+        // focused; otherwise a focused field would silently swallow it with no visible effect.
         if event.keyCode == 0,  // 'a'
            event.modifierFlags.intersection(commandModifiers) == [.command, .shift],
            !lvm.isEditingText {
-            if let first = NSApp.keyWindow?.firstResponder, first is NSTextView || first is NSTextField {
-                return event
-            }
             DispatchQueue.main.async { lvm.deselectAllVideos() }
             return nil
         }

@@ -82,6 +82,7 @@ struct CollectionEditorView: View {
 
                     Button(action: addGroup) {
                         Label("Add Group", systemImage: "plus.circle.fill")
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(Color.appAccent)
@@ -145,6 +146,7 @@ struct CollectionEditorView: View {
                     Capsule().fill(mode.wrappedValue == .all ? Color.appAccent : Color.orange)
                 )
                 .foregroundColor(.white)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

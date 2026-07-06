@@ -93,6 +93,7 @@ struct ActiveFilterPills: View {
             .overlay(
                 Capsule().stroke(Color.appAccent.opacity(0.25), lineWidth: 1)
             )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .foregroundStyle(Color.appTextPrimary)

@@ -69,16 +69,20 @@ struct LandingView: View {
                                     Spacer()
                                 }
                                 .frame(maxWidth: 260)
+                                .padding(.horizontal, AppSpacing.sm)
+                                .padding(.vertical, 6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                                        .fill(Color.appHover)
+                                )
+                                // Must be inside the label, not chained after .buttonStyle(.plain)
+                                // below — a .plain button's hit-testing is otherwise limited to the
+                                // rendered icon/text glyphs, leaving the gap and the Spacer's stretch
+                                // area unclickable despite looking like part of the row.
+                                .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
                             .foregroundStyle(Color.appTextPrimary)
-                            .padding(.horizontal, AppSpacing.sm)
-                            .padding(.vertical, 6)
-                            .background(
-                                RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
-                                    .fill(Color.appHover)
-                            )
-                            .contentShape(Rectangle())
                         }
                     }
                 }

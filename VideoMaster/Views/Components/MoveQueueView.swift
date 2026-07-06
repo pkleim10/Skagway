@@ -175,6 +175,7 @@ struct MoveQueueView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(Capsule().fill(Color.white.opacity(0.06)))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

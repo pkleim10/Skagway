@@ -334,6 +334,7 @@ struct CuratedWallInspector: View {
                     }
                     .font(.caption2)
                     .foregroundStyle(Color.appTextTertiary)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help("Reveal in Finder")
@@ -341,6 +342,7 @@ struct CuratedWallInspector: View {
                 HStack(spacing: 14) {
                     Button { viewModel.isPlayingInline = true } label: {
                         Label("Play", systemImage: "play.fill")
+                            .contentShape(Rectangle())
                     }.buttonStyle(.plain).foregroundStyle(Color.appAccent)
 
                     Spacer()
@@ -639,6 +641,7 @@ struct CuratedWallInspector: View {
                     Spacer()
                 }
                 .foregroundStyle(Color.appAccent)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .padding(.top, 10)
@@ -742,6 +745,7 @@ private struct InspectorTagChip: View {
                 )
                 .clipShape(Capsule())
                 .opacity(isDisabled ? 0.35 : 1.0)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .frame(maxWidth: fillWidth ? .infinity : nil, alignment: .leading)
