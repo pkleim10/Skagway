@@ -18,7 +18,7 @@ Status legend: ☐ open · ✅ fixed · ⏭️ deferred (with reason)
 - "Remove from Library" and "Delete Video…" in the Wall grid's context menu act only on the right-clicked video, unlike every other action in the same menu.
 - **Failure scenario:** Select 8 videos, right-click one. Re-encode, Move Files, Regenerate Thumbnail, and Not a Duplicate all correctly act on the whole selection (`ids = selectedVideoIds.contains(video.id) ? selectedVideoIds : [video.id]`), but Remove from Library / Delete Video hardcode `[video.id]`. The confirmation dialog implies the whole selection is affected; only 1 of 8 is actually removed/deleted. `LibraryListView`'s equivalent menu handles this correctly — confirms this is a Wall-specific regression.
 
-### 3. ☐ Mixed-value custom-metadata field silently wiped to blank on blur
+### 3. ✅ Mixed-value custom-metadata field silently wiped to blank on blur (fixed build 668)
 - **File:** `VideoMaster/Views/Inspector/CuratedWallInspector.swift:102`
 - Clicking into a mixed-value custom field and clicking away — no typing required — overwrites every selected video's differing value with blank.
 - **Failure scenario:** `flushPendingCustomEdits()` correctly skips persisting over mixed fields, but the separate `.onChange(of: focusedCustomFieldId)` blur handler has no such guard and no changed-value check — it unconditionally persists the blank "Multiple values" placeholder.

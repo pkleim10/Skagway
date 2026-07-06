@@ -101,6 +101,12 @@ struct CuratedWallInspector: View {
         .onChange(of: viewModel.selectedVideoIds) { _, _ in loadCustomFieldValues() }
         .onChange(of: focusedCustomFieldId) { old, _ in
             guard let fieldId = old, let value = customFieldValues[fieldId] else { return }
+            // A mixed field shows a blank placeholder for values that actually differ across the
+            // selection — merely focusing and blurring it (no edit) must not persist that blank
+            // over every video's real value. Typing anything clears `customFieldMixed` for this
+            // field (see the binding setter below), so a deliberate clear-via-edit still persists.
+            guard !customFieldMixed.contains(fieldId) else { return }
+            guard value != (customFieldOriginalValues[fieldId] ?? "") else { return }
             // Persist to the selection these values belong to — not the (possibly already-changed)
             // current selection — so an edit is never written to the wrong video.
             let ids = customFieldsLoadedForIds
