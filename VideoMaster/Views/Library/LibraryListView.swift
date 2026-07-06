@@ -149,7 +149,16 @@ struct LibraryListView: View {
         Table(
             viewModel.filteredVideos,
             selection: $viewModel.selectedVideoIds,
-            sortOrder: $viewModel.tableSortOrder,
+            // While shuffled, `tableSortOrder` itself is left untouched (see `shuffleOrder()`) so
+            // exiting random order can tell whether the user picked a genuinely different sort —
+            // but that means the Table would otherwise keep showing a caret on whichever column
+            // was sorted before the shuffle. Reporting an empty order here clears that indicator
+            // without touching the real value; a real column click still writes through normally,
+            // which correctly exits random order via `tableSortOrder`'s own didSet.
+            sortOrder: Binding(
+                get: { viewModel.isRandomOrder ? [] : viewModel.tableSortOrder },
+                set: { viewModel.tableSortOrder = $0 }
+            ),
             columnCustomization: $viewModel.columnCustomization
         ) {
             listTableColumns()
