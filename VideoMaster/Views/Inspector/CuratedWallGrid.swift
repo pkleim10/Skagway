@@ -46,6 +46,10 @@ struct CuratedWallGrid: View {
     @State private var selectionStore = CardSelectionStore()
     @State private var filmstripVideo: Video?
 
+    // "Open With" available-apps lookup, cached per file extension (which apps can open a file
+    // only depends on its type, not the specific file) — see `installedAppURLs(for:)` below.
+    @State private var appURLsByExtension: [String: [URL]] = [:]
+
     // Target from the full-window mock + checklist decisions: 5 columns, generous breathing.
     // `columns` is the single source of truth for the grid width — arrow-key row navigation in
     // ContentView reads it so ↑/↓ move by exactly one row.
@@ -104,11 +108,14 @@ struct CuratedWallGrid: View {
                                 // run directly in this builder. Computing the selection URLs
                                 // here (via a per-id linear scan, no less) was the 75-second
                                 // select-all hang at 12k; it now happens in the button action.
+                                // The installed-apps lookup below is a real Launch Services query,
+                                // so it goes through `installedAppURLs(for:)`, which caches by file
+                                // extension instead of re-querying per card on every render.
                                 if ExternalApps.isSubmarineInstalled {
                                     Button("Submarine") { ExternalApps.openInSubmarine(openWithURLs(for: video)) }
                                     Divider()
                                 }
-                                let appURLs = NSWorkspace.shared.urlsForApplications(toOpen: video.url)
+                                let appURLs = installedAppURLs(for: video)
                                 ForEach(appURLs, id: \.self) { appURL in
                                     Button(appURL.deletingPathExtension().lastPathComponent) {
                                         NSWorkspace.shared.open(
@@ -332,5 +339,19 @@ struct CuratedWallGrid: View {
         let ids = viewModel.selectedVideoIds
         guard ids.count > 1, ids.contains(video.id) else { return [video.url] }
         return viewModel.filteredVideos.filter { ids.contains($0.id) }.map(\.url)
+    }
+
+    /// Which apps can open this video's file type — a real Launch Services query, so it's cached
+    /// per extension rather than re-queried per card on every grid render (the `.contextMenu`
+    /// builder that calls this runs eagerly, once per instantiated card, on every update). Reads
+    /// the cache synchronously; a miss still returns the right answer immediately and schedules
+    /// the cache fill for the *next* run loop turn, since mutating `@State` synchronously inside
+    /// a view-update pass is not safe.
+    private func installedAppURLs(for video: Video) -> [URL] {
+        let ext = video.url.pathExtension.lowercased()
+        if let cached = appURLsByExtension[ext] { return cached }
+        let urls = NSWorkspace.shared.urlsForApplications(toOpen: video.url)
+        DispatchQueue.main.async { appURLsByExtension[ext] = urls }
+        return urls
     }
 }

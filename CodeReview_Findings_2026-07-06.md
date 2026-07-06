@@ -33,10 +33,11 @@ Status legend: ☐ open · ✅ fixed · ⏭️ deferred (with reason)
 
 ## Performance regression
 
-### 5. ☐ Recurrence of the eager-`.contextMenu` bug in "Open With"
+### 5. ✅ Recurrence of the eager-`.contextMenu` bug in "Open With" (fixed build 670)
 - **File:** `VideoMaster/Views/Inspector/CuratedWallGrid.swift:109`
 - `NSWorkspace.shared.urlsForApplications(toOpen:)` (a real Launch Services query) runs directly inside the `Menu("Open With")` builder, not inside a `Button` action.
 - **Failure scenario:** This is the same file that already documents (in a comment) that `.contextMenu` builders are evaluated eagerly per instantiated card on every grid render, and that a prior fix moved a different computation (selection URLs) into a `Button` action after it caused a 75-second hang at 12k videos. Line 109 is a distinct, unfixed instance of the exact same bug class.
+- **Fix:** unlike the earlier "which videos" computation, the app list genuinely has to be known to build the menu's buttons — it can't just move into a button action. Instead, cached the result per file extension (`installedAppURLs(for:)`) since which apps can open a file depends only on its type, not the specific file; a cache miss still answers immediately and schedules the fill for the next run loop turn rather than mutating `@State` mid-render.
 
 ---
 
