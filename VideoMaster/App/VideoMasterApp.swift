@@ -101,7 +101,25 @@ struct VideoMasterApp: App {
                 .keyboardShortcut("m", modifiers: [.command, .option])
                 .disabled(appState.libraryViewModel?.isPlayingInline != true)
             }
-            CommandGroup(after: .pasteboard) {
+            // Replaces the default Cut/Copy/Paste (nothing in the app implements clipboard
+            // operations on videos, so they'd only ever show up permanently disabled) with real
+            // actions: Select All/Deselect All wired to the same view-model calls the ⌘A/⌘⇧A
+            // shortcuts already use, then the existing Delete/Remove from Library items.
+            CommandGroup(replacing: .pasteboard) {
+                Button("Select All") {
+                    appState.libraryViewModel?.selectAllVideos()
+                }
+                .keyboardShortcut("a", modifiers: .command)
+                .disabled(appState.libraryViewModel?.filteredVideos.isEmpty ?? true)
+
+                Button("Deselect All") {
+                    appState.libraryViewModel?.deselectAllVideos()
+                }
+                .keyboardShortcut("a", modifiers: [.command, .shift])
+                .disabled(appState.libraryViewModel?.selectedVideoIds.isEmpty != false)
+
+                Divider()
+
                 Button("Delete\u{2026}") {
                     guard let vm = appState.libraryViewModel,
                           !vm.selectedVideoIds.isEmpty
@@ -127,6 +145,14 @@ struct VideoMasterApp: App {
                 .keyboardShortcut("r", modifiers: [.command, .option])
                 .disabled(appState.libraryViewModel?.selectedVideoIds.isEmpty != false)
             }
+            // These default groups (Undo/Redo, Find/Spelling/Substitutions/Transformations/Speech,
+            // the entire Format menu, Print) have no relevance to a video library and nothing in
+            // the app implements their underlying actions — replacing each with empty content
+            // removes the dead menu clutter instead of leaving it permanently disabled.
+            CommandGroup(replacing: .undoRedo) { }
+            CommandGroup(replacing: .textEditing) { }
+            CommandGroup(replacing: .textFormatting) { }
+            CommandGroup(replacing: .printItem) { }
             CommandGroup(replacing: .appInfo) {
                 Button("About VideoMaster") {
                     let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
