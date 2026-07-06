@@ -231,6 +231,11 @@ struct FloatingPlayerPanel: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(Color.appTextSecondary)
+        // Sitting over the player's title/drag bar area otherwise resolves the hover cursor to
+        // an I-beam (text-edit) instead of the normal arrow every other button in the app shows.
+        .onHover { hovering in
+            if hovering { NSCursor.arrow.set() }
+        }
         .help(help)
     }
 
