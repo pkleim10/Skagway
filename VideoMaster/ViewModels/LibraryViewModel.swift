@@ -33,6 +33,9 @@ final class LibraryViewModel {
     }
     var tableSortOrder: [KeyPathComparator<Video>] = [KeyPathComparator(\Video.dateAdded, order: .reverse)] {
         didSet {
+            // Any explicit sort action (column header click, sort menu) exits random order.
+            isRandomOrder = false
+
             // Ignore programmatic updates from selectCustomSort (which sets a sentinel to show the caret).
             guard !_settingCustomSortOrder else { return }
 
@@ -78,6 +81,7 @@ final class LibraryViewModel {
     private(set) var customSortFieldId: UUID? {
         didSet {
             guard oldValue != customSortFieldId else { return }
+            isRandomOrder = false
             recomputeFilteredVideos()
             savePreferences()
         }
@@ -87,9 +91,36 @@ final class LibraryViewModel {
     var customSortAscending: Bool = true {
         didSet {
             guard customSortFieldId != nil, oldValue != customSortAscending else { return }
+            isRandomOrder = false
             recomputeFilteredVideos()
             savePreferences()
         }
+    }
+
+    /// True while List/Wall show the library in a randomized order (triggered by the Shuffle
+    /// button). Cleared by any explicit sort action (column header, sort menu, custom field) since
+    /// those signal the user wants a real ordering again. Deliberately not persisted — like
+    /// "Surprise Me", shuffling is a "for right now" action, not a durable preference.
+    var isRandomOrder: Bool = false
+
+    /// Per-video random rank backing the current shuffle, keyed by `filePath` (matches `Video.id`).
+    /// Regenerated fresh on every `shuffleOrder()` call so the order stays *stable* across the many
+    /// unrelated `recomputeFilteredVideos()` calls that happen during normal use (selection, tag
+    /// edits, scans, etc.) — without this, "random" would reshuffle under the user on every render
+    /// instead of just once per explicit Shuffle click.
+    private var randomOrderRanks: [String: Double] = [:]
+
+    /// Shuffle — assigns every video a fresh random rank and switches to random order. Safe to call
+    /// repeatedly (e.g. clicking Shuffle again while already in random order just re-shuffles).
+    func shuffleOrder() {
+        var ranks: [String: Double] = [:]
+        ranks.reserveCapacity(videos.count)
+        for video in videos {
+            ranks[video.filePath] = Double.random(in: 0..<1)
+        }
+        randomOrderRanks = ranks
+        isRandomOrder = true
+        recomputeFilteredVideos()
     }
     var viewMode: ViewMode = .grid {
         didSet {
@@ -1360,7 +1391,9 @@ final class LibraryViewModel {
             maxDurationSeconds: maxDurationSeconds,
             customSortField: resolvedCustomSortField,
             customSortAscending: customSortAscending,
-            listCustomMetadataByVideoId: listCustomMetadataByVideoId
+            listCustomMetadataByVideoId: listCustomMetadataByVideoId,
+            isRandomOrder: isRandomOrder,
+            randomOrderRanks: randomOrderRanks
         )
         let repo = collectionRepo
 
@@ -1399,12 +1432,22 @@ final class LibraryViewModel {
         let customSortField: CustomMetadataFieldDefinition?
         let customSortAscending: Bool
         let listCustomMetadataByVideoId: [Int64: [UUID: String]]
+        let isRandomOrder: Bool
+        let randomOrderRanks: [String: Double]
     }
 
     /// Multiple star levels are OR’d: video is included if its rating is in the selected set.
     private nonisolated static func applyRatingFilter(selectedStars: Set<Int>, base: [Video]) -> [Video] {
         guard !selectedStars.isEmpty else { return base }
         return base.filter { selectedStars.contains($0.rating) }
+    }
+
+    /// Sorts by the per-video ranks generated in `shuffleOrder()`. A video with no assigned rank
+    /// (e.g. imported after the last shuffle) sorts to the end rather than getting a fresh random
+    /// value here — that value would be regenerated on every recompute, making just the new videos
+    /// jitter around on every unrelated re-render instead of holding still until the next shuffle.
+    private nonisolated static func sortByRandomOrder(_ videos: [Video], ranks: [String: Double]) -> [Video] {
+        videos.sorted { (ranks[$0.filePath] ?? 2) < (ranks[$1.filePath] ?? 2) }
     }
 
     /// Concrete, fast replacement for `result.sort(using: [KeyPathComparator])`. The KeyPathComparator path
@@ -1628,7 +1671,9 @@ final class LibraryViewModel {
             }
         }
 
-        if snapshot.sidebarFilter == .recentlyPlayed {
+        if snapshot.isRandomOrder {
+            result = Self.sortByRandomOrder(result, ranks: snapshot.randomOrderRanks)
+        } else if snapshot.sidebarFilter == .recentlyPlayed {
             result = result.sorted { ($0.lastPlayed ?? .distantPast) > ($1.lastPlayed ?? .distantPast) }
         } else if snapshot.sidebarFilter == .recentlyConverted {
             result = result.sorted {

@@ -254,7 +254,9 @@ private struct LibraryContentView: View {
         let currentBuiltinSort = VideoSort.from(keyPath: vm.tableSortOrder.first?.keyPath ?? \Video.dateAdded)
         let currentCustomField = vm.customMetadataFieldDefinitions.first { $0.id == vm.customSortFieldId }
         let isAscending = isCustomSort ? vm.customSortAscending : (vm.tableSortOrder.first?.order == .forward)
-        let sortLabel = currentCustomField?.name ?? currentBuiltinSort.displayName
+        // While shuffled, none of the built-in/custom sorts are actually "active" — show Random
+        // in the label and skip the checkmarks below rather than pointing at stale prior state.
+        let sortLabel = vm.isRandomOrder ? "Random" : (currentCustomField?.name ?? currentBuiltinSort.displayName)
         let sortableCustomFields = vm.customMetadataFieldDefinitions
             .filter { $0.valueType != .text }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
@@ -265,7 +267,7 @@ private struct LibraryContentView: View {
                     Button {
                         vm.selectBuiltinSort(sort, ascending: isAscending)
                     } label: {
-                        if !isCustomSort && sort == currentBuiltinSort {
+                        if !isCustomSort && !vm.isRandomOrder && sort == currentBuiltinSort {
                             Label(sort.displayName, systemImage: "checkmark")
                         } else {
                             Text(sort.displayName)
@@ -278,7 +280,7 @@ private struct LibraryContentView: View {
                         Button {
                             vm.selectCustomSort(fieldId: field.id, ascending: isAscending)
                         } label: {
-                            if vm.customSortFieldId == field.id {
+                            if !vm.isRandomOrder && vm.customSortFieldId == field.id {
                                 Label(field.name, systemImage: "checkmark")
                             } else {
                                 Text(field.name)
@@ -295,20 +297,23 @@ private struct LibraryContentView: View {
             .menuIndicator(.hidden)
             .fixedSize()
 
-            Button {
-                if isCustomSort, let fieldId = vm.customSortFieldId {
-                    vm.selectCustomSort(fieldId: fieldId, ascending: !isAscending)
-                } else {
-                    vm.tableSortOrder = currentBuiltinSort.comparators(ascending: !isAscending)
-                    vm.savePreferences()
+            // Ascending/descending has no meaning for a shuffled order.
+            if !vm.isRandomOrder {
+                Button {
+                    if isCustomSort, let fieldId = vm.customSortFieldId {
+                        vm.selectCustomSort(fieldId: fieldId, ascending: !isAscending)
+                    } else {
+                        vm.tableSortOrder = currentBuiltinSort.comparators(ascending: !isAscending)
+                        vm.savePreferences()
+                    }
+                } label: {
+                    Image(systemName: isAscending ? "arrow.up" : "arrow.down")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Color.appTextSecondary)
                 }
-            } label: {
-                Image(systemName: isAscending ? "arrow.up" : "arrow.down")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(Color.appTextSecondary)
+                .buttonStyle(.plain)
+                .help(isAscending ? "Ascending — click for descending" : "Descending — click for ascending")
             }
-            .buttonStyle(.plain)
-            .help(isAscending ? "Ascending — click for descending" : "Descending — click for ascending")
         }
     }
 
@@ -335,6 +340,20 @@ private struct LibraryContentView: View {
             .foregroundStyle(Color.appTextSecondary)
             .disabled(vm.filteredVideos.isEmpty)
             .help("Surprise Me — pick a random video, auto-plays if enabled in Settings (⌘⇧S)")
+            .keyboardShortcut("s", modifiers: [.command, .shift])
+
+            Button {
+                vm.shuffleOrder()
+            } label: {
+                Image(systemName: "shuffle")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(vm.isRandomOrder ? Color.appAccent : Color.appTextSecondary)
+            .disabled(vm.filteredVideos.isEmpty)
+            .help(vm.isRandomOrder
+                  ? "Shuffled — click to reshuffle (⌘⇧R)"
+                  : "Shuffle — show the library in random order (⌘⇧R)")
+            .keyboardShortcut("r", modifiers: [.command, .shift])
             .keyboardShortcut("s", modifiers: [.command, .shift])
 
             Divider().frame(height: 16)

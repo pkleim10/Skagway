@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Added Shuffle — a random-order view for List and Wall.** A new icon button next to Surprise Me (⌘⇧R) assigns every video a fresh random position; unlike Surprise Me (which jumps to and plays one random video), Shuffle reorders the whole library view. The order is generated once per click and held stable across normal use (selection, tag edits, filtering) rather than reshuffling on every re-render, and cleanly exits back to a real sort as soon as you pick one from the sort menu or click a column header.
+
 ## 0.31.0 (build 677) - 2026-07-06
 
 - **Fixed a Collections migration bug found in code review**: backfilling old flat-rule collections into the new AND/OR rule-group structure hardcoded the new group's match mode to "all" instead of copying the collection's original mode, which would have silently turned any pre-existing "match ANY" collection into "match ALL" on upgrade. No impact to any collection that already went through this migration without an "any" mode; protects future upgrades (new installs, or restoring an old database backup) from hitting it.
