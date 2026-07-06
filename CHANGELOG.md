@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Fixed a Collections migration bug found in code review**: backfilling old flat-rule collections into the new AND/OR rule-group structure hardcoded the new group's match mode to "all" instead of copying the collection's original mode, which would have silently turned any pre-existing "match ANY" collection into "match ALL" on upgrade. No impact to any collection that already went through this migration without an "any" mode; protects future upgrades (new installs, or restoring an old database backup) from hitting it.
+
 ## 0.30.0 (build 665) - 2026-07-06
 
 - **Added ⌘⇧A "Deselect All"**, working in both List and Wall grid — pairs with the existing ⌘A "Select All."

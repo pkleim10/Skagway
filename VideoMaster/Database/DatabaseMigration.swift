@@ -140,8 +140,9 @@ enum DatabaseMigration {
         migrator.registerMigration("v9_collectionRuleGroups") { db in
             // Two-level AND/OR grouping: rules now cluster into groups (mode within a group), and
             // the collection's existing `matchMode` becomes the mode *between* groups. Every
-            // existing collection's flat rule list is backfilled into a single default group so
-            // behavior is unchanged (a lone group's outer combination mode is a no-op).
+            // existing collection's flat rule list is backfilled into a single group carrying the
+            // collection's original matchMode (see below), since the outer mode is a no-op for a
+            // lone group and would otherwise not preserve "match ANY" collections.
             try db.create(table: "collection_rule_group") { t in
                 t.autoIncrementedPrimaryKey("id")
                 t.column("collectionId", .integer).notNull().references("collection", onDelete: .cascade)
@@ -158,11 +159,16 @@ enum DatabaseMigration {
                 t.add(column: "groupId", .integer).references("collection_rule_group", onDelete: .cascade)
             }
 
-            let collectionIds = try Int64.fetchAll(db, sql: "SELECT id FROM collection")
-            for collectionId in collectionIds {
+            // A lone group's outer combination mode is a no-op only if the GROUP itself carries the
+            // collection's original matchMode — otherwise a pre-existing "any" collection would
+            // silently start requiring ALL its rules to match.
+            let collectionRows = try Row.fetchAll(db, sql: "SELECT id, matchMode FROM collection")
+            for row in collectionRows {
+                let collectionId: Int64 = row["id"]
+                let matchMode: String = row["matchMode"]
                 try db.execute(
-                    sql: "INSERT INTO collection_rule_group (collectionId, orderIndex, matchMode) VALUES (?, 0, 'all')",
-                    arguments: [collectionId]
+                    sql: "INSERT INTO collection_rule_group (collectionId, orderIndex, matchMode) VALUES (?, 0, ?)",
+                    arguments: [collectionId, matchMode]
                 )
                 let groupId = db.lastInsertedRowID
                 try db.execute(
