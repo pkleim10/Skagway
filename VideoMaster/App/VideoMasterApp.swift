@@ -101,11 +101,15 @@ struct VideoMasterApp: App {
                 .keyboardShortcut("m", modifiers: [.command, .option])
                 .disabled(appState.libraryViewModel?.isPlayingInline != true)
             }
-            // Replaces the default Cut/Copy/Paste (nothing in the app implements clipboard
-            // operations on videos, so they'd only ever show up permanently disabled) with real
-            // actions: Select All/Deselect All wired to the same view-model calls the ⌘A/⌘⇧A
-            // shortcuts already use, then the existing Delete/Remove from Library items.
-            CommandGroup(replacing: .pasteboard) {
+            // Keeps (rather than replaces) the default Cut/Copy/Paste: nothing in the app
+            // implements clipboard operations on videos themselves, but Cut/Copy/Paste are real,
+            // working text-editing commands whenever a text field is focused (rename, notes,
+            // custom metadata fields, search) -- they route to whatever's focused via the standard
+            // cut:/copy:/paste: responder chain. Removing them would have silently killed
+            // ⌘X/⌘C/⌘V everywhere, including inside those fields, since those shortcuts are
+            // dispatched via the menu's key-equivalent mechanism -- no matching menu item, no
+            // shortcut, regardless of what's focused.
+            CommandGroup(after: .pasteboard) {
                 Button("Select All") {
                     appState.libraryViewModel?.selectAllVideos()
                 }
