@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.31.0 (build 677) - 2026-07-06
+
 - **Fixed a Collections migration bug found in code review**: backfilling old flat-rule collections into the new AND/OR rule-group structure hardcoded the new group's match mode to "all" instead of copying the collection's original mode, which would have silently turned any pre-existing "match ANY" collection into "match ALL" on upgrade. No impact to any collection that already went through this migration without an "any" mode; protects future upgrades (new installs, or restoring an old database backup) from hitting it.
 - **Fixed Wall grid's "Remove from Library" and "Delete Video…" acting only on the right-clicked video instead of the full multi-selection** — every other context-menu action already respected the selection; these two silently left the rest of a multi-selected batch untouched despite the confirmation dialog implying otherwise. Now matches List view's behavior.
 - **Fixed the Inspector silently blanking a custom-metadata field across an entire multi-selection.** When selected videos had differing values for a custom field, the field showed blank ("multiple values"); merely clicking into it and clicking away — no typing required — persisted that blank over every selected video's real value. Now a mixed field is only overwritten if you actually type something into it.
