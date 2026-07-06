@@ -130,22 +130,28 @@ struct VideoMasterApp: App {
 
                 Divider()
 
-                // Disabled whenever a text field has focus: a focused NSTextView/NSTextField
-                // constructs its own native Select All in its right-click menu independent of the
-                // app's Edit menu, so a permanently-enabled item here would still show up as a
-                // redundant supplement inside that same context menu even with the structural
-                // Edit-menu duplicate gone.
+                // Select All routes through the responder chain first — which is exactly what the
+                // system's own Edit ▸ Select All is (a nil-targeted `selectAll:`): a focused text
+                // field selects its own text (rename, notes, custom fields, search), List's table
+                // selects all rows. Only when nothing in the chain claims the action does ⌘A mean
+                // "select all videos." The decision MUST happen here at action time — gating via
+                // `.disabled(...)` on the current first responder cannot work, because SwiftUI
+                // only re-evaluates these commands when *observed* state changes, and AppKit
+                // focus is not observable state, so such a check is permanently stale. (That
+                // stale check is also why ⌘A kept stealing "select all text" from focused fields
+                // no matter how the key monitor's deferral logic was adjusted.)
                 Button("Select All") {
-                    appState.libraryViewModel?.selectAllVideos()
+                    if !NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil) {
+                        appState.libraryViewModel?.selectAllVideos()
+                    }
                 }
                 .keyboardShortcut("a", modifiers: .command)
-                .disabled(Self.isFocusedInTextField || (appState.libraryViewModel?.filteredVideos.isEmpty ?? true))
 
                 Button("Deselect All") {
                     appState.libraryViewModel?.deselectAllVideos()
                 }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
-                .disabled(Self.isFocusedInTextField || appState.libraryViewModel?.selectedVideoIds.isEmpty != false)
+                .disabled(appState.libraryViewModel?.selectedVideoIds.isEmpty != false)
 
                 Divider()
 
@@ -309,12 +315,5 @@ struct VideoMasterApp: App {
         Settings {
             SettingsView(appState: appState)
         }
-    }
-
-    /// Mirrors the firstResponder check `ContentView`'s key monitor uses before letting ⌘A/⌘⇧A
-    /// fall through to the video list vs. a focused field's own text-editing behavior.
-    private static var isFocusedInTextField: Bool {
-        guard let first = NSApp.keyWindow?.firstResponder else { return false }
-        return first is NSTextView || first is NSTextField
     }
 }

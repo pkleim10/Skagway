@@ -921,22 +921,13 @@ private struct LibraryContentView: View {
             return nil
         }
 
-        // ⌘A — Select All in the Wall grid. Grid-only: List's `Table` responds to ⌘A natively.
-        // A focused text field always keeps ⌘A as "select the field's text" (even if the field is
-        // currently empty, where that's a no-op) rather than only when it already has text — a
-        // keystroke typed while actively editing a field should never silently redirect to
-        // selecting videos in the background, which is a more surprising outcome than ⌘A appearing
-        // to do nothing in an empty field.
-        if event.keyCode == 0,  // 'a'
-           event.modifierFlags.intersection(commandModifiers) == .command,
-           lvm.viewMode == .grid,
-           !lvm.isEditingText {
-            if let first = NSApp.keyWindow?.firstResponder, first is NSTextView || first is NSTextField {
-                return event
-            }
-            DispatchQueue.main.async { lvm.selectAllVideos() }
-            return nil
-        }
+        // No ⌘A handling here — deliberately. Select All lives in the Edit menu, whose action
+        // routes through the responder chain first (a focused text field selects its own text,
+        // List's table selects its rows) and falls back to `selectAllVideos()` only when nothing
+        // claims it — see the pasteboard CommandGroup in `VideoMasterApp`. Intercepting ⌘A in
+        // this monitor is what repeatedly broke "select all text" in focused fields: the monitor
+        // runs before menu dispatch, and no snapshot-in-advance focus check here can beat the
+        // menu action's at-action-time responder-chain routing.
 
         // ⌘⇧A — Deselect All. Works in both List and grid (unlike ⌘A, `Table` has no native
         // "deselect all" to defer to, so this needs to be handled here for List too). Unlike ⌘A,
