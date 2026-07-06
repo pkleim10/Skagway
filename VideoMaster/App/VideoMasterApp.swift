@@ -109,27 +109,13 @@ struct VideoMasterApp: App {
             // ⌘X/⌘C/⌘V everywhere, including inside those fields, since those shortcuts are
             // dispatched via the menu's key-equivalent mechanism -- no matching menu item, no
             // shortcut, regardless of what's focused.
+            //
+            // No custom Select All/Deselect All here: the default .pasteboard group already
+            // provides its own Select All, so adding another produced a visible duplicate in the
+            // Edit menu (and a second, redundant entry in text fields' own native context menu).
+            // ⌘A/⌘⇧A already work independent of any menu item via ContentView's key monitor, so
+            // nothing is lost by not having a menu item for it.
             CommandGroup(after: .pasteboard) {
-                // Disabled whenever a text field has focus (rename, notes, custom fields, search)
-                // -- not just because the video-list meaning of "select all" doesn't apply there,
-                // but because a permanently-enabled item here gets offered by macOS as a redundant
-                // supplement inside that field's own native Select All context menu, which already
-                // has its own icon and ⌘A. Mirrors the same firstResponder check the ⌘A/⌘⇧A
-                // keyboard shortcuts already use (see ContentView's key monitor).
-                Button("Select All") {
-                    appState.libraryViewModel?.selectAllVideos()
-                }
-                .keyboardShortcut("a", modifiers: .command)
-                .disabled(Self.isFocusedInTextField || (appState.libraryViewModel?.filteredVideos.isEmpty ?? true))
-
-                Button("Deselect All") {
-                    appState.libraryViewModel?.deselectAllVideos()
-                }
-                .keyboardShortcut("a", modifiers: [.command, .shift])
-                .disabled(Self.isFocusedInTextField || appState.libraryViewModel?.selectedVideoIds.isEmpty != false)
-
-                Divider()
-
                 Button("Delete\u{2026}") {
                     guard let vm = appState.libraryViewModel,
                           !vm.selectedVideoIds.isEmpty
@@ -290,12 +276,5 @@ struct VideoMasterApp: App {
         Settings {
             SettingsView(appState: appState)
         }
-    }
-
-    /// Mirrors the firstResponder check `ContentView`'s key monitor uses before letting ⌘A/⌘⇧A
-    /// fall through to the video list vs. a focused field's own text-editing behavior.
-    private static var isFocusedInTextField: Bool {
-        guard let first = NSApp.keyWindow?.firstResponder else { return false }
-        return first is NSTextView || first is NSTextField
     }
 }
