@@ -97,17 +97,13 @@ struct CuratedWallGrid: View {
                                 viewModel.renamingVideoId = video.id
                             }
                             Menu("Open With") {
-                                let urlsToSend: [URL] = {
-                                    if viewModel.selectedVideoIds.count > 1,
-                                       viewModel.selectedVideoIds.contains(video.id) {
-                                        return viewModel.selectedVideoIds.compactMap { id in
-                                            viewModel.filteredVideos.first(where: { $0.id == id })?.url
-                                        }
-                                    }
-                                    return [video.url]
-                                }()
+                                // NB: SwiftUI evaluates contextMenu content EAGERLY, per
+                                // instantiated card, on every grid update — nothing heavy may
+                                // run directly in this builder. Computing the selection URLs
+                                // here (via a per-id linear scan, no less) was the 75-second
+                                // select-all hang at 12k; it now happens in the button action.
                                 if ExternalApps.isSubmarineInstalled {
-                                    Button("Submarine") { ExternalApps.openInSubmarine(urlsToSend) }
+                                    Button("Submarine") { ExternalApps.openInSubmarine(openWithURLs(for: video)) }
                                     Divider()
                                 }
                                 let appURLs = NSWorkspace.shared.urlsForApplications(toOpen: video.url)
@@ -321,5 +317,14 @@ struct CuratedWallGrid: View {
     private func play(_ video: Video) {
         NSWorkspace.shared.open(video.url)
         Task { await viewModel.recordPlay(for: video) }
+    }
+
+    /// URLs the "Open With" actions target: the whole selection when the clicked card is part of
+    /// a multi-selection, else just the clicked video. Single pass over `filteredVideos` — and
+    /// only ever called from a button action, never from the (eagerly evaluated) menu builder.
+    private func openWithURLs(for video: Video) -> [URL] {
+        let ids = viewModel.selectedVideoIds
+        guard ids.count > 1, ids.contains(video.id) else { return [video.url] }
+        return viewModel.filteredVideos.filter { ids.contains($0.id) }.map(\.url)
     }
 }

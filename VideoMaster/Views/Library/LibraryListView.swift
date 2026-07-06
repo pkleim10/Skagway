@@ -195,11 +195,11 @@ struct LibraryListView: View {
                 Menu("Open With") {
                     // If the right-clicked row is part of a multi-selection,
                     // send the whole selection; otherwise just this one video.
+                    // Single pass with O(1) set lookups — the old per-id linear scan made a
+                    // right-click on a large selection cost selection × library comparisons.
                     let urlsToSend: [URL] = {
                         if ids.count > 1, ids.contains(video.id) {
-                            return ids.compactMap { id in
-                                viewModel.filteredVideos.first(where: { $0.id == id })?.url
-                            }
+                            return viewModel.filteredVideos.filter { ids.contains($0.id) }.map(\.url)
                         }
                         return [video.url]
                     }()
