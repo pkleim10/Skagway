@@ -897,15 +897,19 @@ private struct LibraryContentView: View {
             return nil
         }
 
-        // ⌘A — Select All in the Wall grid. Grid-only: List's `Table` responds to ⌘A natively,
-        // and a focused text field must keep ⌘A as "select the field's text" (its field editor is
-        // the first responder, caught by the same guard the other blocks use).
+        // ⌘A — Select All in the Wall grid. Grid-only: List's `Table` responds to ⌘A natively.
+        // A focused text field keeps ⌘A as "select the field's text" — but only when it actually
+        // has text. An *empty* focused field (e.g. the search box, which quietly holds focus until
+        // the user clicks a card) would otherwise swallow ⌘A as an invisible no-op, making Select
+        // All appear randomly dead.
         if event.keyCode == 0,  // 'a'
            event.modifierFlags.intersection(commandModifiers) == .command,
            lvm.viewMode == .grid,
            !lvm.isEditingText {
-            if let first = NSApp.keyWindow?.firstResponder, first is NSTextView || first is NSTextField {
-                return event
+            if let first = NSApp.keyWindow?.firstResponder {
+                let hasText = ((first as? NSTextView)?.string.isEmpty == false)
+                    || ((first as? NSTextField)?.stringValue.isEmpty == false)
+                if hasText { return event }
             }
             DispatchQueue.main.async { lvm.selectAllVideos() }
             return nil
