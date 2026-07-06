@@ -177,12 +177,16 @@ struct CuratedWallGrid: View {
                             }
                             Divider()
                             Button("Remove from Library") {
-                                Task { await viewModel.removeVideosFromLibrary([video.id]) }
+                                let ids = viewModel.selectedVideoIds.contains(video.id)
+                                    ? viewModel.selectedVideoIds : [video.id]
+                                Task { await viewModel.removeVideosFromLibrary(ids) }
                             }
                             .disabled(isMoving)
                             .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "")
                             Button("Delete Video…", role: .destructive) {
-                                viewModel.pendingDeleteIds = [video.id]
+                                let ids = viewModel.selectedVideoIds.contains(video.id)
+                                    ? viewModel.selectedVideoIds : [video.id]
+                                viewModel.pendingDeleteIds = ids
                                 viewModel.showDeleteConfirmation = true
                             }
                             .disabled(isMoving)

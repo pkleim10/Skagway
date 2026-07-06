@@ -13,7 +13,7 @@ Status legend: ☐ open · ✅ fixed · ⏭️ deferred (with reason)
 - The migration that backfills existing Collections into the new rule-group structure hardcodes the new group's `matchMode` to `'all'` instead of copying the collection's existing `matchMode`.
 - **Failure scenario:** `GroupedMatcher` combines rules *within* a group via the group's own mode, and combines *groups* via the outer collection mode. For a single-group backfill, the outer mode is a no-op (`allSatisfy`/`contains` over one element are equivalent), so the hardcoded group mode is what actually governs matching. Any user with a pre-existing "match ANY" collection will have it silently start requiring ALL rules to match after this migration runs on their real database — often collapsing to zero results, with no data loss but wrong semantics.
 
-### 2. ☐ Wall grid's Remove/Delete ignore multi-selection
+### 2. ✅ Wall grid's Remove/Delete ignore multi-selection (fixed build 667)
 - **File:** `VideoMaster/Views/Inspector/CuratedWallGrid.swift:180`
 - "Remove from Library" and "Delete Video…" in the Wall grid's context menu act only on the right-clicked video, unlike every other action in the same menu.
 - **Failure scenario:** Select 8 videos, right-click one. Re-encode, Move Files, Regenerate Thumbnail, and Not a Duplicate all correctly act on the whole selection (`ids = selectedVideoIds.contains(video.id) ? selectedVideoIds : [video.id]`), but Remove from Library / Delete Video hardcode `[video.id]`. The confirmation dialog implies the whole selection is affected; only 1 of 8 is actually removed/deleted. `LibraryListView`'s equivalent menu handles this correctly — confirms this is a Wall-specific regression.

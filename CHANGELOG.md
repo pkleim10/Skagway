@@ -32,6 +32,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 ## Unreleased
 
 - **Fixed a Collections migration bug found in code review**: backfilling old flat-rule collections into the new AND/OR rule-group structure hardcoded the new group's match mode to "all" instead of copying the collection's original mode, which would have silently turned any pre-existing "match ANY" collection into "match ALL" on upgrade. No impact to any collection that already went through this migration without an "any" mode; protects future upgrades (new installs, or restoring an old database backup) from hitting it.
+- **Fixed Wall grid's "Remove from Library" and "Delete Video…" acting only on the right-clicked video instead of the full multi-selection** — every other context-menu action already respected the selection; these two silently left the rest of a multi-selected batch untouched despite the confirmation dialog implying otherwise. Now matches List view's behavior.
 
 ## 0.30.0 (build 665) - 2026-07-06
 
