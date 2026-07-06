@@ -2370,6 +2370,10 @@ final class LibraryViewModel {
 
     func renameVideo(_ video: Video, to newName: String) async -> String? {
         guard let dbId = video.databaseId else { return nil }
+        guard !activeMoveVideoIds.contains(video.filePath) else {
+            reportTransientError("Can't rename \"\(video.fileName)\" — a move is still in progress")
+            return nil
+        }
 
         let trimmed = newName.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return nil }

@@ -198,6 +198,8 @@ struct LibraryListView: View {
                         viewModel.renameText = video.fileName
                         viewModel.renamingVideoId = video.id
                     }
+                    .disabled(isMoving)
+                    .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "")
                 }
                 Menu("Open With") {
                     // If the right-clicked row is part of a multi-selection,

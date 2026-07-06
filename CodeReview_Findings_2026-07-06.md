@@ -23,10 +23,11 @@ Status legend: ☐ open · ✅ fixed · ⏭️ deferred (with reason)
 - Clicking into a mixed-value custom field and clicking away — no typing required — overwrites every selected video's differing value with blank.
 - **Failure scenario:** `flushPendingCustomEdits()` correctly skips persisting over mixed fields, but the separate `.onChange(of: focusedCustomFieldId)` blur handler has no such guard and no changed-value check — it unconditionally persists the blank "Multiple values" placeholder.
 
-### 4. ☐ Rename has no guard against racing an in-flight file move
+### 4. ✅ Rename has no guard against racing an in-flight file move (fixed build 669)
 - **File:** `VideoMaster/Views/Inspector/CuratedWallGrid.swift:95`
 - Every other file-touching action in the context menu (Open With, Re-encode, Move Files, Regenerate Thumbnail, Remove/Delete) is `.disabled(isMoving)`; Rename is not, nor is the global Enter-key rename shortcut, nor `renameVideo()` itself.
 - **Failure scenario:** A user can rename a file while a background `MoveJob` is mid-copy from the same path; `renameVideo()` calls `FileManager.moveItem` on that same URL concurrently with the in-flight copy, risking a corrupted or orphaned file.
+- **Fix:** guarded at three layers — Wall grid's Rename button now `.disabled(isMoving)` (List's had the same gap, fixed too); the Enter-key shortcut in `ContentView.swift` skips a video in `activeMoveVideoIds`; `renameVideo()` itself now refuses with a status message regardless of entry point.
 
 ---
 

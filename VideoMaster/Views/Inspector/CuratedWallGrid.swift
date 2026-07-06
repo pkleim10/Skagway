@@ -96,6 +96,8 @@ struct CuratedWallGrid: View {
                                 viewModel.renameText = video.fileName
                                 viewModel.renamingVideoId = video.id
                             }
+                            .disabled(isMoving)
+                            .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "")
                             Menu("Open With") {
                                 // NB: SwiftUI evaluates contextMenu content EAGERLY, per
                                 // instantiated card, on every grid update — nothing heavy may

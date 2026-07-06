@@ -751,6 +751,7 @@ private struct LibraryContentView: View {
             if (lvm.viewMode == .list || lvm.viewMode == .grid),
                lvm.selectedVideoIds.count == 1,
                let videoId = lvm.selectedVideoIds.first,
+               !lvm.activeMoveVideoIds.contains(videoId),
                let video = lvm.filteredVideos.first(where: { $0.id == videoId })
             {
                 DispatchQueue.main.async {
