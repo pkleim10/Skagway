@@ -2057,6 +2057,12 @@ final class LibraryViewModel {
     /// scroll it into view. Uses `.top`/`.bottom` (not `scrollToVideoId`'s `.toRow`, which centers a
     /// row rather than pinning it, and has no special handling for List's column header) so List's
     /// first row lands fully clear of the header instead of partially hidden under it.
+    /// Select All (⌘A) for the Wall grid — List's `Table` handles ⌘A natively.
+    func selectAllVideos() {
+        guard !filteredVideos.isEmpty else { return }
+        selectedVideoIds = Set(filteredVideos.map(\.id))
+    }
+
     func goToFirstVideo() {
         guard let first = filteredVideos.first else { return }
         selectedVideoIds = [first.id]

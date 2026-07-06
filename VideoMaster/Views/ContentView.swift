@@ -897,6 +897,20 @@ private struct LibraryContentView: View {
             return nil
         }
 
+        // ⌘A — Select All in the Wall grid. Grid-only: List's `Table` responds to ⌘A natively,
+        // and a focused text field must keep ⌘A as "select the field's text" (its field editor is
+        // the first responder, caught by the same guard the other blocks use).
+        if event.keyCode == 0,  // 'a'
+           event.modifierFlags.intersection(commandModifiers) == .command,
+           lvm.viewMode == .grid,
+           !lvm.isEditingText {
+            if let first = NSApp.keyWindow?.firstResponder, first is NSTextView || first is NSTextField {
+                return event
+            }
+            DispatchQueue.main.async { lvm.selectAllVideos() }
+            return nil
+        }
+
         return event
     }
 
