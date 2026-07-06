@@ -593,8 +593,12 @@ struct CuratedWallInspector: View {
     // MARK: - Tags — two lists: assigned, plus (behind a "blind") the unassigned tags.
     private func tagsBlock() -> some View {
         let all = viewModel.tags.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        let assigned = all.filter { isTagAppliedToSelection($0) }
-        let unassigned = all.filter { !isTagAppliedToSelection($0) }
+        // One tagsForVideos call per render. Calling it from a per-tag predicate (the old
+        // isTagAppliedToSelection) multiplied its cost by 2× the tag count — the other half of
+        // the select-all hang fixed in tagsForVideos itself.
+        let appliedIds = Set(viewModel.tagsForVideos(selectedIds).compactMap(\.id))
+        let assigned = all.filter { appliedIds.contains($0.id ?? -1) }
+        let unassigned = all.filter { !appliedIds.contains($0.id ?? -1) }
 
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
@@ -642,7 +646,7 @@ struct CuratedWallInspector: View {
                         .font(.caption2)
                         .foregroundStyle(Color.appTextTertiary)
                 } else {
-                    tagChipGrid(all)
+                    tagChipGrid(all, appliedIds: appliedIds)
                 }
             }
         }
@@ -651,11 +655,11 @@ struct CuratedWallInspector: View {
     /// A flexible grid of every tag in stable (alphabetical) order for the "Add tags" list.
     /// Tags already applied to the selection render greyed out and inert instead of being
     /// filtered out, so the list never reshuffles as tags are added — see `InspectorTagChip`.
-    private func tagChipGrid(_ tags: [Tag]) -> some View {
+    private func tagChipGrid(_ tags: [Tag], appliedIds: Set<Int64>) -> some View {
         let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 6)
         return LazyVGrid(columns: columns, alignment: .leading, spacing: 4) {
             ForEach(tags) { tag in
-                let isApplied = isTagAppliedToSelection(tag)
+                let isApplied = appliedIds.contains(tag.id ?? -1)
                 InspectorTagChip(tag: tag, applied: false, isDisabled: isApplied) {
                     Task { await viewModel.addTag(tag.name, toVideos: selectedIds) }
                 }
@@ -664,11 +668,6 @@ struct CuratedWallInspector: View {
     }
 
     @State private var showUnassigned = false
-
-    private func isTagAppliedToSelection(_ tag: Tag) -> Bool {
-        let applied = viewModel.tagsForVideos(selectedIds)
-        return applied.contains { $0.id == tag.id }
-    }
 
     // MARK: - Footer
 

@@ -2134,10 +2134,8 @@ final class LibraryViewModel {
 
     func applyRating(to videoIds: Set<String>, rating: Int) {
         var updated = videos
-        for filePath in videoIds {
-            if let idx = updated.firstIndex(where: { $0.filePath == filePath }) {
-                updated[idx].rating = rating
-            }
+        for idx in updated.indices where videoIds.contains(updated[idx].filePath) {
+            updated[idx].rating = rating
         }
         videos = updated
     }
@@ -2305,9 +2303,7 @@ final class LibraryViewModel {
     }
 
     func persistRating(for videoIds: Set<String>, rating: Int) async {
-        let dbIds = videoIds.compactMap { filePath in
-            videos.first(where: { $0.filePath == filePath })?.databaseId
-        }
+        let dbIds = videos.filter { videoIds.contains($0.filePath) }.compactMap(\.databaseId)
         guard !dbIds.isEmpty else { return }
 
         if dbIds.count == 1 {
@@ -2351,9 +2347,7 @@ final class LibraryViewModel {
     }
 
     func persistCustomMetadata(fieldId: UUID, value: String, forVideoPaths paths: Set<String>) async {
-        let dbIds = paths.compactMap { path in
-            videos.first(where: { $0.filePath == path })?.databaseId
-        }
+        let dbIds = videos.filter { paths.contains($0.filePath) }.compactMap(\.databaseId)
         guard !dbIds.isEmpty else { return }
         try? await videoRepo.upsertCustomMetadata(videoIds: dbIds, fieldId: fieldId, value: value)
         for id in dbIds {
@@ -3213,12 +3207,11 @@ final class LibraryViewModel {
 
     func deleteVideos(_ ids: Set<String>) async {
         let orderedIds = filteredVideos.map(\.id)
-        for filePath in ids {
-            if let video = videos.first(where: { $0.filePath == filePath }) {
-                try? await videoRepo.delete(video)
-                var resultingURL: NSURL?
-                try? FileManager.default.trashItem(at: video.url, resultingItemURL: &resultingURL)
-            }
+        let targets = videos.filter { ids.contains($0.filePath) }
+        for video in targets {
+            try? await videoRepo.delete(video)
+            var resultingURL: NSURL?
+            try? FileManager.default.trashItem(at: video.url, resultingItemURL: &resultingURL)
         }
         selectedVideoIds.subtract(ids)
         applySelectionAfterDeletionIfNeeded(orderedIdsBeforeDeletion: orderedIds, removedIds: ids)
@@ -3229,10 +3222,9 @@ final class LibraryViewModel {
         guard !ids.isEmpty else { return }
         let orderedIds = filteredVideos.map(\.id)
         stopObserving()
-        for filePath in ids {
-            if let video = videos.first(where: { $0.filePath == filePath }) {
-                try? await videoRepo.delete(video)
-            }
+        let targets = videos.filter { ids.contains($0.filePath) }
+        for video in targets {
+            try? await videoRepo.delete(video)
         }
         selectedVideoIds.subtract(ids)
         applySelectionAfterDeletionIfNeeded(orderedIdsBeforeDeletion: orderedIds, removedIds: ids)
@@ -3294,12 +3286,9 @@ final class LibraryViewModel {
         do {
             let tag = try await tagRepo.findOrCreate(name: name)
             guard let tagId = tag.id else { return }
-            for filePath in videoIds {
-                if let video = videos.first(where: { $0.filePath == filePath }),
-                   let dbId = video.databaseId
-                {
-                    try? await tagRepo.addTag(tagId, to: dbId)
-                }
+            let dbIds = videos.filter { videoIds.contains($0.filePath) }.compactMap(\.databaseId)
+            for dbId in dbIds {
+                try? await tagRepo.addTag(tagId, to: dbId)
             }
             await reloadTagState()
         } catch {
@@ -3321,12 +3310,9 @@ final class LibraryViewModel {
 
     func removeTag(_ tag: Tag, fromVideos videoIds: Set<String>) async {
         guard let tagId = tag.id else { return }
-        for filePath in videoIds {
-            if let video = videos.first(where: { $0.filePath == filePath }),
-               let dbId = video.databaseId
-            {
-                try? await tagRepo.removeTag(tagId, from: dbId)
-            }
+        let dbIds = videos.filter { videoIds.contains($0.filePath) }.compactMap(\.databaseId)
+        for dbId in dbIds {
+            try? await tagRepo.removeTag(tagId, from: dbId)
         }
         await reloadTagState()
     }
@@ -3406,22 +3392,25 @@ final class LibraryViewModel {
         await refreshTagsByVideoId()
     }
 
+    /// Tags common to every video in the selection. Single pass over `videos` with O(1) set
+    /// lookups — the old per-id `videos.first(where:)` was O(selection × library) and, called
+    /// per-tag from the Inspector's render path, hung the app for over a minute on a
+    /// 1500-video select-all.
     func tagsForVideos(_ videoIds: Set<String>) -> [Tag] {
-        guard let firstId = videoIds.first,
-              let firstVideo = videos.first(where: { $0.filePath == firstId }),
-              let firstDbId = firstVideo.databaseId
-        else { return [] }
-
-        var commonTagIds = Set((tagsByVideoId[firstDbId] ?? []).compactMap(\.id))
-        for filePath in videoIds.dropFirst() {
-            if let video = videos.first(where: { $0.filePath == filePath }),
-               let dbId = video.databaseId
-            {
-                let videoTagIds = Set((tagsByVideoId[dbId] ?? []).compactMap(\.id))
-                commonTagIds.formIntersection(videoTagIds)
+        guard !videoIds.isEmpty else { return [] }
+        var commonTagIds: Set<Int64>?
+        for video in videos where videoIds.contains(video.filePath) {
+            guard let dbId = video.databaseId else { continue }
+            let videoTagIds = Set((tagsByVideoId[dbId] ?? []).compactMap(\.id))
+            if commonTagIds == nil {
+                commonTagIds = videoTagIds
+            } else {
+                commonTagIds!.formIntersection(videoTagIds)
             }
+            if commonTagIds!.isEmpty { break }
         }
-        return tags.filter { commonTagIds.contains($0.id ?? -1) }
+        guard let common = commonTagIds, !common.isEmpty else { return [] }
+        return tags.filter { common.contains($0.id ?? -1) }
     }
 
     func tagsForVideo(_ video: Video) async -> [Tag] {
