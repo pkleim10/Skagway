@@ -226,6 +226,15 @@ struct FloatingPlayerPanel: View {
             iconButton("arrow.up.left.and.arrow.down.right", help: "Full screen (⌃⌘F)") {
                 viewModel.isPlayerFullScreen = true
             }
+            Divider().frame(height: 12).overlay(Color.appTextSecondary.opacity(0.4))
+            // Mouse-only equivalent of Escape (which already stops playback the same way — see
+            // ContentView's key monitor). A close button lived in the title bar once, but that
+            // whole area is covered by `titleBarDragArea`'s hit-testable drag surface, which
+            // claimed every tap before it reached the button underneath, so it was removed as
+            // dead weight rather than fixed. This lives here instead, outside the drag area.
+            iconButton("xmark", help: "Stop playback (Esc)") {
+                viewModel.isPlayingInline = false
+            }
         }
         .padding(8)
     }
