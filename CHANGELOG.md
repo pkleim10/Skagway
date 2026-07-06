@@ -32,6 +32,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 ## Unreleased
 
 - **Added Shuffle — a random-order view for List and Wall.** A new icon button next to Surprise Me (⌘⇧R) assigns every video a fresh random position; unlike Surprise Me (which jumps to and plays one random video), Shuffle reorders the whole library view. The order is generated once per click and held stable across normal use (selection, tag edits, filtering) rather than reshuffling on every re-render, and cleanly exits back to a real sort as soon as you pick one from the sort menu or click a column header.
+- **Fixed Shuffle not exiting when the picked sort matched whatever was active before shuffling** (e.g. sorted by Name, shuffled, then clicked "Name" again did nothing) — the sort machinery skipped its own re-sort as an optimization since the target looked unchanged, leaving the view stuck on the stale shuffled order. Now forces a re-sort whenever exiting random order, regardless of whether the target sort looks unchanged.
 
 ## 0.31.0 (build 677) - 2026-07-06
 

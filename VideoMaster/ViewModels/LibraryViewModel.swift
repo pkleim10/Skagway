@@ -34,7 +34,18 @@ final class LibraryViewModel {
     var tableSortOrder: [KeyPathComparator<Video>] = [KeyPathComparator(\Video.dateAdded, order: .reverse)] {
         didSet {
             // Any explicit sort action (column header click, sort menu) exits random order.
+            let wasRandomOrder = isRandomOrder
             isRandomOrder = false
+            defer {
+                // The branches below only recompute when the *target* sort actually differs from
+                // what was active before — correct when coming from a real sort, but exiting random
+                // order needs a re-sort even if the picked sort happens to match whatever was
+                // active before the shuffle (e.g. sorted by Name, shuffled, then clicked Name
+                // again), since `filteredVideos` is still sitting in the stale shuffled order.
+                // Deferred so it sees the branches' final state (e.g. `customSortFieldId`), not the
+                // value present when this didSet started.
+                if wasRandomOrder { recomputeFilteredVideos() }
+            }
 
             // Ignore programmatic updates from selectCustomSort (which sets a sentinel to show the caret).
             guard !_settingCustomSortOrder else { return }
