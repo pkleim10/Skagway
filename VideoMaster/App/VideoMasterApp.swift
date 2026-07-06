@@ -101,21 +101,54 @@ struct VideoMasterApp: App {
                 .keyboardShortcut("m", modifiers: [.command, .option])
                 .disabled(appState.libraryViewModel?.isPlayingInline != true)
             }
-            // Keeps (rather than replaces) the default Cut/Copy/Paste: nothing in the app
-            // implements clipboard operations on videos themselves, but Cut/Copy/Paste are real,
-            // working text-editing commands whenever a text field is focused (rename, notes,
-            // custom metadata fields, search) -- they route to whatever's focused via the standard
-            // cut:/copy:/paste: responder chain. Removing them would have silently killed
-            // ⌘X/⌘C/⌘V everywhere, including inside those fields, since those shortcuts are
-            // dispatched via the menu's key-equivalent mechanism -- no matching menu item, no
-            // shortcut, regardless of what's focused.
+            // Fully replaces .pasteboard rather than composing "default + custom" via `after:` --
+            // that approach previously produced a real, structural duplicate (the default group's
+            // own Select All, stacked with a custom one) because its exact default contents aren't
+            // something we control or fully know ahead of time. Specifying every item here removes
+            // that ambiguity entirely.
             //
-            // No custom Select All/Deselect All here: the default .pasteboard group already
-            // provides its own Select All, so adding another produced a visible duplicate in the
-            // Edit menu (and a second, redundant entry in text fields' own native context menu).
-            // ⌘A/⌘⇧A already work independent of any menu item via ContentView's key monitor, so
-            // nothing is lost by not having a menu item for it.
-            CommandGroup(after: .pasteboard) {
+            // Cut/Copy/Paste forward to the standard responder-chain actions (same behavior as the
+            // system default) so they still work correctly wherever a text field is focused (rename,
+            // notes, custom metadata fields, search) -- nothing in the app implements clipboard
+            // operations on videos themselves, but these are real, working text-editing commands,
+            // not dead weight.
+            CommandGroup(replacing: .pasteboard) {
+                Button("Cut") {
+                    NSApp.sendAction(Selector(("cut:")), to: nil, from: nil)
+                }
+                .keyboardShortcut("x", modifiers: .command)
+
+                Button("Copy") {
+                    NSApp.sendAction(Selector(("copy:")), to: nil, from: nil)
+                }
+                .keyboardShortcut("c", modifiers: .command)
+
+                Button("Paste") {
+                    NSApp.sendAction(Selector(("paste:")), to: nil, from: nil)
+                }
+                .keyboardShortcut("v", modifiers: .command)
+
+                Divider()
+
+                // Disabled whenever a text field has focus: a focused NSTextView/NSTextField
+                // constructs its own native Select All in its right-click menu independent of the
+                // app's Edit menu, so a permanently-enabled item here would still show up as a
+                // redundant supplement inside that same context menu even with the structural
+                // Edit-menu duplicate gone.
+                Button("Select All") {
+                    appState.libraryViewModel?.selectAllVideos()
+                }
+                .keyboardShortcut("a", modifiers: .command)
+                .disabled(Self.isFocusedInTextField || (appState.libraryViewModel?.filteredVideos.isEmpty ?? true))
+
+                Button("Deselect All") {
+                    appState.libraryViewModel?.deselectAllVideos()
+                }
+                .keyboardShortcut("a", modifiers: [.command, .shift])
+                .disabled(Self.isFocusedInTextField || appState.libraryViewModel?.selectedVideoIds.isEmpty != false)
+
+                Divider()
+
                 Button("Delete\u{2026}") {
                     guard let vm = appState.libraryViewModel,
                           !vm.selectedVideoIds.isEmpty
@@ -276,5 +309,12 @@ struct VideoMasterApp: App {
         Settings {
             SettingsView(appState: appState)
         }
+    }
+
+    /// Mirrors the firstResponder check `ContentView`'s key monitor uses before letting ⌘A/⌘⇧A
+    /// fall through to the video list vs. a focused field's own text-editing behavior.
+    private static var isFocusedInTextField: Bool {
+        guard let first = NSApp.keyWindow?.firstResponder else { return false }
+        return first is NSTextView || first is NSTextField
     }
 }
