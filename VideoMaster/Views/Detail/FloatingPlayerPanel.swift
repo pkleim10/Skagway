@@ -105,7 +105,15 @@ struct FloatingPlayerPanel: View {
     // MARK: - Body
 
     var body: some View {
+        // This root fills the entire content pane (Wall/List + Inspector) purely so `available`
+        // reflects the true floating/clamping bounds — nothing is drawn here. Without
+        // `allowsHitTesting(false)`, a `Color` view still claims hit-testing across its whole
+        // frame by default, silently swallowing clicks anywhere in that pane while playing —
+        // e.g. the Inspector's own hero-resize handle, well outside where the player is visible.
+        // `panelContent` is composited via `.overlay` as an independent layer, so it keeps its own
+        // hit-testing (buttons, drag handles) unaffected by this.
         Color.clear
+            .allowsHitTesting(false)
             .overlay {
                 panelContent
                     .position(effectiveCenter)
@@ -137,8 +145,11 @@ struct FloatingPlayerPanel: View {
                     .opacity(effectiveControlsVisible ? 1 : 0)
                     .allowsHitTesting(effectiveControlsVisible)
             }
-            .shadow(color: .black.opacity(0.45), radius: 18, x: 0, y: 8)
-            .padding(outerPadding)
+            // `.onHover` moved to before `.padding`/`.shadow` below (was after): its hover-tracking
+            // region matches whatever frame it's attached to, so applying it to the padded frame
+            // extended that region 12pt beyond the visible video on every side — in Compact mode,
+            // enough to reach past the Inspector's hero-resize handle just below, silently
+            // swallowing drags meant for it even though nothing is drawn there.
             .onHover { hovering in
                 controlsHideTask?.cancel()
                 if hovering {
@@ -152,6 +163,8 @@ struct FloatingPlayerPanel: View {
                     }
                 }
             }
+            .shadow(color: .black.opacity(0.45), radius: 18, x: 0, y: 8)
+            .padding(outerPadding)
     }
 
     // MARK: - Title bar drag
