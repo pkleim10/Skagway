@@ -120,7 +120,7 @@ struct TableScrollHelper: NSViewRepresentable {
     /// Prefer the table with the most rows (video list) over sidebar/collections. Starts at -1 (not
     /// 0) so a table that hasn't finished populating rows yet (e.g. right after cold launch) is still
     /// found rather than silently skipped.
-    fileprivate static func findTableView(in view: NSView) -> NSTableView? {
+    static func findTableView(in view: NSView) -> NSTableView? {
         var best: NSTableView?
         var bestRows = -1
         func search(_ v: NSView) {

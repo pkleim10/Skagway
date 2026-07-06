@@ -807,7 +807,19 @@ private struct LibraryContentView: View {
             // fields (TabbableTextEditor handles its own via doCommandBy, but this is a fallback).
             if let first = NSApp.keyWindow?.firstResponder,
                first is NSText {
-                DispatchQueue.main.async { NSApp.keyWindow?.makeFirstResponder(nil) }
+                DispatchQueue.main.async {
+                    guard let window = NSApp.keyWindow else { return }
+                    window.makeFirstResponder(nil)
+                    // `makeFirstResponder(nil)` only clears the field's focus — it doesn't hand
+                    // focus to anything else, so List's Table stops being first responder and its
+                    // selection highlight is stuck in AppKit's "not focused" gray style until
+                    // something becomes first responder again. Restore it explicitly.
+                    if lvm.viewMode == .list,
+                       let content = window.contentView,
+                       let tableView = TableScrollHelper.findTableView(in: content) {
+                        window.makeFirstResponder(tableView)
+                    }
+                }
                 return nil
             }
             if lvm.isPlayingInline {
