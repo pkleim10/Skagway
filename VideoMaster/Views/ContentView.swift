@@ -915,6 +915,18 @@ private struct LibraryContentView: View {
             return nil
         }
 
+        // ⌘⇧A — Deselect All. Works in both List and grid (unlike ⌘A, `Table` has no native
+        // "deselect all" to defer to, so this needs to be handled here for List too).
+        if event.keyCode == 0,  // 'a'
+           event.modifierFlags.intersection(commandModifiers) == [.command, .shift],
+           !lvm.isEditingText {
+            if let first = NSApp.keyWindow?.firstResponder, first is NSTextView || first is NSTextField {
+                return event
+            }
+            DispatchQueue.main.async { lvm.deselectAllVideos() }
+            return nil
+        }
+
         return event
     }
 

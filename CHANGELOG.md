@@ -31,6 +31,11 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.30.0 (build 665) - 2026-07-06
+
+- **Added ⌘⇧A "Deselect All"**, working in both List and Wall grid — pairs with the existing ⌘A "Select All."
+- **Fixed List view's native ⌘A/arrow-key handling failing to work until a row was clicked first.** The List `Table` needs actual keyboard focus (first responder) for its built-in ⌘A to fire; several paths never gave it that focus: switching view mode via the ⌘1/⌘2 menu shortcuts (only the toolbar toggle did), loading directly into List with nothing selected (cold launch), and — the core bug underneath both — a "pick the table with the most rows" helper that required *more than zero* rows, so it silently found nothing if it ran before the Table had finished populating. Fixed all three; the Table now reliably claims focus so ⌘A works immediately.
+
 ## 0.29.0 (build 659) - 2026-07-05
 
 - **Failures that used to only print to console now surface briefly in the header status bar** (tag create/rename/delete/add/remove, file rename conflicts, post-conversion library-record update failures, and a paused-library-updates notice if the background video observation errors out). Each message auto-clears after ~4 seconds unless replaced by a newer one — same transient-status channel already used for scan progress.

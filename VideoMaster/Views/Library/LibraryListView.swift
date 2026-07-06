@@ -117,10 +117,12 @@ struct TableScrollHelper: NSViewRepresentable {
         }
     }
 
-    /// Prefer the table with the most rows (video list) over sidebar/collections.
-    private static func findTableView(in view: NSView) -> NSTableView? {
+    /// Prefer the table with the most rows (video list) over sidebar/collections. Starts at -1 (not
+    /// 0) so a table that hasn't finished populating rows yet (e.g. right after cold launch) is still
+    /// found rather than silently skipped.
+    fileprivate static func findTableView(in view: NSView) -> NSTableView? {
         var best: NSTableView?
-        var bestRows = 0
+        var bestRows = -1
         func search(_ v: NSView) {
             if let tv = v as? NSTableView, tv.numberOfRows > bestRows {
                 best = tv
@@ -162,6 +164,11 @@ struct LibraryListView: View {
                 scrollToSelectedRow(delay: 0.3)
             } else if let row = scrollPositionRow, row >= 0, row < viewModel.filteredVideos.count {
                 scrollToRow(withId: viewModel.filteredVideos[row].id, delay: 0.2)
+            } else {
+                // Cold launch (or any other appearance) with no switch flag and no persisted scroll
+                // row — still claim first responder so the Table's native ⌘A/arrow keys work without
+                // requiring the user to click a row first.
+                focusTable(delay: 0.2)
             }
         }
         .onChange(of: viewModel.scrollToVideoId, initial: true) { _, targetId in
@@ -591,9 +598,30 @@ struct LibraryListView: View {
     private func scrollToSelectedRow(delay: Double) {
         guard let selectedId = viewModel.selectedVideoIds.first,
               let row = viewModel.filteredVideos.firstIndex(where: { $0.id == selectedId })
-        else { return }
+        else {
+            // No selection to scroll to (e.g. after Deselect All) — still grab first responder so
+            // the Table's native ⌘A/arrow-key handling works right after switching from Wall.
+            focusTable(delay: delay)
+            return
+        }
         scrollPositionRow = row
         scrollToRow(withId: selectedId, delay: delay)
+    }
+
+    private func focusTable(delay: Double) {
+        // Retry at a couple of delays — same rationale as TableScrollHelper's scroll retries: right
+        // after cold launch or a view switch, the Table's underlying NSTableView may not be laid out
+        // (or its window may not be key) yet on the first attempt.
+        for extra in [0.0, 0.2, 0.4] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay + extra) {
+                guard let window = NSApp.keyWindow,
+                      let content = window.contentView,
+                      let tableView = TableScrollHelper.findTableView(in: content),
+                      window.firstResponder !== tableView
+                else { return }
+                window.makeFirstResponder(tableView)
+            }
+        }
     }
 
     private func scrollToRow(withId id: String, delay: Double) {

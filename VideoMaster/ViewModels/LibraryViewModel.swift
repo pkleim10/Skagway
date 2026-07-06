@@ -2063,6 +2063,13 @@ final class LibraryViewModel {
         selectedVideoIds = Set(filteredVideos.map(\.id))
     }
 
+    /// Deselect All (⌘⇧A) — works in both List and Wall grid, since unlike ⌘A, `Table` has no
+    /// native "deselect all" gesture to defer to.
+    func deselectAllVideos() {
+        guard !selectedVideoIds.isEmpty else { return }
+        selectedVideoIds = []
+    }
+
     func goToFirstVideo() {
         guard let first = filteredVideos.first else { return }
         selectedVideoIds = [first.id]

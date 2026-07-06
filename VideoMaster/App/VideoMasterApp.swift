@@ -18,6 +18,7 @@ struct VideoMasterApp: App {
         .commands {
             CommandGroup(after: .sidebar) {
                 Button("List View") {
+                    appState.libraryViewModel?.scrollToSelectedOnViewSwitch = true
                     appState.libraryViewModel?.viewMode = .list
                     appState.libraryViewModel?.savePreferences()
                 }
@@ -25,6 +26,7 @@ struct VideoMasterApp: App {
                 .disabled(!appState.hasLibrary)
 
                 Button("Wall View") {
+                    appState.libraryViewModel?.scrollToSelectedOnViewSwitch = true
                     appState.libraryViewModel?.viewMode = .grid
                     appState.libraryViewModel?.savePreferences()
                 }
