@@ -110,17 +110,23 @@ struct VideoMasterApp: App {
             // dispatched via the menu's key-equivalent mechanism -- no matching menu item, no
             // shortcut, regardless of what's focused.
             CommandGroup(after: .pasteboard) {
+                // Disabled whenever a text field has focus (rename, notes, custom fields, search)
+                // -- not just because the video-list meaning of "select all" doesn't apply there,
+                // but because a permanently-enabled item here gets offered by macOS as a redundant
+                // supplement inside that field's own native Select All context menu, which already
+                // has its own icon and ⌘A. Mirrors the same firstResponder check the ⌘A/⌘⇧A
+                // keyboard shortcuts already use (see ContentView's key monitor).
                 Button("Select All") {
                     appState.libraryViewModel?.selectAllVideos()
                 }
                 .keyboardShortcut("a", modifiers: .command)
-                .disabled(appState.libraryViewModel?.filteredVideos.isEmpty ?? true)
+                .disabled(Self.isFocusedInTextField || (appState.libraryViewModel?.filteredVideos.isEmpty ?? true))
 
                 Button("Deselect All") {
                     appState.libraryViewModel?.deselectAllVideos()
                 }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
-                .disabled(appState.libraryViewModel?.selectedVideoIds.isEmpty != false)
+                .disabled(Self.isFocusedInTextField || appState.libraryViewModel?.selectedVideoIds.isEmpty != false)
 
                 Divider()
 
@@ -284,5 +290,12 @@ struct VideoMasterApp: App {
         Settings {
             SettingsView(appState: appState)
         }
+    }
+
+    /// Mirrors the firstResponder check `ContentView`'s key monitor uses before letting ⌘A/⌘⇧A
+    /// fall through to the video list vs. a focused field's own text-editing behavior.
+    private static var isFocusedInTextField: Bool {
+        guard let first = NSApp.keyWindow?.firstResponder else { return false }
+        return first is NSTextView || first is NSTextField
     }
 }
