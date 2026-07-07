@@ -190,6 +190,18 @@ final class LibraryViewModel {
         didSet { recomputeFilteredVideos() }
     }
 
+    /// The live "advanced rules" boolean filter (the Phase 3 advanced-tier UI writes this). Applied
+    /// as one AND step on top of the quick filters, compiled through the shared `FilterMatcher`.
+    /// nil or an empty group means "no advanced filter". Not persisted across relaunch.
+    var advancedFilterGroup: FilterGroup? {
+        didSet { recomputeFilteredVideos() }
+    }
+
+    var hasActiveAdvancedFilter: Bool {
+        if let g = advancedFilterGroup, !g.isEmpty { return true }
+        return false
+    }
+
     private func isCustomFieldFilterActive(_ criterion: CustomFieldFilterCriterion) -> Bool {
         switch criterion {
         case .contains(let s): return !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -1637,6 +1649,7 @@ final class LibraryViewModel {
             builtinFilters: builtinFilters,
             customFieldFilters: customFieldFilters,
             customFieldDefinitionsById: customFieldDefinitionsById,
+            advancedFilterGroup: advancedFilterGroup,
             customSortField: resolvedCustomSortField,
             customSortAscending: customSortAscending,
             listCustomMetadataByVideoId: listCustomMetadataByVideoId,
@@ -1680,6 +1693,7 @@ final class LibraryViewModel {
         let builtinFilters: [BuiltinFilterField: BuiltinFilterCriterion]
         let customFieldFilters: [UUID: CustomFieldFilterCriterion]
         let customFieldDefinitionsById: [UUID: CustomMetadataFieldDefinition]
+        let advancedFilterGroup: FilterGroup?
         let customSortField: CustomMetadataFieldDefinition?
         let customSortAscending: Bool
         let listCustomMetadataByVideoId: [Int64: [UUID: String]]
@@ -2066,6 +2080,19 @@ final class LibraryViewModel {
             metadata: snapshot.listCustomMetadataByVideoId,
             base: baseResult
         )
+
+        // Advanced boolean rules (Phase 3 UI). Compiled once; a nil/empty group is skipped entirely.
+        if let group = snapshot.advancedFilterGroup, !group.isEmpty {
+            let matcher = FilterMatcher(group: group, customFields: snapshot.customFieldDefinitionsById)
+            baseResult = baseResult.filter { video in
+                let dbId = video.databaseId
+                return matcher.matches(
+                    video,
+                    tags: snapshot.tagsByVideoId[dbId ?? -1] ?? [],
+                    customValues: dbId.flatMap { snapshot.listCustomMetadataByVideoId[$0] } ?? [:]
+                )
+            }
+        }
 
         let tagCounts = computeTagCounts(snapshot: snapshot, baseVideos: baseResult)
 
@@ -3824,6 +3851,7 @@ final class LibraryViewModel {
         if minDurationSeconds != nil || maxDurationSeconds != nil { return true }
         if hasActiveBuiltinFilters { return true }
         if hasActiveCustomFieldFilters { return true }
+        if hasActiveAdvancedFilter { return true }
         return false
     }
 
@@ -3844,6 +3872,7 @@ final class LibraryViewModel {
         clearDurationFilter()
         clearBuiltinFilters()
         clearCustomFieldFilters()
+        advancedFilterGroup = nil
         // Note: we intentionally do not reset sidebarFilter here; caller can do if desired.
     }
 
@@ -3856,6 +3885,7 @@ final class LibraryViewModel {
         maxDurationSeconds = nil
         builtinFilters = [:]
         customFieldFilters = [:]
+        advancedFilterGroup = nil
     }
 
     func deleteTag(_ tag: Tag) async {
