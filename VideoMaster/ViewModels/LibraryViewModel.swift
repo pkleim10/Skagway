@@ -2032,9 +2032,17 @@ final class LibraryViewModel {
             }
             let rules = snapshot.cachedCollectionRules[collectionId] ?? []
             let rulesByGroup = Dictionary(grouping: rules, by: \.groupId)
-            let matcher = collectionRepo.compileMatcher(for: collection, groups: groups, rulesByGroup: rulesByGroup)
+            let matcher = collectionRepo.compileMatcher(
+                for: collection, groups: groups, rulesByGroup: rulesByGroup,
+                customFields: snapshot.customFieldDefinitionsById
+            )
             baseResult = baseResult.filter { video in
-                matcher.matches(video, tags: snapshot.tagsByVideoId[video.databaseId ?? -1] ?? [])
+                let dbId = video.databaseId
+                return matcher.matches(
+                    video,
+                    tags: snapshot.tagsByVideoId[dbId ?? -1] ?? [],
+                    customValues: dbId.flatMap { snapshot.listCustomMetadataByVideoId[$0] } ?? [:]
+                )
             }
         default:
             break
@@ -2323,9 +2331,15 @@ final class LibraryViewModel {
             if groups.isEmpty { return [] }
             let rules = cachedCollectionRules[collectionId] ?? []
             let rulesByGroup = Dictionary(grouping: rules, by: \.groupId)
-            let matcher = collectionRepo.compileMatcher(for: collection, groups: groups, rulesByGroup: rulesByGroup)
+            let customFields = Dictionary(uniqueKeysWithValues: customMetadataFieldDefinitions.map { ($0.id, $0) })
+            let matcher = collectionRepo.compileMatcher(for: collection, groups: groups, rulesByGroup: rulesByGroup, customFields: customFields)
             result = result.filter { video in
-                matcher.matches(video, tags: tagsByVideoId[video.databaseId ?? -1] ?? [])
+                let dbId = video.databaseId
+                return matcher.matches(
+                    video,
+                    tags: tagsByVideoId[dbId ?? -1] ?? [],
+                    customValues: dbId.flatMap { listCustomMetadataByVideoId[$0] } ?? [:]
+                )
             }
         default:
             break
@@ -3920,6 +3934,8 @@ final class LibraryViewModel {
         let allGroups = cachedCollectionRuleGroups
         let cols = collections
         let repo = collectionRepo
+        let customValuesById = listCustomMetadataByVideoId
+        let customFields = Dictionary(uniqueKeysWithValues: customMetadataFieldDefinitions.map { ($0.id, $0) })
 
         let counts = await Task.detached(priority: .utility) {
             var counts: [Int64: Int] = [:]
@@ -3928,9 +3944,14 @@ final class LibraryViewModel {
                 let groups = allGroups[id] ?? []
                 if groups.isEmpty { continue }
                 let rulesByGroup = Dictionary(grouping: allRules[id] ?? [], by: \.groupId)
-                let matcher = repo.compileMatcher(for: collection, groups: groups, rulesByGroup: rulesByGroup)
+                let matcher = repo.compileMatcher(for: collection, groups: groups, rulesByGroup: rulesByGroup, customFields: customFields)
                 counts[id] = baseVideos.filter { video in
-                    matcher.matches(video, tags: currentTags[video.databaseId ?? -1] ?? [])
+                    let dbId = video.databaseId
+                    return matcher.matches(
+                        video,
+                        tags: currentTags[dbId ?? -1] ?? [],
+                        customValues: dbId.flatMap { customValuesById[$0] } ?? [:]
+                    )
                 }.count
             }
             return counts

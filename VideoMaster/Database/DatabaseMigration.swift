@@ -178,6 +178,17 @@ enum DatabaseMigration {
             }
         }
 
+        migrator.registerMigration("v10_collectionRuleValue2") { db in
+            // Second value for the new `.between` range operator (nullable — every existing rule
+            // leaves it NULL, and the unified filter matcher only reads it for `.between`). The
+            // `attribute` column is unchanged: built-in attributes keep their exact RuleAttribute
+            // rawValue token, so existing rows decode straight into `FilterField.builtin(...)`;
+            // custom-field rules (new) store a `custom:<uuid>` token in that same TEXT column.
+            try db.alter(table: "collection_rule") { t in
+                t.add(column: "value2", .text)
+            }
+        }
+
         try migrator.migrate(pool)
     }
 }

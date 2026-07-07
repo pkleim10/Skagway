@@ -244,8 +244,12 @@ struct CollectionEditorView: View {
             } else {
                 let rulesByGroup = Dictionary(grouping: dbRules, by: \.groupId)
                 groups = dbGroups.sorted { $0.orderIndex < $1.orderIndex }.map { g in
-                    let groupRules = (rulesByGroup[g.id ?? -1] ?? []).map { r in
-                        EditableRule(attribute: r.attribute, comparison: r.comparison, value: r.value)
+                    let groupRules = (rulesByGroup[g.id ?? -1] ?? []).compactMap { r -> EditableRule? in
+                        // The editor currently edits built-in attributes only; a custom-field rule
+                        // (only creatable once the editor gains custom-field support in a later
+                        // stage) is skipped rather than shown as a broken row.
+                        guard case .builtin(let attr) = r.attribute else { return nil }
+                        return EditableRule(attribute: attr, comparison: r.comparison, value: r.value)
                     }
                     return EditableGroup(matchMode: g.matchMode, rules: groupRules.isEmpty ? [EditableRule()] : groupRules)
                 }
@@ -263,7 +267,7 @@ struct CollectionEditorView: View {
                         CollectionRule(
                             collectionId: 0,
                             groupId: 0,
-                            attribute: r.attribute,
+                            attribute: .builtin(r.attribute),
                             comparison: r.comparison,
                             value: r.value.trimmingCharacters(in: .whitespaces)
                         )

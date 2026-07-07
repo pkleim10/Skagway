@@ -64,12 +64,26 @@ struct CollectionRule: Codable, Identifiable, Equatable, Hashable {
     var id: Int64?
     var collectionId: Int64
     var groupId: Int64
-    var attribute: RuleAttribute
+    /// Stored in the `attribute` TEXT column as a `FilterField` token — built-ins keep their exact
+    /// `RuleAttribute` rawValue (so existing rows decode unchanged), custom fields use `custom:<uuid>`.
+    var attribute: FilterField
     var comparison: RuleComparison
     var value: String
+    /// Upper bound for the `.between` operator; nil for every other operator.
+    var value2: String?
+
+    init(id: Int64? = nil, collectionId: Int64, groupId: Int64, attribute: FilterField, comparison: RuleComparison, value: String, value2: String? = nil) {
+        self.id = id
+        self.collectionId = collectionId
+        self.groupId = groupId
+        self.attribute = attribute
+        self.comparison = comparison
+        self.value = value
+        self.value2 = value2
+    }
 
     private enum CodingKeys: String, CodingKey {
-        case id, collectionId, groupId, attribute, comparison, value
+        case id, collectionId, groupId, attribute, comparison, value, value2
     }
 }
 
