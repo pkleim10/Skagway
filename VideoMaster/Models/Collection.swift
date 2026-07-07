@@ -176,6 +176,9 @@ enum RuleComparison: String, Codable, CaseIterable, Identifiable {
     case greaterThan
     case lessThanOrEqual
     case greaterThanOrEqual
+    /// Inclusive range using both `value` (lower) and `value2` (upper). Added in the Phase 2
+    /// filter-engine unification; older stored rules never use it.
+    case between
 
     var id: String { rawValue }
 
@@ -191,6 +194,10 @@ enum RuleComparison: String, Codable, CaseIterable, Identifiable {
         case .greaterThan: "is greater than"
         case .lessThanOrEqual: "is at most"
         case .greaterThanOrEqual: "is at least"
+        case .between: "is between"
         }
     }
+
+    /// Whether this operator consumes a second value (`FilterCondition.value2`).
+    var usesSecondValue: Bool { self == .between }
 }
