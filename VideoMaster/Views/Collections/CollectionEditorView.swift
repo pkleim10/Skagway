@@ -4,6 +4,10 @@ import SwiftUI
 struct CollectionEditorView: View {
     let dbPool: DatabasePool
     let collection: VideoCollection?
+    /// Custom metadata fields, so rules can target them (and value editors know their type).
+    var customFields: [CustomMetadataFieldDefinition] = []
+    /// Existing tags, offered as a menu when a rule targets the Tag attribute.
+    var tags: [Tag] = []
     let onSave: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -14,9 +18,10 @@ struct CollectionEditorView: View {
 
     struct EditableRule: Identifiable {
         let id = UUID()
-        var attribute: RuleAttribute = .name
+        var field: FilterField = .builtin(.name)
         var comparison: RuleComparison = .equals
         var value: String = ""
+        var value2: String = ""
     }
 
     struct EditableGroup: Identifiable {
@@ -29,13 +34,24 @@ struct CollectionEditorView: View {
         CollectionRepository(dbPool: dbPool)
     }
 
+    private var customFieldsById: [UUID: CustomMetadataFieldDefinition] {
+        Dictionary(uniqueKeysWithValues: customFields.map { ($0.id, $0) })
+    }
+
     private var isValid: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty
             && !groups.isEmpty
             && groups.allSatisfy { group in
-                !group.rules.isEmpty
-                    && group.rules.allSatisfy { !$0.value.trimmingCharacters(in: .whitespaces).isEmpty }
+                !group.rules.isEmpty && group.rules.allSatisfy { ruleIsValid($0) }
             }
+    }
+
+    private func ruleIsValid(_ rule: EditableRule) -> Bool {
+        guard !rule.value.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
+        if rule.comparison.usesSecondValue {
+            return !rule.value2.trimmingCharacters(in: .whitespaces).isEmpty
+        }
+        return true
     }
 
     var body: some View {
@@ -152,34 +168,52 @@ struct CollectionEditorView: View {
     }
 
     private func ruleRow(groupIndex: Int, ruleIndex: Int) -> some View {
-        HStack(spacing: 8) {
-            Picker("Attribute", selection: $groups[groupIndex].rules[ruleIndex].attribute) {
+        let rule = $groups[groupIndex].rules[ruleIndex]
+        let fields = customFieldsById
+        return HStack(spacing: 8) {
+            // Attribute: built-in fields, then custom fields (sectioned).
+            Picker("Attribute", selection: rule.field) {
                 ForEach(RuleAttribute.allCases) { attr in
-                    Text(attr.label).tag(attr)
+                    Text(attr.label).tag(FilterField.builtin(attr))
+                }
+                if !customFields.isEmpty {
+                    Section("Custom Fields") {
+                        ForEach(customFields) { def in
+                            Text(def.name).tag(FilterField.custom(def.id))
+                        }
+                    }
                 }
             }
             .labelsHidden()
-            .frame(width: 130)
-            .onChange(of: groups[groupIndex].rules[ruleIndex].attribute) { _, newAttr in
-                let supported = newAttr.supportedComparisons
-                if !supported.contains(groups[groupIndex].rules[ruleIndex].comparison) {
-                    groups[groupIndex].rules[ruleIndex].comparison = supported.first ?? .equals
+            .frame(width: 140)
+            .onChange(of: rule.wrappedValue.field) { _, newField in
+                let supported = newField.supportedComparisons(customFields: fields)
+                if !supported.contains(rule.wrappedValue.comparison) {
+                    rule.wrappedValue.comparison = supported.first ?? .equals
+                }
+                // Prefill a default for controls that always show something (date picker, stars),
+                // so a freshly-picked date/rating field isn't invalid-because-empty.
+                if rule.wrappedValue.value.isEmpty {
+                    prefillDefault(rule.value, kind: newField.kind(customFields: fields))
                 }
             }
 
-            Picker("Comparison", selection: $groups[groupIndex].rules[ruleIndex].comparison) {
-                ForEach(groups[groupIndex].rules[ruleIndex].attribute.supportedComparisons) { comp in
+            Picker("Comparison", selection: rule.comparison) {
+                ForEach(rule.wrappedValue.field.supportedComparisons(customFields: fields)) { comp in
                     Text(comp.label).tag(comp)
                 }
             }
             .labelsHidden()
             .frame(width: 150)
+            .onChange(of: rule.wrappedValue.comparison) { _, newComp in
+                if newComp.usesSecondValue && rule.wrappedValue.value2.isEmpty {
+                    prefillDefault(rule.value2, kind: rule.wrappedValue.field.kind(customFields: fields))
+                }
+            }
 
-            TextField(
-                groups[groupIndex].rules[ruleIndex].attribute.valuePlaceholder,
-                text: $groups[groupIndex].rules[ruleIndex].value
-            )
-            .textFieldStyle(.roundedBorder)
+            ruleValueEditor(rule, fields: fields)
+
+            Spacer(minLength: 0)
 
             Button(action: { addRule(toGroup: groupIndex) }) {
                 Image(systemName: "plus.circle.fill")
@@ -193,6 +227,90 @@ struct CollectionEditorView: View {
             }
             .buttonStyle(.borderless)
             .disabled(groups[groupIndex].rules.count <= 1)
+        }
+    }
+
+    /// Type-aware value editor: the control fits the field's kind (stars for rating, a date picker
+    /// for dates, a tag menu for tags, numeric/text fields otherwise), and shows a second control
+    /// for the `.between` range operator.
+    @ViewBuilder
+    private func ruleValueEditor(_ rule: Binding<EditableRule>, fields: [UUID: CustomMetadataFieldDefinition]) -> some View {
+        let kind = rule.wrappedValue.field.kind(customFields: fields)
+        let isBetween = rule.wrappedValue.comparison.usesSecondValue
+        switch kind {
+        case .rating:
+            HStack(spacing: 6) {
+                starRating(rule.value)
+                if isBetween {
+                    Text("to").foregroundStyle(Color.appTextSecondary)
+                    starRating(rule.value2)
+                }
+            }
+        case .date:
+            HStack(spacing: 6) {
+                DatePicker("", selection: dateBinding(rule.value), displayedComponents: [.date])
+                    .labelsHidden()
+                if isBetween {
+                    Text("to").foregroundStyle(Color.appTextSecondary)
+                    DatePicker("", selection: dateBinding(rule.value2), displayedComponents: [.date])
+                        .labelsHidden()
+                }
+            }
+        case .tag:
+            HStack(spacing: 6) {
+                TextField("Tag name", text: rule.value)
+                    .textFieldStyle(.roundedBorder)
+                if !tags.isEmpty {
+                    Menu {
+                        ForEach(tags) { tag in
+                            Button(tag.name) { rule.wrappedValue.value = tag.name }
+                        }
+                    } label: {
+                        Image(systemName: "tag")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                }
+            }
+        case .number:
+            HStack(spacing: 6) {
+                TextField(rule.wrappedValue.field.valuePlaceholder(customFields: fields), text: rule.value)
+                    .textFieldStyle(.roundedBorder)
+                if isBetween {
+                    Text("and").foregroundStyle(Color.appTextSecondary)
+                    TextField(rule.wrappedValue.field.valuePlaceholder(customFields: fields), text: rule.value2)
+                        .textFieldStyle(.roundedBorder)
+                }
+            }
+        case .string:
+            TextField(rule.wrappedValue.field.valuePlaceholder(customFields: fields), text: rule.value)
+                .textFieldStyle(.roundedBorder)
+        }
+    }
+
+    private func starRating(_ value: Binding<String>) -> some View {
+        let current = Int(value.wrappedValue) ?? 0
+        return HStack(spacing: 2) {
+            ForEach(1...5, id: \.self) { star in
+                Image(systemName: star <= current ? "star.fill" : "star")
+                    .foregroundStyle(star <= current ? .yellow : Color.appTextTertiary)
+                    .onTapGesture { value.wrappedValue = String(star == current ? 0 : star) }
+            }
+        }
+    }
+
+    private func dateBinding(_ value: Binding<String>) -> Binding<Date> {
+        Binding(
+            get: { RuleDateFormat.date(from: value.wrappedValue) ?? Date() },
+            set: { value.wrappedValue = RuleDateFormat.string(from: $0) }
+        )
+    }
+
+    private func prefillDefault(_ value: Binding<String>, kind: FilterFieldKind) {
+        switch kind {
+        case .date: value.wrappedValue = RuleDateFormat.string(from: Date())
+        case .rating: value.wrappedValue = "0"
+        default: break
         }
     }
 
@@ -244,12 +362,8 @@ struct CollectionEditorView: View {
             } else {
                 let rulesByGroup = Dictionary(grouping: dbRules, by: \.groupId)
                 groups = dbGroups.sorted { $0.orderIndex < $1.orderIndex }.map { g in
-                    let groupRules = (rulesByGroup[g.id ?? -1] ?? []).compactMap { r -> EditableRule? in
-                        // The editor currently edits built-in attributes only; a custom-field rule
-                        // (only creatable once the editor gains custom-field support in a later
-                        // stage) is skipped rather than shown as a broken row.
-                        guard case .builtin(let attr) = r.attribute else { return nil }
-                        return EditableRule(attribute: attr, comparison: r.comparison, value: r.value)
+                    let groupRules = (rulesByGroup[g.id ?? -1] ?? []).map { r in
+                        EditableRule(field: r.attribute, comparison: r.comparison, value: r.value, value2: r.value2 ?? "")
                     }
                     return EditableGroup(matchMode: g.matchMode, rules: groupRules.isEmpty ? [EditableRule()] : groupRules)
                 }
@@ -267,9 +381,10 @@ struct CollectionEditorView: View {
                         CollectionRule(
                             collectionId: 0,
                             groupId: 0,
-                            attribute: .builtin(r.attribute),
+                            attribute: r.field,
                             comparison: r.comparison,
-                            value: r.value.trimmingCharacters(in: .whitespaces)
+                            value: r.value.trimmingCharacters(in: .whitespaces),
+                            value2: r.comparison.usesSecondValue ? r.value2.trimmingCharacters(in: .whitespaces) : nil
                         )
                     }
                 )

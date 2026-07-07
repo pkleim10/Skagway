@@ -141,9 +141,9 @@ enum RuleAttribute: String, Codable, CaseIterable, Identifiable {
         case .name, .fileExtension, .path, .parentFolder, .volume, .codec, .tag:
             return [.equals, .notEquals, .contains, .startsWith, .endsWith, .matches]
         case .fileSize, .duration, .height, .width, .playCount, .rating:
-            return [.equals, .notEquals, .lessThan, .greaterThan, .lessThanOrEqual, .greaterThanOrEqual]
+            return [.equals, .notEquals, .lessThan, .greaterThan, .lessThanOrEqual, .greaterThanOrEqual, .between]
         case .dateImported, .dateCreated:
-            return [.equals, .lessThan, .greaterThan]
+            return [.equals, .lessThan, .greaterThan, .between]
         }
     }
 

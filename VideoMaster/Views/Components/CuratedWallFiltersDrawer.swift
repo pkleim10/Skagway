@@ -79,6 +79,8 @@ struct CuratedWallFiltersDrawer: View {
             CollectionEditorView(
                 dbPool: viewModel.dbPool,
                 collection: nil,
+                customFields: viewModel.customMetadataFieldDefinitions,
+                tags: viewModel.tags,
                 onSave: { Task { await viewModel.loadCollections() } }
             )
         }
@@ -86,6 +88,8 @@ struct CuratedWallFiltersDrawer: View {
             CollectionEditorView(
                 dbPool: viewModel.dbPool,
                 collection: collection,
+                customFields: viewModel.customMetadataFieldDefinitions,
+                tags: viewModel.tags,
                 onSave: { Task { await viewModel.loadCollections() } }
             )
         }
