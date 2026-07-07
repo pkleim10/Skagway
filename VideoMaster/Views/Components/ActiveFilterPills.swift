@@ -56,6 +56,13 @@ struct ActiveFilterPills: View {
                                 viewModel.clearDurationFilter()
                             }
                         }
+
+                        // Custom metadata fields
+                        ForEach(viewModel.activeCustomFieldFilterDescriptions, id: \.fieldId) { desc in
+                            pill(text: desc.label, systemImage: "tag.circle") {
+                                viewModel.removeCustomFieldFilter(fieldId: desc.fieldId)
+                            }
+                        }
                     }
                 }
 

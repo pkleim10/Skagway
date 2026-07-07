@@ -172,6 +172,124 @@ final class LibraryViewModel {
         didSet { recomputeFilteredVideos() }
     }
 
+    /// One active custom-metadata-field filter criterion. Associated values are already the
+    /// parsed, typed bounds/needle the user configured -- never raw strings.
+    enum CustomFieldFilterCriterion: Equatable {
+        /// `.string`/`.text` fields: case-insensitive substring match.
+        case contains(String)
+        /// `.number` fields: inclusive range; either bound may be nil (open-ended).
+        case numberRange(min: Double?, max: Double?)
+        /// `.date`/`.dateTime` fields: inclusive range; either bound may be nil.
+        case dateRange(min: Date?, max: Date?)
+    }
+
+    /// Active custom-metadata-field filters, keyed by `CustomMetadataFieldDefinition.id`. All
+    /// entries AND together, like Tags/Rating/Duration compose with each other. Not persisted
+    /// across relaunch -- matches every sibling filter here, none of which survive a relaunch.
+    var customFieldFilters: [UUID: CustomFieldFilterCriterion] = [:] {
+        didSet { recomputeFilteredVideos() }
+    }
+
+    private func isCustomFieldFilterActive(_ criterion: CustomFieldFilterCriterion) -> Bool {
+        switch criterion {
+        case .contains(let s): return !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .numberRange(let min, let max): return min != nil || max != nil
+        case .dateRange(let min, let max): return min != nil || max != nil
+        }
+    }
+
+    /// True if any custom-metadata-field filter has real (non-empty/non-open) criteria.
+    var hasActiveCustomFieldFilters: Bool {
+        customFieldFilters.values.contains { isCustomFieldFilterActive($0) }
+    }
+
+    /// Sets the "contains" filter for a `.string`/`.text` field. Stores the raw text as typed --
+    /// no trimming here, since trimming trailing whitespace on every keystroke would silently eat
+    /// spaces as the user types a multi-word phrase. Never removes the field's row on empty text
+    /// (that previously caused the row to disappear the moment a `TextField` gained focus, which
+    /// can fire its binding's `set("")` once even with no typing -- a known SwiftUI/AppKit quirk).
+    /// A blank/whitespace-only value simply doesn't count as "active" (`isCustomFieldFilterActive`)
+    /// and doesn't narrow results (`applyCustomFieldFilters`); only the row's own "✕" removes it.
+    func setCustomFieldContainsFilter(fieldId: UUID, text: String) {
+        customFieldFilters[fieldId] = .contains(text)
+    }
+
+    /// Sets the numeric range filter for a `.number` field. Never removes the row when both bounds
+    /// are nil -- same reasoning as `setCustomFieldContainsFilter`; only the row's own "✕" removes it.
+    func setCustomFieldNumberRangeFilter(fieldId: UUID, min: Double?, max: Double?) {
+        customFieldFilters[fieldId] = .numberRange(min: min, max: max)
+    }
+
+    /// Sets the date range filter for a `.date`/`.dateTime` field. Never removes the row when both
+    /// bounds are nil -- same reasoning as `setCustomFieldContainsFilter`; only the row's own "✕" removes it.
+    func setCustomFieldDateRangeFilter(fieldId: UUID, min: Date?, max: Date?) {
+        customFieldFilters[fieldId] = .dateRange(min: min, max: max)
+    }
+
+    /// Adds a field to the active filter set with an inert default criterion -- drives the "Add
+    /// Filter" menu, which inserts an empty, editable row rather than an already-active filter.
+    func addCustomFieldFilter(fieldId: UUID, valueType: CustomMetadataValueType) {
+        guard customFieldFilters[fieldId] == nil else { return }
+        switch valueType {
+        case .string, .text: customFieldFilters[fieldId] = .contains("")
+        case .number: customFieldFilters[fieldId] = .numberRange(min: nil, max: nil)
+        case .date, .dateTime: customFieldFilters[fieldId] = .dateRange(min: nil, max: nil)
+        }
+    }
+
+    func removeCustomFieldFilter(fieldId: UUID) {
+        customFieldFilters.removeValue(forKey: fieldId)
+    }
+
+    func clearCustomFieldFilters() {
+        customFieldFilters = [:]
+    }
+
+    struct ActiveCustomFieldFilterDescription {
+        let fieldId: UUID
+        let label: String
+    }
+
+    /// Human-readable summaries of active custom-field filters for the pills row, alphabetical by
+    /// field name so pill order is stable across recomputes (dictionary order is not).
+    var activeCustomFieldFilterDescriptions: [ActiveCustomFieldFilterDescription] {
+        customMetadataFieldDefinitions
+            .compactMap { field -> ActiveCustomFieldFilterDescription? in
+                guard let criterion = customFieldFilters[field.id], isCustomFieldFilterActive(criterion) else { return nil }
+                let label: String
+                switch criterion {
+                case .contains(let s):
+                    label = "\(field.name): \(s)"
+                case .numberRange(let min, let max):
+                    switch (min, max) {
+                    case let (min?, max?): label = "\(field.name) \(formatCustomFieldNumber(min))–\(formatCustomFieldNumber(max))"
+                    case let (min?, nil):  label = "\(field.name) ≥\(formatCustomFieldNumber(min))"
+                    case let (nil, max?):  label = "\(field.name) ≤\(formatCustomFieldNumber(max))"
+                    case (nil, nil):       label = field.name
+                    }
+                case .dateRange(let min, let max):
+                    switch (min, max) {
+                    case let (min?, max?): label = "\(field.name) \(formatCustomFieldDate(min))–\(formatCustomFieldDate(max))"
+                    case let (min?, nil):  label = "\(field.name) after \(formatCustomFieldDate(min))"
+                    case let (nil, max?):  label = "\(field.name) before \(formatCustomFieldDate(max))"
+                    case (nil, nil):       label = field.name
+                    }
+                }
+                return ActiveCustomFieldFilterDescription(fieldId: field.id, label: label)
+            }
+            .sorted { $0.label.localizedCaseInsensitiveCompare($1.label) == .orderedAscending }
+    }
+
+    private func formatCustomFieldNumber(_ n: Double) -> String {
+        n.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(n)) : String(n)
+    }
+
+    private func formatCustomFieldDate(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.dateStyle = .short
+        return f.string(from: d)
+    }
+
     /// Controls the top-descending filters drawer for the Curated Wall variant.
     /// Always forced closed on appearance (not persisted). Toggle via header button or ⌘⇧F.
     var isCuratedWallFiltersDrawerOpen: Bool = false
@@ -866,6 +984,9 @@ final class LibraryViewModel {
         var p = listColumnPreferences
         p.visibleCustomFieldIDs.subtract(ids)
         listColumnPreferences = p
+        // A deleted field's filter (if any) has no remaining UI path to remove it -- drop it here
+        // rather than leaving stale, invisible filter state behind.
+        customFieldFilters = customFieldFilters.filter { !ids.contains($0.key) }
     }
 
     func updateCustomMetadataFieldName(id: UUID, name: String) {
@@ -876,6 +997,9 @@ final class LibraryViewModel {
     func updateCustomMetadataFieldType(id: UUID, valueType: CustomMetadataValueType) {
         guard let i = customMetadataFieldDefinitions.firstIndex(where: { $0.id == id }) else { return }
         customMetadataFieldDefinitions[i].valueType = valueType
+        // An existing filter criterion (e.g. .contains) would be the wrong enum case for the
+        // field's new type -- drop it rather than leave a mismatched filter active.
+        customFieldFilters.removeValue(forKey: id)
     }
 
     private func saveCustomMetadataFieldDefinitions() {
@@ -1378,6 +1502,9 @@ final class LibraryViewModel {
         let resolvedCustomSortField = customSortFieldId.flatMap { id in
             customMetadataFieldDefinitions.first { $0.id == id }
         }
+        let customFieldDefinitionsById = Dictionary(
+            uniqueKeysWithValues: customMetadataFieldDefinitions.map { ($0.id, $0) }
+        )
         let snapshot = FilterSnapshot(
             videos: videos,
             tagsByVideoId: tagsByVideoId,
@@ -1400,6 +1527,8 @@ final class LibraryViewModel {
             recentlyConvertedDates: recentlyConvertedDates,
             minDurationSeconds: minDurationSeconds,
             maxDurationSeconds: maxDurationSeconds,
+            customFieldFilters: customFieldFilters,
+            customFieldDefinitionsById: customFieldDefinitionsById,
             customSortField: resolvedCustomSortField,
             customSortAscending: customSortAscending,
             listCustomMetadataByVideoId: listCustomMetadataByVideoId,
@@ -1440,6 +1569,8 @@ final class LibraryViewModel {
         let recentlyConvertedDates: [String: Date]
         let minDurationSeconds: Double?
         let maxDurationSeconds: Double?
+        let customFieldFilters: [UUID: CustomFieldFilterCriterion]
+        let customFieldDefinitionsById: [UUID: CustomMetadataFieldDefinition]
         let customSortField: CustomMetadataFieldDefinition?
         let customSortAscending: Bool
         let listCustomMetadataByVideoId: [Int64: [UUID: String]]
@@ -1502,6 +1633,123 @@ final class LibraryViewModel {
         return result
     }
 
+    /// Shared raw-string → typed-value parsing for a custom metadata field, used by both
+    /// custom-field sort (`sortByCustomField`) and custom-field filter (`applyCustomFieldFilters`)
+    /// so there is exactly one implementation of "how do I read a `.number`/`.date`/`.dateTime`/
+    /// `.string` raw value." Builds the map once per field (O(videos)), not once per comparison.
+    private enum CustomFieldValueParser {
+        static func numberValues(_ videos: [Video], fieldId: UUID, metadata: [Int64: [UUID: String]]) -> [Int64: Double] {
+            var values: [Int64: Double] = [:]
+            for video in videos {
+                guard let vid = video.databaseId, let raw = metadata[vid]?[fieldId] else { continue }
+                let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let d = Double(t) { values[vid] = d }
+            }
+            return values
+        }
+
+        static func dateValues(_ videos: [Video], fieldId: UUID, metadata: [Int64: [UUID: String]]) -> [Int64: Date] {
+            var values: [Int64: Date] = [:]
+            for video in videos {
+                guard let vid = video.databaseId, let raw = metadata[vid]?[fieldId] else { continue }
+                let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let d = isoDate.date(from: t) { values[vid] = d }
+            }
+            return values
+        }
+
+        static func dateTimeValues(_ videos: [Video], fieldId: UUID, metadata: [Int64: [UUID: String]]) -> [Int64: Date] {
+            var values: [Int64: Date] = [:]
+            for video in videos {
+                guard let vid = video.databaseId, let raw = metadata[vid]?[fieldId] else { continue }
+                let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let d = isoFrac.date(from: t) ?? isoPlain.date(from: t) { values[vid] = d }
+            }
+            return values
+        }
+
+        static func stringValues(_ videos: [Video], fieldId: UUID, metadata: [Int64: [UUID: String]]) -> [Int64: String] {
+            var values: [Int64: String] = [:]
+            for video in videos {
+                guard let vid = video.databaseId, let raw = metadata[vid]?[fieldId] else { continue }
+                let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !t.isEmpty { values[vid] = t }
+            }
+            return values
+        }
+
+        private static let isoDate: DateFormatter = {
+            let f = DateFormatter()
+            f.calendar = Calendar(identifier: .gregorian)
+            f.locale = Locale(identifier: "en_US_POSIX")
+            f.timeZone = TimeZone.current
+            f.dateFormat = "yyyy-MM-dd"
+            return f
+        }()
+        private static let isoFrac: ISO8601DateFormatter = {
+            let f = ISO8601DateFormatter()
+            f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            return f
+        }()
+        private static let isoPlain: ISO8601DateFormatter = {
+            let f = ISO8601DateFormatter()
+            f.formatOptions = [.withInternetDateTime]
+            return f
+        }()
+    }
+
+    /// Applies all active custom-metadata-field filters (AND across fields). For each active
+    /// field, builds its typed value map once (via `CustomFieldValueParser`) and filters in a
+    /// single pass. Iterates the progressively-narrowed `base` for each successive field, so later
+    /// fields build smaller maps once earlier fields have already narrowed the set. A video with no
+    /// stored value for an actively-filtered field is excluded (parallels "missing sorts last" in
+    /// `sortByCustomField`: here, "missing" fails the filter rather than being ambiguously included).
+    private nonisolated static func applyCustomFieldFilters(
+        _ filters: [UUID: CustomFieldFilterCriterion],
+        fieldDefinitionsById: [UUID: CustomMetadataFieldDefinition],
+        metadata: [Int64: [UUID: String]],
+        base: [Video]
+    ) -> [Video] {
+        guard !filters.isEmpty else { return base }
+        var result = base
+        for (fieldId, criterion) in filters {
+            // Field deleted since the filter was set -- ignore the stale entry (view-model layer
+            // also prunes these on deletion, but this guard keeps the pure function safe regardless).
+            guard let field = fieldDefinitionsById[fieldId] else { continue }
+            switch criterion {
+            case .contains(let rawNeedle):
+                let needle = rawNeedle.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !needle.isEmpty else { continue } // inert/blank row -- not yet active
+                let values = CustomFieldValueParser.stringValues(result, fieldId: fieldId, metadata: metadata)
+                result = result.filter { video in
+                    guard let vid = video.databaseId, let v = values[vid] else { return false }
+                    return v.localizedCaseInsensitiveContains(needle)
+                }
+            case .numberRange(let min, let max):
+                guard min != nil || max != nil else { continue }
+                let values = CustomFieldValueParser.numberValues(result, fieldId: fieldId, metadata: metadata)
+                result = result.filter { video in
+                    guard let vid = video.databaseId, let v = values[vid] else { return false }
+                    if let min, v < min { return false }
+                    if let max, v > max { return false }
+                    return true
+                }
+            case .dateRange(let min, let max):
+                guard min != nil || max != nil else { continue }
+                let values = field.valueType == .dateTime
+                    ? CustomFieldValueParser.dateTimeValues(result, fieldId: fieldId, metadata: metadata)
+                    : CustomFieldValueParser.dateValues(result, fieldId: fieldId, metadata: metadata)
+                result = result.filter { video in
+                    guard let vid = video.databaseId, let v = values[vid] else { return false }
+                    if let min, v < min { return false }
+                    if let max, v > max { return false }
+                    return true
+                }
+            }
+        }
+        return result
+    }
+
     /// Sort by a custom metadata field. Pre-builds a typed value map so comparisons are concrete (no per-pair
     /// string parsing). Missing/empty values sort last when ascending, first when descending.
     private nonisolated static func sortByCustomField(
@@ -1512,14 +1760,7 @@ final class LibraryViewModel {
     ) -> [Video] {
         switch field.valueType {
         case .number:
-            var values: [Int64: Double] = [:]
-            for video in videos {
-                guard let vid = video.databaseId,
-                      let raw = metadata[vid]?[field.id]
-                else { continue }
-                let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                if let d = Double(t) { values[vid] = d }
-            }
+            let values = CustomFieldValueParser.numberValues(videos, fieldId: field.id, metadata: metadata)
             return videos.sorted { a, b in
                 let va = a.databaseId.flatMap { values[$0] }
                 let vb = b.databaseId.flatMap { values[$0] }
@@ -1532,22 +1773,7 @@ final class LibraryViewModel {
             }
 
         case .date:
-            let isoDate: DateFormatter = {
-                let f = DateFormatter()
-                f.calendar = Calendar(identifier: .gregorian)
-                f.locale = Locale(identifier: "en_US_POSIX")
-                f.timeZone = TimeZone.current
-                f.dateFormat = "yyyy-MM-dd"
-                return f
-            }()
-            var values: [Int64: Date] = [:]
-            for video in videos {
-                guard let vid = video.databaseId,
-                      let raw = metadata[vid]?[field.id]
-                else { continue }
-                let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                if let d = isoDate.date(from: t) { values[vid] = d }
-            }
+            let values = CustomFieldValueParser.dateValues(videos, fieldId: field.id, metadata: metadata)
             return videos.sorted { a, b in
                 let va = a.databaseId.flatMap { values[$0] }
                 let vb = b.databaseId.flatMap { values[$0] }
@@ -1560,18 +1786,7 @@ final class LibraryViewModel {
             }
 
         case .dateTime:
-            let isoFrac = ISO8601DateFormatter()
-            isoFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            let isoPlain = ISO8601DateFormatter()
-            isoPlain.formatOptions = [.withInternetDateTime]
-            var values: [Int64: Date] = [:]
-            for video in videos {
-                guard let vid = video.databaseId,
-                      let raw = metadata[vid]?[field.id]
-                else { continue }
-                let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                if let d = isoFrac.date(from: t) ?? isoPlain.date(from: t) { values[vid] = d }
-            }
+            let values = CustomFieldValueParser.dateTimeValues(videos, fieldId: field.id, metadata: metadata)
             return videos.sorted { a, b in
                 let va = a.databaseId.flatMap { values[$0] }
                 let vb = b.databaseId.flatMap { values[$0] }
@@ -1584,14 +1799,7 @@ final class LibraryViewModel {
             }
 
         case .string, .text:
-            var values: [Int64: String] = [:]
-            for video in videos {
-                guard let vid = video.databaseId,
-                      let raw = metadata[vid]?[field.id]
-                else { continue }
-                let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !t.isEmpty { values[vid] = t }
-            }
+            let values = CustomFieldValueParser.stringValues(videos, fieldId: field.id, metadata: metadata)
             return videos.sorted { a, b in
                 let va = a.databaseId.flatMap { values[$0] }
                 let vb = b.databaseId.flatMap { values[$0] }
@@ -1668,6 +1876,13 @@ final class LibraryViewModel {
         if let maxD = snapshot.maxDurationSeconds {
             baseResult = baseResult.filter { ($0.duration ?? 0) <= maxD }
         }
+
+        baseResult = Self.applyCustomFieldFilters(
+            snapshot.customFieldFilters,
+            fieldDefinitionsById: snapshot.customFieldDefinitionsById,
+            metadata: snapshot.listCustomMetadataByVideoId,
+            base: baseResult
+        )
 
         let tagCounts = computeTagCounts(snapshot: snapshot, baseVideos: baseResult)
 
@@ -3418,6 +3633,7 @@ final class LibraryViewModel {
         if !selectedTagIds.isEmpty { return true }
         if !selectedRatingStars.isEmpty { return true }
         if minDurationSeconds != nil || maxDurationSeconds != nil { return true }
+        if hasActiveCustomFieldFilters { return true }
         return false
     }
 
@@ -3436,6 +3652,7 @@ final class LibraryViewModel {
         clearTagFilters()
         clearRatingFilter()
         clearDurationFilter()
+        clearCustomFieldFilters()
         // Note: we intentionally do not reset sidebarFilter here; caller can do if desired.
     }
 
@@ -3446,6 +3663,7 @@ final class LibraryViewModel {
         selectedRatingStars = []
         minDurationSeconds = nil
         maxDurationSeconds = nil
+        customFieldFilters = [:]
     }
 
     func deleteTag(_ tag: Tag) async {
