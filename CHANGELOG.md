@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Filters Drawer now covers the major built-in fields, not just rating/duration/tags/custom.** The old "Custom Fields" card is now a unified "More Filters" card with one "Add filter" menu offering every built-in field — Quality (resolution buckets SD…8K+), File Size (GB range), Date Added, Date Created (quick presets + custom range), Plays (Unplayed/Played), Codec, Extension, Folder — plus your custom fields. Each pick adds a removable, type-appropriate row; all rows AND together with each other and with the pinned filters, and each shows a removable pill. (Phase 1 of the layered-filtering design — quick-filter completeness, no rule-engine change yet.)
+
 ## 0.32.0 (build 698) - 2026-07-06
 
 - **Added Shuffle — a random-order view for List and Wall.** A new icon button next to Surprise Me (⌘⇧R) assigns every video a fresh random position; unlike Surprise Me (which jumps to and plays one random video), Shuffle reorders the whole library view. The order is generated once per click and held stable across normal use (selection, tag edits, filtering) rather than reshuffling on every re-render, and cleanly exits back to a real sort as soon as you pick one from the sort menu or click a column header.

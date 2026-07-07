@@ -57,6 +57,13 @@ struct ActiveFilterPills: View {
                             }
                         }
 
+                        // Built-in field quick filters (quality/size/date/plays/codec/…)
+                        ForEach(viewModel.activeBuiltinFilterDescriptions, id: \.field) { desc in
+                            pill(text: desc.label, systemImage: "slider.horizontal.3") {
+                                viewModel.removeBuiltinFilter(desc.field)
+                            }
+                        }
+
                         // Custom metadata fields
                         ForEach(viewModel.activeCustomFieldFilterDescriptions, id: \.fieldId) { desc in
                             pill(text: desc.label, systemImage: "tag.circle") {

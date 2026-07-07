@@ -24,6 +24,8 @@ struct CuratedWallFiltersDrawer: View {
     /// Set right after "Add Filter" adds a new custom-field row, so its primary input grabs focus
     /// immediately instead of requiring an extra click.
     @FocusState private var focusedCustomFieldFilterId: UUID?
+    /// Same, for a newly-added built-in field row (text/number kinds).
+    @FocusState private var focusedBuiltinFilterField: BuiltinFilterField?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -91,17 +93,11 @@ struct CuratedWallFiltersDrawer: View {
 
     // MARK: - Responsive column packing
 
-    // The filter units in reading order. Rating + Duration are grouped so they always travel
-    // together. The natural (max) width of each is used to decide how many columns fit. Custom
-    // Fields is a 5th unit, present only when there's something to filter -- computed rather than
-    // a fixed `let` so its column slot only exists when `customMetadataFieldDefinitions` is
-    // non-empty (unitView's `default:` case stays in lock-step since it's only ever reached at
-    // index 4, which only exists when this array has 5 entries).
-    private var unitWidths: [CGFloat] {
-        var widths: [CGFloat] = [260, 240, 320, 360]
-        if !viewModel.customMetadataFieldDefinitions.isEmpty { widths.append(320) }
-        return widths
-    }
+    // The five filter units in reading order. Rating + Duration are grouped so they always travel
+    // together. The natural (max) width of each is used to decide how many columns fit. The 5th
+    // unit ("More Filters") is always present -- it hosts the shared "Add filter" menu for every
+    // built-in field (Quality/Size/Date/Plays/Codec/…) plus custom fields.
+    private let unitWidths: [CGFloat] = [260, 240, 320, 360, 340]
 
     @ViewBuilder
     private func unitView(_ index: Int) -> some View {
@@ -110,7 +106,7 @@ struct CuratedWallFiltersDrawer: View {
         case 1: collectionsCard
         case 2: ratingDurationColumn
         case 3: tagsCard
-        default: customFieldsCard
+        default: moreFiltersCard
         }
     }
 
@@ -615,41 +611,65 @@ struct CuratedWallFiltersDrawer: View {
 
     // MARK: - Custom Fields
 
-    private var customFieldsCard: some View {
-        makeFilterCard(title: "CUSTOM FIELDS", accessory: {
-            clearFilterAccessory { viewModel.clearCustomFieldFilters() }
+    /// The shared "Add filter" surface (Tier 1): one menu offering every built-in field not already
+    /// active (Quality/Size/Date/Plays/Codec/Extension/Folder) plus every custom field not already
+    /// active, and a removable, type-appropriate row for each active one. All rows AND together with
+    /// each other and with the pinned Rating/Duration/Tags/sidebar filters.
+    private var moreFiltersCard: some View {
+        makeFilterCard(title: "MORE FILTERS", accessory: {
+            if !viewModel.builtinFilters.isEmpty || !viewModel.customFieldFilters.isEmpty {
+                clearFilterAccessory {
+                    viewModel.clearBuiltinFilters()
+                    viewModel.clearCustomFieldFilters()
+                }
+            }
         }) {
             VStack(alignment: .leading, spacing: 8) {
-                // Fields not yet actively filtered -- picking one adds a fresh, editable row below.
-                let available = viewModel.customMetadataFieldDefinitions
+                let availableBuiltins = BuiltinFilterField.allCases
+                    .filter { viewModel.builtinFilters[$0] == nil }
+                let availableCustom = viewModel.customMetadataFieldDefinitions
                     .filter { viewModel.customFieldFilters[$0.id] == nil }
                     .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
                 Menu {
-                    ForEach(available) { field in
+                    ForEach(availableBuiltins) { field in
+                        Button(field.label) {
+                            viewModel.addBuiltinFilter(field)
+                            focusedBuiltinFilterField = field
+                        }
+                    }
+                    if !availableBuiltins.isEmpty && !availableCustom.isEmpty {
+                        Divider()
+                    }
+                    ForEach(availableCustom) { field in
                         Button(field.name) {
                             viewModel.addCustomFieldFilter(fieldId: field.id, valueType: field.valueType)
                             focusedCustomFieldFilterId = field.id
                         }
                     }
                 } label: {
-                    Label("Add Filter", systemImage: "plus")
+                    Label("Add filter", systemImage: "plus")
                         .font(.caption)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.appAccent)
-                .disabled(available.isEmpty)
+                .disabled(availableBuiltins.isEmpty && availableCustom.isEmpty)
 
-                // One row per actively-filtered field, alphabetical so rows don't reorder
-                // themselves as criteria change (dictionary iteration order isn't stable).
-                let activeFields = viewModel.customMetadataFieldDefinitions
+                // Active built-in rows first (in field declaration order), then active custom-field
+                // rows (alphabetical). Both orders are stable across recomputes -- dictionary
+                // iteration order isn't.
+                let activeBuiltins = BuiltinFilterField.allCases.filter { viewModel.builtinFilters[$0] != nil }
+                let activeCustom = viewModel.customMetadataFieldDefinitions
                     .filter { viewModel.customFieldFilters[$0.id] != nil }
                     .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
-                if !activeFields.isEmpty {
+                if !activeBuiltins.isEmpty || !activeCustom.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
-                        ForEach(activeFields) { field in
+                        ForEach(activeBuiltins) { field in
+                            builtinFilterRow(field)
+                        }
+                        ForEach(activeCustom) { field in
                             customFieldFilterRow(field)
                         }
                     }
@@ -807,6 +827,246 @@ struct CuratedWallFiltersDrawer: View {
             get: { customFieldDateBound(for: fieldId, isMin: isMin) ?? Date() },
             set: { customFieldSetDateBound(for: fieldId, isMin: isMin, to: $0) }
         )
+    }
+
+    // MARK: - Built-in field filter rows
+
+    @ViewBuilder
+    private func builtinFilterRow(_ field: BuiltinFilterField) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(field.label)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color.appTextPrimary)
+                Spacer()
+                Button {
+                    viewModel.removeBuiltinFilter(field)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(Color.appTextTertiary)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            builtinFilterControl(field)
+        }
+        .padding(8)
+        .background(Color.appSurface.opacity(0.35))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    @ViewBuilder
+    private func builtinFilterControl(_ field: BuiltinFilterField) -> some View {
+        switch field {
+        case .quality: builtinQualityControl()
+        case .fileSize: builtinSizeControl()
+        case .dateAdded, .dateCreated: builtinDateControl(field)
+        case .plays: builtinPlaysControl()
+        case .codec, .fileExtension, .folder: builtinContainsControl(field)
+        }
+    }
+
+    // Quality — resolution-bucket chips (OR within the selected set).
+    private func builtinQualityControl() -> some View {
+        let selected = builtinQualityBuckets
+        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 46), spacing: 4)], alignment: .leading, spacing: 4) {
+            ForEach(ResolutionBucket.allCases) { bucket in
+                let on = selected.contains(bucket.rawValue)
+                Button {
+                    toggleBuiltinQualityBucket(bucket.rawValue)
+                } label: {
+                    Text(bucket.label)
+                        .font(.caption2.weight(.medium))
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .frame(maxWidth: .infinity)
+                        .background(Capsule().fill(on ? Color.appAccent.opacity(0.85) : Color.appSurface.opacity(0.6)))
+                        .foregroundStyle(on ? Color.white : Color.appTextSecondary)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var builtinQualityBuckets: Set<String> {
+        if case .quality(let s) = viewModel.builtinFilters[.quality] { return s }
+        return []
+    }
+
+    private func toggleBuiltinQualityBucket(_ label: String) {
+        var s = builtinQualityBuckets
+        if s.contains(label) { s.remove(label) } else { s.insert(label) }
+        viewModel.setBuiltinQualityFilter(buckets: s)
+    }
+
+    // File size — Min/Max in GB (converted to bytes in the criterion).
+    private func builtinSizeControl() -> some View {
+        HStack(spacing: 6) {
+            TextField("Min", value: builtinSizeBinding(isMin: true), format: .number)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 60)
+                .focused($focusedBuiltinFilterField, equals: .fileSize)
+            Text("–").foregroundStyle(Color.appTextSecondary)
+            TextField("Max", value: builtinSizeBinding(isMin: false), format: .number)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 60)
+            Text("GB").foregroundStyle(Color.appTextSecondary)
+        }
+        .font(.caption)
+    }
+
+    private func builtinSizeBinding(isMin: Bool) -> Binding<Double?> {
+        Binding(
+            get: {
+                guard case .sizeRange(let min, let max) = viewModel.builtinFilters[.fileSize] else { return nil }
+                return (isMin ? min : max).map { $0 / 1_000_000_000 }   // bytes -> GB
+            },
+            set: { newGB in
+                guard case .sizeRange(let min, let max) = viewModel.builtinFilters[.fileSize] else { return }
+                let newBytes = newGB.map { $0 * 1_000_000_000 }
+                viewModel.setBuiltinSizeRangeFilter(
+                    minBytes: isMin ? newBytes : min,
+                    maxBytes: isMin ? max : newBytes
+                )
+            }
+        )
+    }
+
+    // Plays — Unplayed / Played (single-select; tapping the active one clears it).
+    private func builtinPlaysControl() -> some View {
+        HStack(spacing: 6) {
+            builtinPlaysChip("Unplayed", value: .unplayed)
+            builtinPlaysChip("Played", value: .played)
+        }
+    }
+
+    private func builtinPlaysChip(_ label: String, value: PlaysFilter) -> some View {
+        let on = builtinPlaysValue == value
+        return Button {
+            viewModel.setBuiltinPlaysFilter(on ? nil : value)
+        } label: {
+            Text(label)
+                .font(.caption2.weight(.medium))
+                .padding(.horizontal, 10).padding(.vertical, 3)
+                .background(Capsule().fill(on ? Color.appAccent.opacity(0.85) : Color.appSurface.opacity(0.6)))
+                .foregroundStyle(on ? Color.white : Color.appTextSecondary)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var builtinPlaysValue: PlaysFilter? {
+        if case .plays(let p) = viewModel.builtinFilters[.plays] { return p }
+        return nil
+    }
+
+    // Codec / Extension / Folder — case-insensitive contains.
+    private func builtinContainsControl(_ field: BuiltinFilterField) -> some View {
+        let placeholder: String = {
+            switch field {
+            case .codec: return "h264, hevc…"
+            case .fileExtension: return "mp4, mkv…"
+            case .folder: return "Folder name"
+            default: return "Contains…"
+            }
+        }()
+        return TextField(placeholder, text: builtinContainsBinding(field))
+            .textFieldStyle(.roundedBorder)
+            .font(.caption)
+            .focused($focusedBuiltinFilterField, equals: field)
+    }
+
+    private func builtinContainsBinding(_ field: BuiltinFilterField) -> Binding<String> {
+        Binding(
+            get: {
+                if case .contains(let s) = viewModel.builtinFilters[field] { return s }
+                return ""
+            },
+            set: { viewModel.setBuiltinContainsFilter(field: field, text: $0) }
+        )
+    }
+
+    // Date added / created — quick presets + a From/To custom range.
+    @ViewBuilder
+    private func builtinDateControl(_ field: BuiltinFilterField) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Menu {
+                Button("Any time") { viewModel.setBuiltinDateRangeFilter(field: field, min: nil, max: nil) }
+                Button("Today") { setBuiltinDatePresetDays(field, 0) }
+                Button("Last 7 days") { setBuiltinDatePresetDays(field, 7) }
+                Button("Last 30 days") { setBuiltinDatePresetDays(field, 30) }
+                Button("This year") { setBuiltinDateThisYear(field) }
+            } label: {
+                Label("Quick range", systemImage: "calendar")
+                    .font(.caption2)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.appAccent)
+
+            builtinDateBoundRow(field: field, isMin: true, label: "From")
+            builtinDateBoundRow(field: field, isMin: false, label: "To")
+        }
+    }
+
+    @ViewBuilder
+    private func builtinDateBoundRow(field: BuiltinFilterField, isMin: Bool, label: String) -> some View {
+        HStack(spacing: 6) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(Color.appTextSecondary)
+                .frame(width: 32, alignment: .leading)
+            if builtinDateBound(field: field, isMin: isMin) != nil {
+                DatePicker("", selection: builtinDateBinding(field: field, isMin: isMin), displayedComponents: [.date])
+                    .labelsHidden()
+                    .font(.caption)
+                Button {
+                    builtinSetDateBound(field: field, isMin: isMin, to: nil)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(Color.appTextTertiary)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            } else {
+                Button("Set…") {
+                    builtinSetDateBound(field: field, isMin: isMin, to: Date())
+                }
+                .font(.caption)
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.appAccent)
+            }
+        }
+    }
+
+    private func builtinDateBound(field: BuiltinFilterField, isMin: Bool) -> Date? {
+        guard case .dateRange(let min, let max) = viewModel.builtinFilters[field] else { return nil }
+        return isMin ? min : max
+    }
+
+    private func builtinSetDateBound(field: BuiltinFilterField, isMin: Bool, to newValue: Date?) {
+        guard case .dateRange(let min, let max) = viewModel.builtinFilters[field] else { return }
+        viewModel.setBuiltinDateRangeFilter(field: field, min: isMin ? newValue : min, max: isMin ? max : newValue)
+    }
+
+    private func builtinDateBinding(field: BuiltinFilterField, isMin: Bool) -> Binding<Date> {
+        Binding(
+            get: { builtinDateBound(field: field, isMin: isMin) ?? Date() },
+            set: { builtinSetDateBound(field: field, isMin: isMin, to: $0) }
+        )
+    }
+
+    /// `days == 0` means "today" (start of today → now). Sets only the lower bound (open-ended max).
+    private func setBuiltinDatePresetDays(_ field: BuiltinFilterField, _ days: Int) {
+        let cal = Calendar.current
+        let base = cal.date(byAdding: .day, value: -days, to: Date()) ?? Date()
+        viewModel.setBuiltinDateRangeFilter(field: field, min: cal.startOfDay(for: base), max: nil)
+    }
+
+    private func setBuiltinDateThisYear(_ field: BuiltinFilterField) {
+        let cal = Calendar.current
+        let start = cal.date(from: cal.dateComponents([.year], from: Date()))
+        viewModel.setBuiltinDateRangeFilter(field: field, min: start, max: nil)
     }
 
     @ViewBuilder

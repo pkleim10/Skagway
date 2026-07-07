@@ -290,6 +290,113 @@ final class LibraryViewModel {
         return f.string(from: d)
     }
 
+    // MARK: - Built-in field filters (quick-filter rows for size/quality/date/plays/codec/…)
+
+    /// Active built-in-field quick filters, keyed by `BuiltinFilterField`. All entries AND together,
+    /// with each other and with rating/duration/tags/custom-field filters — Tier 1 of the layered
+    /// filtering design. Not persisted across relaunch, matching every sibling filter.
+    var builtinFilters: [BuiltinFilterField: BuiltinFilterCriterion] = [:] {
+        didSet { recomputeFilteredVideos() }
+    }
+
+    private func isBuiltinFilterActive(_ criterion: BuiltinFilterCriterion) -> Bool {
+        switch criterion {
+        case .quality(let buckets): return !buckets.isEmpty
+        case .sizeRange(let min, let max): return min != nil || max != nil
+        case .dateRange(let min, let max): return min != nil || max != nil
+        case .plays(let p): return p != nil
+        case .contains(let s): return !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    var hasActiveBuiltinFilters: Bool {
+        builtinFilters.values.contains { isBuiltinFilterActive($0) }
+    }
+
+    /// Adds a field to the active set with its inert default criterion — drives the "Add filter"
+    /// menu, inserting an empty, editable row rather than an already-active filter.
+    func addBuiltinFilter(_ field: BuiltinFilterField) {
+        guard builtinFilters[field] == nil else { return }
+        builtinFilters[field] = field.defaultCriterion
+    }
+
+    func removeBuiltinFilter(_ field: BuiltinFilterField) {
+        builtinFilters.removeValue(forKey: field)
+    }
+
+    func clearBuiltinFilters() {
+        builtinFilters = [:]
+    }
+
+    /// Setters mirror the custom-field ones: they never remove the row on an empty value (only the
+    /// row's own "✕" removes it); an empty/open value simply doesn't count as active.
+    func setBuiltinQualityFilter(buckets: Set<String>) {
+        builtinFilters[.quality] = .quality(buckets)
+    }
+
+    func setBuiltinSizeRangeFilter(minBytes: Double?, maxBytes: Double?) {
+        builtinFilters[.fileSize] = .sizeRange(minBytes: minBytes, maxBytes: maxBytes)
+    }
+
+    func setBuiltinDateRangeFilter(field: BuiltinFilterField, min: Date?, max: Date?) {
+        builtinFilters[field] = .dateRange(min: min, max: max)
+    }
+
+    func setBuiltinPlaysFilter(_ value: PlaysFilter?) {
+        builtinFilters[.plays] = .plays(value)
+    }
+
+    func setBuiltinContainsFilter(field: BuiltinFilterField, text: String) {
+        builtinFilters[field] = .contains(text)
+    }
+
+    struct ActiveBuiltinFilterDescription {
+        let field: BuiltinFilterField
+        let label: String
+    }
+
+    /// Pill summaries for active built-in filters, ordered by the field enum's declaration order so
+    /// pill order is stable across recomputes (dictionary order is not).
+    var activeBuiltinFilterDescriptions: [ActiveBuiltinFilterDescription] {
+        BuiltinFilterField.allCases.compactMap { field -> ActiveBuiltinFilterDescription? in
+            guard let criterion = builtinFilters[field], isBuiltinFilterActive(criterion) else { return nil }
+            let label: String
+            switch criterion {
+            case .quality(let buckets):
+                let ordered = ResolutionBucket.allCases.filter { buckets.contains($0.rawValue) }.map(\.rawValue)
+                label = "Quality: " + ordered.joined(separator: ", ")
+            case .sizeRange(let min, let max):
+                switch (min, max) {
+                case let (min?, max?): label = "Size \(Self.formatBytes(min))–\(Self.formatBytes(max))"
+                case let (min?, nil):  label = "Size ≥\(Self.formatBytes(min))"
+                case let (nil, max?):  label = "Size ≤\(Self.formatBytes(max))"
+                case (nil, nil):       label = field.label
+                }
+            case .dateRange(let min, let max):
+                let verb = field == .dateCreated ? "Created" : "Added"
+                switch (min, max) {
+                case let (min?, max?): label = "\(verb) \(formatCustomFieldDate(min))–\(formatCustomFieldDate(max))"
+                case let (min?, nil):  label = "\(verb) after \(formatCustomFieldDate(min))"
+                case let (nil, max?):  label = "\(verb) before \(formatCustomFieldDate(max))"
+                case (nil, nil):       label = field.label
+                }
+            case .plays(let p):
+                switch p {
+                case .unplayed: label = "Unplayed"
+                case .played:   label = "Played"
+                case nil:       label = field.label
+                }
+            case .contains(let s):
+                label = "\(field.label): \(s.trimmingCharacters(in: .whitespacesAndNewlines))"
+            }
+            return ActiveBuiltinFilterDescription(field: field, label: label)
+        }
+    }
+
+    private static func formatBytes(_ bytes: Double) -> String {
+        Int64(bytes).formattedFileSize
+    }
+
     /// Controls the top-descending filters drawer for the Curated Wall variant.
     /// Always forced closed on appearance (not persisted). Toggle via header button or ⌘⇧F.
     var isCuratedWallFiltersDrawerOpen: Bool = false
@@ -1527,6 +1634,7 @@ final class LibraryViewModel {
             recentlyConvertedDates: recentlyConvertedDates,
             minDurationSeconds: minDurationSeconds,
             maxDurationSeconds: maxDurationSeconds,
+            builtinFilters: builtinFilters,
             customFieldFilters: customFieldFilters,
             customFieldDefinitionsById: customFieldDefinitionsById,
             customSortField: resolvedCustomSortField,
@@ -1569,6 +1677,7 @@ final class LibraryViewModel {
         let recentlyConvertedDates: [String: Date]
         let minDurationSeconds: Double?
         let maxDurationSeconds: Double?
+        let builtinFilters: [BuiltinFilterField: BuiltinFilterCriterion]
         let customFieldFilters: [UUID: CustomFieldFilterCriterion]
         let customFieldDefinitionsById: [UUID: CustomMetadataFieldDefinition]
         let customSortField: CustomMetadataFieldDefinition?
@@ -1582,6 +1691,70 @@ final class LibraryViewModel {
     private nonisolated static func applyRatingFilter(selectedStars: Set<Int>, base: [Video]) -> [Video] {
         guard !selectedStars.isEmpty else { return base }
         return base.filter { selectedStars.contains($0.rating) }
+    }
+
+    /// Applies all active built-in-field quick filters (AND across fields). Reads `Video` fields
+    /// directly (no external maps needed). Videos missing the relevant value fail the filter, same
+    /// convention as custom-field filtering (e.g. an unknown resolution can't match a Quality
+    /// filter). Date-range max bounds are treated as "through the end of that day," since a `.date`
+    /// DatePicker returns midnight and a user picking a max date means "up to and including" it.
+    private nonisolated static func applyBuiltinFilters(_ filters: [BuiltinFilterField: BuiltinFilterCriterion], base: [Video]) -> [Video] {
+        guard !filters.isEmpty else { return base }
+        let cal = Calendar.current
+        var result = base
+        for (field, criterion) in filters {
+            switch criterion {
+            case .quality(let buckets):
+                guard !buckets.isEmpty else { continue }
+                result = result.filter { v in
+                    guard let label = v.resolutionLabel else { return false }
+                    return buckets.contains(label)
+                }
+            case .sizeRange(let min, let max):
+                guard min != nil || max != nil else { continue }
+                result = result.filter { v in
+                    let bytes = Double(v.fileSize)
+                    if let min, bytes < min { return false }
+                    if let max, bytes > max { return false }
+                    return true
+                }
+            case .dateRange(let min, let max):
+                guard min != nil || max != nil else { continue }
+                let lower = min.map { cal.startOfDay(for: $0) }
+                // Exclusive upper bound = start of the day *after* the picked max day, so the whole
+                // max day is included.
+                let upperExclusive = max.flatMap { cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: $0)) }
+                result = result.filter { v in
+                    let date: Date? = (field == .dateCreated) ? v.creationDate : v.dateAdded
+                    guard let date else { return false }
+                    if let lower, date < lower { return false }
+                    if let upperExclusive, date >= upperExclusive { return false }
+                    return true
+                }
+            case .plays(let mode):
+                guard let mode else { continue }
+                result = result.filter { v in
+                    switch mode {
+                    case .unplayed: return v.playCount == 0
+                    case .played:   return v.playCount > 0
+                    }
+                }
+            case .contains(let rawNeedle):
+                let needle = rawNeedle.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !needle.isEmpty else { continue }
+                result = result.filter { v in
+                    let haystack: String
+                    switch field {
+                    case .codec: haystack = v.codec ?? ""
+                    case .fileExtension: haystack = (v.filePath as NSString).pathExtension
+                    case .folder: haystack = URL(fileURLWithPath: v.filePath).deletingLastPathComponent().lastPathComponent
+                    default: haystack = ""
+                    }
+                    return haystack.localizedCaseInsensitiveContains(needle)
+                }
+            }
+        }
+        return result
     }
 
     /// Sorts by the per-video ranks generated in `shuffleOrder()`. A video with no assigned rank
@@ -1876,6 +2049,8 @@ final class LibraryViewModel {
         if let maxD = snapshot.maxDurationSeconds {
             baseResult = baseResult.filter { ($0.duration ?? 0) <= maxD }
         }
+
+        baseResult = Self.applyBuiltinFilters(snapshot.builtinFilters, base: baseResult)
 
         baseResult = Self.applyCustomFieldFilters(
             snapshot.customFieldFilters,
@@ -3633,6 +3808,7 @@ final class LibraryViewModel {
         if !selectedTagIds.isEmpty { return true }
         if !selectedRatingStars.isEmpty { return true }
         if minDurationSeconds != nil || maxDurationSeconds != nil { return true }
+        if hasActiveBuiltinFilters { return true }
         if hasActiveCustomFieldFilters { return true }
         return false
     }
@@ -3652,6 +3828,7 @@ final class LibraryViewModel {
         clearTagFilters()
         clearRatingFilter()
         clearDurationFilter()
+        clearBuiltinFilters()
         clearCustomFieldFilters()
         // Note: we intentionally do not reset sidebarFilter here; caller can do if desired.
     }
@@ -3663,6 +3840,7 @@ final class LibraryViewModel {
         selectedRatingStars = []
         minDurationSeconds = nil
         maxDurationSeconds = nil
+        builtinFilters = [:]
         customFieldFilters = [:]
     }
 
