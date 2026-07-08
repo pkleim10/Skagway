@@ -873,7 +873,7 @@ struct CuratedWallFiltersDrawer: View {
     // Quality — resolution-bucket chips (OR within the selected set).
     private func builtinQualityControl() -> some View {
         let selected = builtinQualityBuckets
-        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 46), spacing: 4)], alignment: .leading, spacing: 4) {
+        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 56), spacing: 4)], alignment: .leading, spacing: 4) {
             ForEach(ResolutionBucket.allCases) { bucket in
                 let on = selected.contains(bucket.rawValue)
                 Button {
@@ -881,6 +881,8 @@ struct CuratedWallFiltersDrawer: View {
                 } label: {
                     Text(bucket.label)
                         .font(.caption2.weight(.medium))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                         .padding(.horizontal, 8).padding(.vertical, 3)
                         .frame(maxWidth: .infinity)
                         .background(Capsule().fill(on ? Color.appAccent.opacity(0.85) : Color.appSurface.opacity(0.6)))
@@ -903,7 +905,8 @@ struct CuratedWallFiltersDrawer: View {
         viewModel.setBuiltinQualityFilter(buckets: s)
     }
 
-    // File size — Min/Max in GB (converted to bytes in the criterion).
+    // File size — Min/Max in MB (converted to bytes in the criterion; MB matches the Collections
+    // rule engine's file-size unit).
     private func builtinSizeControl() -> some View {
         HStack(spacing: 6) {
             TextField("Min", value: builtinSizeBinding(isMin: true), format: .number)
@@ -914,7 +917,7 @@ struct CuratedWallFiltersDrawer: View {
             TextField("Max", value: builtinSizeBinding(isMin: false), format: .number)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 60)
-            Text("GB").foregroundStyle(Color.appTextSecondary)
+            Text("MB").foregroundStyle(Color.appTextSecondary)
         }
         .font(.caption)
     }
@@ -923,11 +926,11 @@ struct CuratedWallFiltersDrawer: View {
         Binding(
             get: {
                 guard case .sizeRange(let min, let max) = viewModel.builtinFilters[.fileSize] else { return nil }
-                return (isMin ? min : max).map { $0 / 1_000_000_000 }   // bytes -> GB
+                return (isMin ? min : max).map { $0 / 1_000_000 }   // bytes -> MB
             },
-            set: { newGB in
+            set: { newMB in
                 guard case .sizeRange(let min, let max) = viewModel.builtinFilters[.fileSize] else { return }
-                let newBytes = newGB.map { $0 * 1_000_000_000 }
+                let newBytes = newMB.map { $0 * 1_000_000 }
                 viewModel.setBuiltinSizeRangeFilter(
                     minBytes: isMin ? newBytes : min,
                     maxBytes: isMin ? max : newBytes
