@@ -764,6 +764,13 @@ private struct LibraryContentView: View {
         .sheet(isPresented: $showMoveQueue) {
             MoveQueueView(vm: vm)
         }
+        .sheet(item: $vm.metadataExportPresentation) { presentation in
+            ExportMetadataSheet(
+                viewModel: vm,
+                scope: presentation.scope,
+                videoCount: presentation.videoCount
+            )
+        }
         .onChange(of: vm.focusSearchFieldToken) { _, _ in
             isSearchFocused = true
         }

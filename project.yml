@@ -22,8 +22,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.videomaster.VideoMaster
-        MARKETING_VERSION: "0.35.0"
-        CURRENT_PROJECT_VERSION: "723"
+        MARKETING_VERSION: "0.36.0"
+        CURRENT_PROJECT_VERSION: "728"
         GENERATE_INFOPLIST_FILE: "YES"
         INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
         INFOPLIST_KEY_CFBundleDisplayName: VideoMaster
@@ -33,6 +33,22 @@ targets:
         CODE_SIGN_ENTITLEMENTS: VideoMaster/VideoMaster.entitlements
         CODE_SIGN_IDENTITY: "-"
         SWIFT_VERSION: "5"
+        ENABLE_TESTABILITY: "YES"
     dependencies:
       - package: GRDB
         product: GRDB
+  VideoMasterTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: VideoMasterTests
+    dependencies:
+      - target: VideoMaster
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.videomaster.VideoMasterTests
+        GENERATE_INFOPLIST_FILE: "YES"
+        CODE_SIGN_IDENTITY: "-"
+        SWIFT_VERSION: "5"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/VideoMaster.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/VideoMaster"
+        BUNDLE_LOADER: "$(TEST_HOST)"

@@ -472,6 +472,183 @@ final class LibraryViewModel {
     var pendingDeleteIds: Set<String> = []
     var showDeleteConfirmation: Bool = false
 
+    // MARK: - Metadata export
+
+    /// Non-nil while the Export Metadata sheet is presented. Scope is fixed by the entry point.
+    var metadataExportPresentation: MetadataExportPresentation? = nil
+    var metadataExportProgress: (current: Int, total: Int)? = nil
+    var metadataExportErrorMessage: String? = nil
+    private var metadataExportTask: Task<Void, Never>?
+
+    private static let metadataExportFormatKey = "VideoMaster.metadataExportFormat"
+    private static let metadataExportColumnOrderKey = "VideoMaster.metadataExportColumnOrder"
+    private static let metadataExportIncludedColumnsKey = "VideoMaster.metadataExportIncludedColumns"
+
+    struct MetadataExportPresentation: Identifiable, Equatable {
+        let id = UUID()
+        let scope: MetadataExportScope
+        let videoCount: Int
+    }
+
+    func presentExportMetadata(scope: MetadataExportScope) {
+        let videos = videosForMetadataExport(scope: scope)
+        guard !videos.isEmpty else { return }
+        metadataExportErrorMessage = nil
+        metadataExportProgress = nil
+        metadataExportPresentation = MetadataExportPresentation(scope: scope, videoCount: videos.count)
+    }
+
+    func videosForMetadataExport(scope: MetadataExportScope) -> [Video] {
+        switch scope {
+        case .filtered:
+            return filteredVideos
+        case .selection:
+            let ids = selectedVideoIds
+            return filteredVideos.filter { ids.contains($0.id) }
+        }
+    }
+
+    func loadMetadataExportFormat() -> MetadataExportFormat {
+        if let raw = UserDefaults.standard.string(forKey: Self.metadataExportFormatKey),
+           let format = MetadataExportFormat(rawValue: raw)
+        {
+            return format
+        }
+        return .csv
+    }
+
+    func saveMetadataExportFormat(_ format: MetadataExportFormat) {
+        UserDefaults.standard.set(format.rawValue, forKey: Self.metadataExportFormatKey)
+    }
+
+    /// Full field list order for the export sheet (checked and unchecked).
+    func loadMetadataExportColumnOrder() -> [String] {
+        let custom = customMetadataFieldDefinitions
+        if let saved = UserDefaults.standard.array(forKey: Self.metadataExportColumnOrderKey) as? [String] {
+            let sanitized = MetadataExportColumnRegistry.sanitizeFullListOrder(saved, customFields: custom)
+            if !sanitized.isEmpty { return sanitized }
+        }
+        return MetadataExportColumnRegistry.defaultFullListOrder(customFields: custom)
+    }
+
+    func saveMetadataExportColumnOrder(_ ids: [String]) {
+        let sanitized = MetadataExportColumnRegistry.sanitizeFullListOrder(
+            ids,
+            customFields: customMetadataFieldDefinitions
+        )
+        UserDefaults.standard.set(sanitized, forKey: Self.metadataExportColumnOrderKey)
+    }
+
+    func loadMetadataExportIncludedColumnIDs() -> Set<String> {
+        let custom = customMetadataFieldDefinitions
+        if let saved = UserDefaults.standard.array(forKey: Self.metadataExportIncludedColumnsKey) as? [String] {
+            let sanitized = MetadataExportColumnRegistry.sanitizeIncludedIDs(saved, customFields: custom)
+            if !sanitized.isEmpty { return sanitized }
+        }
+        // Migrate older prefs that only stored the included-ordered list.
+        if let legacy = UserDefaults.standard.array(forKey: Self.metadataExportColumnOrderKey) as? [String],
+           UserDefaults.standard.object(forKey: Self.metadataExportIncludedColumnsKey) == nil
+        {
+            let legacyIncluded = MetadataExportColumnRegistry.sanitizeOrderedIDs(legacy, customFields: custom)
+            if !legacyIncluded.isEmpty {
+                return Set(legacyIncluded)
+            }
+        }
+        return MetadataExportColumnRegistry.defaultIncludedIDs(customFields: custom)
+    }
+
+    func saveMetadataExportIncludedColumnIDs(_ ids: Set<String>) {
+        let sanitized = MetadataExportColumnRegistry.sanitizeIncludedIDs(
+            Array(ids),
+            customFields: customMetadataFieldDefinitions
+        )
+        UserDefaults.standard.set(Array(sanitized), forKey: Self.metadataExportIncludedColumnsKey)
+    }
+
+    func makeMetadataExportContext() -> MetadataExportContext {
+        MetadataExportContext(
+            tagsByVideoId: tagsByVideoId,
+            customValuesByVideoId: listCustomMetadataByVideoId,
+            customFieldDefinitions: Dictionary(
+                uniqueKeysWithValues: customMetadataFieldDefinitions.map { ($0.id, $0) }
+            ),
+            missingVideoIds: missingVideoIds,
+            duplicateVideoIds: duplicateVideoIds,
+            convertedDatesByPath: recentlyConvertedDates,
+            thumbnailsSettled: thumbnailsSettled
+        )
+    }
+
+    func cancelMetadataExport() {
+        metadataExportTask?.cancel()
+        metadataExportTask = nil
+        metadataExportProgress = nil
+    }
+
+    func runMetadataExport(
+        scope: MetadataExportScope,
+        format: MetadataExportFormat,
+        orderedColumnIDs: [String],
+        destinationURL: URL
+    ) {
+        cancelMetadataExport()
+        let videos = videosForMetadataExport(scope: scope)
+        guard !videos.isEmpty, !orderedColumnIDs.isEmpty else {
+            metadataExportErrorMessage = MetadataExportError.emptySelection.localizedDescription
+            return
+        }
+        saveMetadataExportFormat(format)
+
+        let columns = MetadataExportColumnRegistry.allColumns(customFields: customMetadataFieldDefinitions)
+        let columnsByID = Dictionary(uniqueKeysWithValues: columns.map { ($0.id, $0) })
+        let context = makeMetadataExportContext()
+        let request = MetadataExporter.Request(
+            videos: videos,
+            orderedColumnIDs: orderedColumnIDs,
+            columnsByID: columnsByID,
+            format: format,
+            context: context,
+            destinationURL: destinationURL
+        )
+
+        metadataExportErrorMessage = nil
+        metadataExportProgress = (0, videos.count)
+        metadataExportTask = Task { [weak self] in
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try MetadataExporter.export(request) { current, total in
+                        Task { @MainActor [weak self] in
+                            self?.metadataExportProgress = (current, total)
+                        }
+                    }
+                }.value
+                await MainActor.run {
+                    guard let self, !Task.isCancelled else { return }
+                    self.metadataExportProgress = nil
+                    self.metadataExportTask = nil
+                    self.metadataExportPresentation = nil
+                    let text = "Exported \(videos.count) video\(videos.count == 1 ? "" : "s")"
+                    self.scanProgress = text
+                    Task { [weak self] in
+                        try? await Task.sleep(for: .seconds(3))
+                        if self?.scanProgress == text { self?.scanProgress = "" }
+                    }
+                }
+            } catch is CancellationError {
+                await MainActor.run {
+                    self?.metadataExportProgress = nil
+                    self?.metadataExportTask = nil
+                }
+            } catch {
+                await MainActor.run {
+                    self?.metadataExportProgress = nil
+                    self?.metadataExportTask = nil
+                    self?.metadataExportErrorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
     var isSortedByName: Bool {
         guard let first = tableSortOrder.first else { return false }
         return VideoSort.from(keyPath: first.keyPath) == .name

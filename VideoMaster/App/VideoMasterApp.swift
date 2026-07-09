@@ -291,6 +291,13 @@ struct VideoMasterApp: App {
                     }
                 }
                 .disabled(!appState.hasLibrary)
+                Button("Export Metadata\u{2026}") {
+                    appState.libraryViewModel?.presentExportMetadata(scope: .filtered)
+                }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .disabled(!(appState.hasLibrary)
+                    || (appState.libraryViewModel?.filteredVideos.isEmpty ?? true))
+                .help("Export metadata for the current filtered video set")
                 Divider()
                 Button("Close Library\u{2026}") {
                     DatabaseExportImport.closeLibrary()

@@ -185,6 +185,13 @@ struct CuratedWallGrid: View {
                                 .help("Confirm this isn't a duplicate — it leaves the Duplicates library and stays out unless a genuinely new matching file is added")
                             }
                             Divider()
+                            Button("Export Metadata\u{2026}") {
+                                let ids = viewModel.selectedVideoIds.contains(video.id)
+                                    ? viewModel.selectedVideoIds : [video.id]
+                                viewModel.selectedVideoIds = ids
+                                viewModel.presentExportMetadata(scope: .selection)
+                            }
+                            Divider()
                             Button("Remove from Library") {
                                 let ids = viewModel.selectedVideoIds.contains(video.id)
                                     ? viewModel.selectedVideoIds : [video.id]

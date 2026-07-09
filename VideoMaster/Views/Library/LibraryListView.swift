@@ -291,6 +291,12 @@ struct LibraryListView: View {
                     .help("Confirm this isn't a duplicate — it leaves the Duplicates library and stays out unless a genuinely new matching file is added")
                 }
                 Divider()
+                Button("Export Metadata\u{2026}") {
+                    // Context menu selection `ids` is the effective set for this action.
+                    viewModel.selectedVideoIds = ids
+                    viewModel.presentExportMetadata(scope: .selection)
+                }
+                Divider()
                 Button("Remove from Library") {
                     Task { await viewModel.removeVideosFromLibrary(ids) }
                 }

@@ -16,6 +16,7 @@ VideoMaster indexes folders you already have on disk, then adds ratings, tags, s
 - **Inline playback** — resizable floating player (Compact / Windowed / Full screen), resume positions, sidecar subtitles
 - **Tags, ratings, custom metadata**, sort, shuffle, Surprise Me
 - **Import / scan** from watched folders; drag-and-drop files and folders
+- **Export Metadata** (CSV or JSON Lines) for the filtered set or selection, with a field picker
 - **Re-encode** and **cross-volume move** queues with crash-safe temp → promote workflows
 - **Dark-only** cinematic UI tuned for media work
 - Built for **large libraries** (thousands of videos) with careful SwiftUI and filtering performance

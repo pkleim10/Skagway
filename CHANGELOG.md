@@ -31,6 +31,10 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.36.0 (build 728) - 2026-07-09
+
+- **Added Export Metadata (CSV + JSON Lines).** File → Export Metadata… (⌘⇧E) exports the current filtered set; Grid/List context menu Export Metadata… exports the selection. Shared sheet: format selector (CSV / JSON Lines), single field list with checkboxes and drag-reorder (optional fields start unchecked at the bottom), read-only scope summary. RFC 4180 CSV with UTF-8 BOM; JSONL uses human custom-field names (e.g. `Featuring`) when unique, falling back to `custom:<uuid>` on collisions. Format and column prefs persist.
+
 ## 0.35.0 (build 723) - 2026-07-09
 
 - **Added a proper repo README** — overview, features, requirements, build/install, layout, versioning, and doc index (replaces the previous stub).
