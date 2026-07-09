@@ -5,21 +5,11 @@ import GRDB
 @MainActor
 @Observable
 final class AppState {
-    private static let appearanceKey = "VideoMaster.appearanceMode"
-
     let dbManager: DatabaseManager?
     let libraryViewModel: LibraryViewModel?
     let thumbnailService: ThumbnailService
 
     var hasLibrary: Bool { dbManager != nil }
-
-    /// Light / Dark / System — persisted and applied to `NSApp.appearance`.
-    var appearance: AppAppearance = .system {
-        didSet {
-            UserDefaults.standard.set(appearance.rawValue, forKey: Self.appearanceKey)
-            Self.applyAppearance(appearance)
-        }
-    }
 
     init() {
         thumbnailService = ThumbnailService()
@@ -44,28 +34,14 @@ final class AppState {
         libraryViewModel = vm
         DatabaseExportImport.activeDbPool = db?.dbPool
 
-        if let raw = UserDefaults.standard.string(forKey: Self.appearanceKey),
-           let mode = AppAppearance(rawValue: raw)
-        {
-            appearance = mode
-        }
         // `NSApp` / shared application is not ready during `App.init` — applying here crashes (IUO nil).
-        let mode = appearance
         DispatchQueue.main.async {
-            Self.applyAppearance(mode)
+            Self.applyDarkAppearance()
         }
     }
 
-    static func applyAppearance(_ mode: AppAppearance) {
-        // Prefer `shared` over `NSApp` — safer if anything queries before full activation.
-        let app = NSApplication.shared
-        switch mode {
-        case .system:
-            app.appearance = nil
-        case .light:
-            app.appearance = NSAppearance(named: .aqua)
-        case .dark:
-            app.appearance = NSAppearance(named: .darkAqua)
-        }
+    /// VideoMaster is dark-only; lock `NSApp` so system light mode cannot wash out the UI.
+    static func applyDarkAppearance() {
+        NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
     }
 }

@@ -25,7 +25,7 @@ struct VideoMasterApp: App {
                 .keyboardShortcut("1", modifiers: .command)
                 .disabled(!appState.hasLibrary)
 
-                Button("Wall View") {
+                Button("Grid View") {
                     appState.libraryViewModel?.scrollToSelectedOnViewSwitch = true
                     appState.libraryViewModel?.viewMode = .grid
                     appState.libraryViewModel?.savePreferences()

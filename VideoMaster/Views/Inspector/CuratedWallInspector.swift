@@ -685,7 +685,7 @@ struct CuratedWallInspector: View {
             Image(systemName: "rectangle.on.rectangle.angled")
                 .font(.title2)
                 .foregroundStyle(Color.appTextTertiary)
-            Text("Select a video on the wall")
+            Text("Select a video in the grid")
                 .font(.caption)
                 .foregroundStyle(Color.appTextSecondary)
         }

@@ -31,6 +31,12 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.35.0 (build 723) - 2026-07-09
+
+- **Added a proper repo README** — overview, features, requirements, build/install, layout, versioning, and doc index (replaces the previous stub).
+- **Renamed Wall → Grid in the UI.** Segmented control, View menu, tooltips, inspector empty state, and Settings copy now say Grid (standard List/Grid terminology). Internal type names unchanged.
+- **Dark-only appearance.** Removed the Application Settings Appearance picker (System / Light / Dark). VideoMaster always locks to dark mode.
+
 ## 0.34.0 (build 720) - 2026-07-09
 
 - **Added Quality chips to Quick Filter** (after Duration): SD / 480p / 720p / 1080p / 1440p / 4K / 8K+ multi-select, OR within the set. Same buckets as Advanced Filter Quality; Width/Height stay Advanced-only.

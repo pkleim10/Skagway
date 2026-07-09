@@ -6,42 +6,45 @@ struct SettingsView: View {
     @Bindable var appState: AppState
 
     var body: some View {
-        TabView {
-            ApplicationSettingsView(appState: appState)
-                .tabItem {
-                    Label("Application", systemImage: "app")
-                }
-
+        Group {
             if let pool = appState.dbManager?.dbPool, let vm = appState.libraryViewModel {
-                LibrarySettingsView(viewModel: vm)
-                    .tabItem {
-                        Label("Library", systemImage: "books.vertical")
-                    }
+                TabView {
+                    LibrarySettingsView(viewModel: vm)
+                        .tabItem {
+                            Label("Library", systemImage: "books.vertical")
+                        }
 
-                VideoSettingsView(viewModel: vm)
-                    .tabItem {
-                        Label("Video", systemImage: "film")
-                    }
+                    VideoSettingsView(viewModel: vm)
+                        .tabItem {
+                            Label("Video", systemImage: "film")
+                        }
 
-                DataSourcesSettingsView(dbPool: pool)
-                    .tabItem {
-                        Label("Data Sources", systemImage: "folder")
-                    }
+                    DataSourcesSettingsView(dbPool: pool)
+                        .tabItem {
+                            Label("Data Sources", systemImage: "folder")
+                        }
 
-                FileExtSettingsView()
-                    .tabItem {
-                        Label("File Ext", systemImage: "doc.badge.gearshape")
-                    }
+                    FileExtSettingsView()
+                        .tabItem {
+                            Label("File Ext", systemImage: "doc.badge.gearshape")
+                        }
 
-                ToolsSettingsView(viewModel: vm)
-                    .tabItem {
-                        Label("Tools", systemImage: "wrench.and.screwdriver")
-                    }
+                    ToolsSettingsView(viewModel: vm)
+                        .tabItem {
+                            Label("Tools", systemImage: "wrench.and.screwdriver")
+                        }
 
-                CustomMetadataSettingsView(viewModel: vm)
-                    .tabItem {
-                        Label("Custom Metadata", systemImage: "square.grid.3x3.square.badge.ellipsis")
-                    }
+                    CustomMetadataSettingsView(viewModel: vm)
+                        .tabItem {
+                            Label("Custom Metadata", systemImage: "square.grid.3x3.square.badge.ellipsis")
+                        }
+                }
+            } else {
+                ContentUnavailableView(
+                    "Open a Library",
+                    systemImage: "books.vertical",
+                    description: Text("Library settings appear once a library is open.")
+                )
             }
         }
         .frame(minWidth: 500, minHeight: 350)
@@ -199,7 +202,7 @@ struct VideoSettingsView: View {
             } header: {
                 Text("Filters")
             } footer: {
-                Text("How the Curated Wall filters drawer sizes itself when opened. Fit to content sizes it to just show all the filter cards (no scrollbar) and hides the resize handle; Last used reopens it at whatever height you last dragged it to.")
+                Text("How the filters drawer sizes itself when opened. Fit to content sizes it to just show all the filter cards (no scrollbar) and hides the resize handle; Last used reopens it at whatever height you last dragged it to.")
             }
 
             Section {

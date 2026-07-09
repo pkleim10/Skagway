@@ -40,7 +40,7 @@ struct AppSegmentedControl<Selection: Hashable>: View {
                         .padding(.vertical, 3)
                         // On macOS, .plain buttons hit-test against the label's rendered content
                         // (icon/text glyphs), not the full frame — without this, the gap between an
-                        // icon and its text (e.g. "List"/"Wall") is a dead zone. Must be applied to
+                        // icon and its text (e.g. "List"/"Grid") is a dead zone. Must be applied to
                         // the label content itself; applying it only outside .buttonStyle below is
                         // not sufficient.
                         .contentShape(Rectangle())

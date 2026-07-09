@@ -121,7 +121,7 @@ private struct LibraryContentView: View {
         .frame(minWidth: 160, idealWidth: 220)
     }
 
-    /// Thin header bar for Curated Wall: List/Wall toggle + inline search + count + Filters toggle.
+    /// Thin header bar for Curated Wall: List/Grid toggle + inline search + count + Filters toggle.
     /// Matches the layout in the wireframe mock (search is inline in the same row as the mode selector and filter button).
     /// The same button opens *and* closes the top drawer. Icon and help update with state.
     /// Header status: video count normally, live import progress while scanning, or a transient
@@ -371,13 +371,13 @@ private struct LibraryContentView: View {
                 tooltip: { mode in
                     switch mode {
                     case .list: "List view (⌘1)"
-                    case .grid: "Wall view (⌘2)"
+                    case .grid: "Grid view (⌘2)"
                     }
                 }
             ) { mode in
                 switch mode {
                 case .list: Label("List", systemImage: "list.bullet")
-                case .grid: Label("Wall", systemImage: "square.grid.2x2")
+                case .grid: Label("Grid", systemImage: "square.grid.2x2")
                 }
             }
             .controlSize(.small)

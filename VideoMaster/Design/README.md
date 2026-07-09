@@ -12,7 +12,7 @@ We are taking a **fully opinionated** direction:
 - **Performance first**: Grid cells remain relatively lightweight. Materials and complex effects are reserved for non-scrolling or low-density surfaces.
 - **Distinctive, not generic**: We are deliberately moving away from stock Apple toolkit look toward something that feels like a premium media app.
 
-Light mode is de-prioritized for now (decisions are reversible). We can re-introduce a high-quality Light variant later if needed.
+Dark-only: the app always forces `darkAqua`. Light/System appearance is not supported.
 
 ## Core Tokens (Cinematic Blue)
 
