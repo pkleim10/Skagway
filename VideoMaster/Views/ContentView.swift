@@ -419,25 +419,48 @@ private struct LibraryContentView: View {
                 movePill
             }
 
-            // The single toggle for the top filters drawer.
-            // Closed -> filter icon; Open -> close (X) icon. Always live filters, no Apply step.
+            // Quick Filter drawer (⌘⇧F) — exclusive with Advanced Filter.
             Button {
-                // Just flip the model flag. The .onChange below will drive the slide animation
-                // (offset + height) with the proper duration and a clean transaction.
-                vm.isCuratedWallFiltersDrawerOpen.toggle()
+                vm.toggleQuickFilter()
             } label: {
-                if vm.isCuratedWallFiltersDrawerOpen {
+                if vm.isQuickFilterDrawerOpen {
                     Image(systemName: "xmark.circle")
                 } else {
-                    Image(systemName: vm.hasActiveFilters ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                    Image(systemName: vm.hasActiveFilters && !vm.hasActiveAdvancedFilter
+                          ? "line.3.horizontal.decrease.circle.fill"
+                          : "line.3.horizontal.decrease.circle")
                 }
             }
             .buttonStyle(.plain)
             .foregroundStyle(Color.appTextSecondary)
-            .help(vm.isCuratedWallFiltersDrawerOpen
-                  ? "Close filters (⌘⇧F)"
-                  : "Show filters (⌘⇧F)")
+            .help(vm.isQuickFilterDrawerOpen
+                  ? "Close Quick Filter (⌘⇧F)"
+                  : "Quick Filter (⌘⇧F)")
             .keyboardShortcut("f", modifiers: [.command, .shift])
+
+            // Advanced Filter in the shared drawer (⌘⇧V) — exclusive with Quick Filter.
+            Button {
+                vm.toggleAdvancedFilter()
+            } label: {
+                Image(systemName: vm.isAdvancedFilterDrawerOpen
+                      ? "xmark.circle"
+                      : "slider.horizontal.3")
+                    .symbolVariant(vm.hasActiveAdvancedFilter && !vm.isAdvancedFilterDrawerOpen ? .fill : .none)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(vm.hasActiveAdvancedFilter || vm.isAdvancedFilterDrawerOpen
+                             ? Color.appAccent
+                             : Color.appTextSecondary)
+            .help({
+                if vm.isAdvancedFilterDrawerOpen {
+                    return "Close Advanced Filter (⌘⇧V)"
+                }
+                if vm.hasActiveAdvancedFilter {
+                    return "Edit Advanced Filter (⌘⇧V)"
+                }
+                return "Advanced Filter (⌘⇧V)"
+            }())
+            .keyboardShortcut("v", modifiers: [.command, .shift])
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 3)
@@ -877,12 +900,24 @@ private struct LibraryContentView: View {
             return nil
         }
 
-        // ⌘⇧F — toggle the Curated Wall top filters drawer (live filters, always starts closed).
-        // This is a fallback in addition to the .keyboardShortcut on the button.
-        if event.modifierFlags.contains([.command, .shift]), event.keyCode == 3 /* 'f' */ {
-            // Just set the flag; the onChange handler will start the slide animation with the right duration.
+        // Real command/option/control/shift only — arrow keys also carry `.function` + `.numericPad`.
+        let commandModifiers: NSEvent.ModifierFlags = [.command, .option, .control, .shift]
+
+        // ⌘⇧F — toggle Quick Filter (exclusive with Advanced Filter).
+        // Fallback in addition to the .keyboardShortcut on the button.
+        if event.modifierFlags.intersection(commandModifiers) == [.command, .shift],
+           event.keyCode == 3 /* 'f' */ {
             DispatchQueue.main.async {
-                lvm.isCuratedWallFiltersDrawerOpen.toggle()
+                lvm.toggleQuickFilter()
+            }
+            return nil
+        }
+
+        // ⌘⇧V — toggle Advanced Filter (exclusive with Quick Filter).
+        if event.modifierFlags.intersection(commandModifiers) == [.command, .shift],
+           event.keyCode == 9 /* 'v' */ {
+            DispatchQueue.main.async {
+                lvm.toggleAdvancedFilter()
             }
             return nil
         }
@@ -891,9 +926,6 @@ private struct LibraryContentView: View {
         // SwiftUI `.onKeyPress` on the grid's `ScrollView` doesn't reliably receive keys inside the
         // NSHostingView+NSSplitView the Curated Wall is hosted in. ←/→ step one video; ↑/↓ step one row.
         // keyCodes: 123 ←, 124 →, 125 ↓, 126 ↑.
-        // NB: arrow events always carry `.function` + `.numericPad`, so we must test only the real
-        // command/option/control/shift modifiers — a `.deviceIndependentFlagsMask` check never matches.
-        let commandModifiers: NSEvent.ModifierFlags = [.command, .option, .control, .shift]
         if [123, 124, 125, 126].contains(event.keyCode),
            event.modifierFlags.intersection(commandModifiers).isEmpty,
            lvm.viewMode == .grid,

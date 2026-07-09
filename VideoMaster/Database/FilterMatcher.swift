@@ -110,6 +110,19 @@ struct FilterMatcher {
                 guard let w = v.width else { return false }
                 return matchNumeric(w, cmp, lo, hi)
             }
+        case .quality:
+            // Value is a comma-separated set of ResolutionBucket labels; equals = is any of,
+            // notEquals = is none of. Empty selection never matches.
+            let buckets = ResolutionBucket.decode(raw)
+            return { v, _ in
+                guard !buckets.isEmpty, let label = v.resolutionLabel else { return false }
+                let hit = buckets.contains(label)
+                switch cmp {
+                case .equals: return hit
+                case .notEquals: return !hit
+                default: return false
+                }
+            }
         case .playCount:
             let lo = Int(raw) ?? 0
             let hi = raw2.flatMap { Int($0) }

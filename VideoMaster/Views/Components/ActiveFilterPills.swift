@@ -57,17 +57,23 @@ struct ActiveFilterPills: View {
                             }
                         }
 
-                        // Built-in field quick filters (quality/size/date/plays/codec/…)
-                        ForEach(viewModel.activeBuiltinFilterDescriptions, id: \.field) { desc in
-                            pill(text: desc.label, systemImage: "slider.horizontal.3") {
-                                viewModel.removeBuiltinFilter(desc.field)
+                        // Quality
+                        if !viewModel.selectedQualityBuckets.isEmpty {
+                            let ordered = ResolutionBucket.allCases
+                                .map(\.rawValue)
+                                .filter { viewModel.selectedQualityBuckets.contains($0) }
+                            pill(text: "Quality: " + ordered.joined(separator: ", "), systemImage: "rectangle.and.arrow.up.right.and.arrow.down.left") {
+                                viewModel.clearQualityFilter()
                             }
                         }
 
-                        // Custom metadata fields
-                        ForEach(viewModel.activeCustomFieldFilterDescriptions, id: \.fieldId) { desc in
-                            pill(text: desc.label, systemImage: "tag.circle") {
-                                viewModel.removeCustomFieldFilter(fieldId: desc.fieldId)
+                        // Advanced Filter — one summary pill, not per-condition.
+                        if let summary = viewModel.activeAdvancedFilterSummary {
+                            pill(
+                                text: summary.count > 48 ? "Advanced Filter" : summary,
+                                systemImage: "slider.horizontal.3"
+                            ) {
+                                viewModel.clearAdvancedFilter()
                             }
                         }
                     }

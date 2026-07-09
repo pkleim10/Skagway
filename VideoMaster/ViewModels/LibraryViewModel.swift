@@ -172,27 +172,15 @@ final class LibraryViewModel {
         didSet { recomputeFilteredVideos() }
     }
 
-    /// One active custom-metadata-field filter criterion. Associated values are already the
-    /// parsed, typed bounds/needle the user configured -- never raw strings.
-    enum CustomFieldFilterCriterion: Equatable {
-        /// `.string`/`.text` fields: case-insensitive substring match.
-        case contains(String)
-        /// `.number` fields: inclusive range; either bound may be nil (open-ended).
-        case numberRange(min: Double?, max: Double?)
-        /// `.date`/`.dateTime` fields: inclusive range; either bound may be nil.
-        case dateRange(min: Date?, max: Date?)
-    }
-
-    /// Active custom-metadata-field filters, keyed by `CustomMetadataFieldDefinition.id`. All
-    /// entries AND together, like Tags/Rating/Duration compose with each other. Not persisted
-    /// across relaunch -- matches every sibling filter here, none of which survive a relaunch.
-    var customFieldFilters: [UUID: CustomFieldFilterCriterion] = [:] {
+    /// Quick Filter quality buckets (`ResolutionBucket` raw values). OR within the set — a video
+    /// matches if its `resolutionLabel` is any selected bucket. Empty = inactive.
+    var selectedQualityBuckets: Set<String> = [] {
         didSet { recomputeFilteredVideos() }
     }
 
-    /// The live "advanced rules" boolean filter (the Phase 3 advanced-tier UI writes this). Applied
-    /// as one AND step on top of the quick filters, compiled through the shared `FilterMatcher`.
-    /// nil or an empty group means "no advanced filter". Not persisted across relaunch.
+    /// The live Advanced Filter boolean tree. Exclusive with Quick Filter (sidebar / rating /
+    /// duration / quality / tags) — only one mode owns matching at a time. Compiled through the shared
+    /// `FilterMatcher`. nil or an empty group means "no advanced filter". Session-only.
     var advancedFilterGroup: FilterGroup? {
         didSet { recomputeFilteredVideos() }
     }
@@ -202,216 +190,132 @@ final class LibraryViewModel {
         return false
     }
 
-    private func isCustomFieldFilterActive(_ criterion: CustomFieldFilterCriterion) -> Bool {
-        switch criterion {
-        case .contains(let s): return !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        case .numberRange(let min, let max): return min != nil || max != nil
-        case .dateRange(let min, let max): return min != nil || max != nil
-        }
+    /// Clears the live Advanced Filter (drawer Clear / pill ✕).
+    func clearAdvancedFilter() {
+        advancedFilterGroup = nil
     }
 
-    /// True if any custom-metadata-field filter has real (non-empty/non-open) criteria.
-    var hasActiveCustomFieldFilters: Bool {
-        customFieldFilters.values.contains { isCustomFieldFilterActive($0) }
+    /// Clears Quick Filter state (sidebar, tags, rating, duration, quality). Does not touch
+    /// `advancedFilterGroup` or search. Used when entering Advanced Filter mode.
+    func clearQuickFilters() {
+        sidebarFilter = .all
+        selectedTagIds = []
+        selectedRatingStars = []
+        minDurationSeconds = nil
+        maxDurationSeconds = nil
+        selectedQualityBuckets = []
     }
 
-    /// Sets the "contains" filter for a `.string`/`.text` field. Stores the raw text as typed --
-    /// no trimming here, since trimming trailing whitespace on every keystroke would silently eat
-    /// spaces as the user types a multi-word phrase. Never removes the field's row on empty text
-    /// (that previously caused the row to disappear the moment a `TextField` gained focus, which
-    /// can fire its binding's `set("")` once even with no typing -- a known SwiftUI/AppKit quirk).
-    /// A blank/whitespace-only value simply doesn't count as "active" (`isCustomFieldFilterActive`)
-    /// and doesn't narrow results (`applyCustomFieldFilters`); only the row's own "✕" removes it.
-    func setCustomFieldContainsFilter(fieldId: UUID, text: String) {
-        customFieldFilters[fieldId] = .contains(text)
+    /// Short human-readable summary of the active Advanced Filter, for the closed-drawer pill.
+    /// `nil` when no advanced filter is active.
+    var activeAdvancedFilterSummary: String? {
+        guard let group = advancedFilterGroup, !group.isEmpty else { return nil }
+        return Self.describeFilterGroup(
+            group,
+            customFields: Dictionary(
+                uniqueKeysWithValues: customMetadataFieldDefinitions.map { ($0.id, $0) }
+            )
+        )
     }
 
-    /// Sets the numeric range filter for a `.number` field. Never removes the row when both bounds
-    /// are nil -- same reasoning as `setCustomFieldContainsFilter`; only the row's own "✕" removes it.
-    func setCustomFieldNumberRangeFilter(fieldId: UUID, min: Double?, max: Double?) {
-        customFieldFilters[fieldId] = .numberRange(min: min, max: max)
-    }
-
-    /// Sets the date range filter for a `.date`/`.dateTime` field. Never removes the row when both
-    /// bounds are nil -- same reasoning as `setCustomFieldContainsFilter`; only the row's own "✕" removes it.
-    func setCustomFieldDateRangeFilter(fieldId: UUID, min: Date?, max: Date?) {
-        customFieldFilters[fieldId] = .dateRange(min: min, max: max)
-    }
-
-    /// Adds a field to the active filter set with an inert default criterion -- drives the "Add
-    /// Filter" menu, which inserts an empty, editable row rather than an already-active filter.
-    func addCustomFieldFilter(fieldId: UUID, valueType: CustomMetadataValueType) {
-        guard customFieldFilters[fieldId] == nil else { return }
-        switch valueType {
-        case .string, .text: customFieldFilters[fieldId] = .contains("")
-        case .number: customFieldFilters[fieldId] = .numberRange(min: nil, max: nil)
-        case .date, .dateTime: customFieldFilters[fieldId] = .dateRange(min: nil, max: nil)
-        }
-    }
-
-    func removeCustomFieldFilter(fieldId: UUID) {
-        customFieldFilters.removeValue(forKey: fieldId)
-    }
-
-    func clearCustomFieldFilters() {
-        customFieldFilters = [:]
-    }
-
-    struct ActiveCustomFieldFilterDescription {
-        let fieldId: UUID
-        let label: String
-    }
-
-    /// Human-readable summaries of active custom-field filters for the pills row, alphabetical by
-    /// field name so pill order is stable across recomputes (dictionary order is not).
-    var activeCustomFieldFilterDescriptions: [ActiveCustomFieldFilterDescription] {
-        customMetadataFieldDefinitions
-            .compactMap { field -> ActiveCustomFieldFilterDescription? in
-                guard let criterion = customFieldFilters[field.id], isCustomFieldFilterActive(criterion) else { return nil }
-                let label: String
-                switch criterion {
-                case .contains(let s):
-                    label = "\(field.name): \(s)"
-                case .numberRange(let min, let max):
-                    switch (min, max) {
-                    case let (min?, max?): label = "\(field.name) \(formatCustomFieldNumber(min))–\(formatCustomFieldNumber(max))"
-                    case let (min?, nil):  label = "\(field.name) ≥\(formatCustomFieldNumber(min))"
-                    case let (nil, max?):  label = "\(field.name) ≤\(formatCustomFieldNumber(max))"
-                    case (nil, nil):       label = field.name
-                    }
-                case .dateRange(let min, let max):
-                    switch (min, max) {
-                    case let (min?, max?): label = "\(field.name) \(formatCustomFieldDate(min))–\(formatCustomFieldDate(max))"
-                    case let (min?, nil):  label = "\(field.name) after \(formatCustomFieldDate(min))"
-                    case let (nil, max?):  label = "\(field.name) before \(formatCustomFieldDate(max))"
-                    case (nil, nil):       label = field.name
-                    }
+    /// Builds a compact "Quality is at least 1080 · (Tag contains marvel OR Tag contains dc)" string.
+    private static func describeFilterGroup(
+        _ group: FilterGroup,
+        customFields: [UUID: CustomMetadataFieldDefinition]
+    ) -> String {
+        let parts: [String] = group.nodes.compactMap { node in
+            switch node {
+            case .condition(let c):
+                return describeCondition(c, customFields: customFields)
+            case .group(let inner):
+                let innerParts = inner.nodes.compactMap { child -> String? in
+                    guard case .condition(let c) = child else { return nil }
+                    return describeCondition(c, customFields: customFields)
                 }
-                return ActiveCustomFieldFilterDescription(fieldId: field.id, label: label)
+                guard !innerParts.isEmpty else { return nil }
+                let joiner = inner.mode == .all ? " AND " : " OR "
+                let joined = innerParts.joined(separator: joiner)
+                // Parenthesize when the outer tree has more than one node, or the inner uses OR.
+                if group.nodes.count > 1 || inner.mode == .any {
+                    return "(\(joined))"
+                }
+                return joined
             }
-            .sorted { $0.label.localizedCaseInsensitiveCompare($1.label) == .orderedAscending }
-    }
-
-    private func formatCustomFieldNumber(_ n: Double) -> String {
-        n.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(n)) : String(n)
-    }
-
-    private func formatCustomFieldDate(_ d: Date) -> String {
-        let f = DateFormatter()
-        f.dateStyle = .short
-        return f.string(from: d)
-    }
-
-    // MARK: - Built-in field filters (quick-filter rows for size/quality/date/plays/codec/…)
-
-    /// Active built-in-field quick filters, keyed by `BuiltinFilterField`. All entries AND together,
-    /// with each other and with rating/duration/tags/custom-field filters — Tier 1 of the layered
-    /// filtering design. Not persisted across relaunch, matching every sibling filter.
-    var builtinFilters: [BuiltinFilterField: BuiltinFilterCriterion] = [:] {
-        didSet { recomputeFilteredVideos() }
-    }
-
-    private func isBuiltinFilterActive(_ criterion: BuiltinFilterCriterion) -> Bool {
-        switch criterion {
-        case .quality(let buckets): return !buckets.isEmpty
-        case .sizeRange(let min, let max): return min != nil || max != nil
-        case .dateRange(let min, let max): return min != nil || max != nil
-        case .plays(let p): return p != nil
-        case .contains(let s): return !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
+        let joiner = group.mode == .all ? " · " : " OR "
+        return parts.joined(separator: joiner)
     }
 
-    var hasActiveBuiltinFilters: Bool {
-        builtinFilters.values.contains { isBuiltinFilterActive($0) }
-    }
-
-    /// Adds a field to the active set with its inert default criterion — drives the "Add filter"
-    /// menu, inserting an empty, editable row rather than an already-active filter.
-    func addBuiltinFilter(_ field: BuiltinFilterField) {
-        guard builtinFilters[field] == nil else { return }
-        builtinFilters[field] = field.defaultCriterion
-    }
-
-    func removeBuiltinFilter(_ field: BuiltinFilterField) {
-        builtinFilters.removeValue(forKey: field)
-    }
-
-    func clearBuiltinFilters() {
-        builtinFilters = [:]
-    }
-
-    /// Setters mirror the custom-field ones: they never remove the row on an empty value (only the
-    /// row's own "✕" removes it); an empty/open value simply doesn't count as active.
-    func setBuiltinQualityFilter(buckets: Set<String>) {
-        builtinFilters[.quality] = .quality(buckets)
-    }
-
-    func setBuiltinSizeRangeFilter(minBytes: Double?, maxBytes: Double?) {
-        builtinFilters[.fileSize] = .sizeRange(minBytes: minBytes, maxBytes: maxBytes)
-    }
-
-    func setBuiltinDateRangeFilter(field: BuiltinFilterField, min: Date?, max: Date?) {
-        builtinFilters[field] = .dateRange(min: min, max: max)
-    }
-
-    func setBuiltinPlaysFilter(_ value: PlaysFilter?) {
-        builtinFilters[.plays] = .plays(value)
-    }
-
-    func setBuiltinContainsFilter(field: BuiltinFilterField, text: String) {
-        builtinFilters[field] = .contains(text)
-    }
-
-    struct ActiveBuiltinFilterDescription {
-        let field: BuiltinFilterField
-        let label: String
-    }
-
-    /// Pill summaries for active built-in filters, ordered by the field enum's declaration order so
-    /// pill order is stable across recomputes (dictionary order is not).
-    var activeBuiltinFilterDescriptions: [ActiveBuiltinFilterDescription] {
-        BuiltinFilterField.allCases.compactMap { field -> ActiveBuiltinFilterDescription? in
-            guard let criterion = builtinFilters[field], isBuiltinFilterActive(criterion) else { return nil }
-            let label: String
-            switch criterion {
-            case .quality(let buckets):
-                let ordered = ResolutionBucket.allCases.filter { buckets.contains($0.rawValue) }.map(\.rawValue)
-                label = "Quality: " + ordered.joined(separator: ", ")
-            case .sizeRange(let min, let max):
-                switch (min, max) {
-                case let (min?, max?): label = "Size \(Self.formatBytes(min))–\(Self.formatBytes(max))"
-                case let (min?, nil):  label = "Size ≥\(Self.formatBytes(min))"
-                case let (nil, max?):  label = "Size ≤\(Self.formatBytes(max))"
-                case (nil, nil):       label = field.label
-                }
-            case .dateRange(let min, let max):
-                let verb = field == .dateCreated ? "Created" : "Added"
-                switch (min, max) {
-                case let (min?, max?): label = "\(verb) \(formatCustomFieldDate(min))–\(formatCustomFieldDate(max))"
-                case let (min?, nil):  label = "\(verb) after \(formatCustomFieldDate(min))"
-                case let (nil, max?):  label = "\(verb) before \(formatCustomFieldDate(max))"
-                case (nil, nil):       label = field.label
-                }
-            case .plays(let p):
-                switch p {
-                case .unplayed: label = "Unplayed"
-                case .played:   label = "Played"
-                case nil:       label = field.label
-                }
-            case .contains(let s):
-                label = "\(field.label): \(s.trimmingCharacters(in: .whitespacesAndNewlines))"
-            }
-            return ActiveBuiltinFilterDescription(field: field, label: label)
+    private static func describeCondition(
+        _ c: FilterCondition,
+        customFields: [UUID: CustomMetadataFieldDefinition]
+    ) -> String {
+        let field = c.field.label(customFields: customFields)
+        if case .builtin(.quality) = c.field {
+            let buckets = ResolutionBucket.decode(c.value)
+            let list = ResolutionBucket.allCases.map(\.rawValue).filter { buckets.contains($0) }.joined(separator: ", ")
+            let verb = c.comparison == .notEquals ? "is none of" : "is"
+            return list.isEmpty ? field : "\(field) \(verb) \(list)"
         }
+        let op = c.comparison.label
+        if c.comparison.usesSecondValue, let v2 = c.value2 {
+            return "\(field) \(op) \(c.value) and \(v2)"
+        }
+        return "\(field) \(op) \(c.value)"
     }
 
-    private static func formatBytes(_ bytes: Double) -> String {
-        Int64(bytes).formattedFileSize
+    /// Which body the shared filters drawer shows. Quick Filter and Advanced Filter are exclusive
+    /// modes of the same drawer shell — never shown together.
+    enum FiltersDrawerMode: Equatable {
+        case quick
+        case advanced
     }
 
-    /// Controls the top-descending filters drawer for the Curated Wall variant.
-    /// Always forced closed on appearance (not persisted). Toggle via header button or ⌘⇧F.
+    /// Controls the top-descending filters drawer. Always forced closed on appearance (not
+    /// persisted). Toggle via header Quick Filter (⌘⇧F) or Advanced Filter (⌘⇧V).
     var isCuratedWallFiltersDrawerOpen: Bool = false
+
+    /// Content mode for the open drawer. Ignored while the drawer is closed; set when opening.
+    var filtersDrawerMode: FiltersDrawerMode = .quick
+
+    /// True when the drawer is open in Advanced Filter mode (drives header button chrome).
+    var isAdvancedFilterDrawerOpen: Bool {
+        isCuratedWallFiltersDrawerOpen && filtersDrawerMode == .advanced
+    }
+
+    /// True when the drawer is open in Quick Filter mode.
+    var isQuickFilterDrawerOpen: Bool {
+        isCuratedWallFiltersDrawerOpen && filtersDrawerMode == .quick
+    }
+
+    /// Quick Filter control (header button / ⌘⇧F). Opening clears any Advanced Filter so the two
+    /// modes stay exclusive; closing just hides the drawer (Advanced state is already nil).
+    func toggleQuickFilter() {
+        if isQuickFilterDrawerOpen {
+            isCuratedWallFiltersDrawerOpen = false
+        } else {
+            clearAdvancedFilter()
+            filtersDrawerMode = .quick
+            isCuratedWallFiltersDrawerOpen = true
+        }
+    }
+
+    /// Advanced Filter control (header button / ⌘⇧V). Opening clears Quick Filter and shows
+    /// the Advanced editor in the drawer; toggling again closes the drawer (filter stays until Clear).
+    func toggleAdvancedFilter() {
+        if isAdvancedFilterDrawerOpen {
+            isCuratedWallFiltersDrawerOpen = false
+        } else {
+            openAdvancedFilter()
+        }
+    }
+
+    /// Enter Advanced Filter mode in the shared drawer: clear Quick Filter, show Advanced body.
+    func openAdvancedFilter() {
+        clearQuickFilters()
+        filtersDrawerMode = .advanced
+        isCuratedWallFiltersDrawerOpen = true
+    }
 
     /// User-adjustable, persisted height of the filters drawer (drag handle at its bottom edge).
     /// `ContentView` clamps the *displayed* height against the current window size — this stored
@@ -1103,9 +1007,6 @@ final class LibraryViewModel {
         var p = listColumnPreferences
         p.visibleCustomFieldIDs.subtract(ids)
         listColumnPreferences = p
-        // A deleted field's filter (if any) has no remaining UI path to remove it -- drop it here
-        // rather than leaving stale, invisible filter state behind.
-        customFieldFilters = customFieldFilters.filter { !ids.contains($0.key) }
     }
 
     func updateCustomMetadataFieldName(id: UUID, name: String) {
@@ -1116,9 +1017,6 @@ final class LibraryViewModel {
     func updateCustomMetadataFieldType(id: UUID, valueType: CustomMetadataValueType) {
         guard let i = customMetadataFieldDefinitions.firstIndex(where: { $0.id == id }) else { return }
         customMetadataFieldDefinitions[i].valueType = valueType
-        // An existing filter criterion (e.g. .contains) would be the wrong enum case for the
-        // field's new type -- drop it rather than leave a mismatched filter active.
-        customFieldFilters.removeValue(forKey: id)
     }
 
     private func saveCustomMetadataFieldDefinitions() {
@@ -1646,8 +1544,7 @@ final class LibraryViewModel {
             recentlyConvertedDates: recentlyConvertedDates,
             minDurationSeconds: minDurationSeconds,
             maxDurationSeconds: maxDurationSeconds,
-            builtinFilters: builtinFilters,
-            customFieldFilters: customFieldFilters,
+            selectedQualityBuckets: selectedQualityBuckets,
             customFieldDefinitionsById: customFieldDefinitionsById,
             advancedFilterGroup: advancedFilterGroup,
             customSortField: resolvedCustomSortField,
@@ -1690,8 +1587,7 @@ final class LibraryViewModel {
         let recentlyConvertedDates: [String: Date]
         let minDurationSeconds: Double?
         let maxDurationSeconds: Double?
-        let builtinFilters: [BuiltinFilterField: BuiltinFilterCriterion]
-        let customFieldFilters: [UUID: CustomFieldFilterCriterion]
+        let selectedQualityBuckets: Set<String>
         let customFieldDefinitionsById: [UUID: CustomMetadataFieldDefinition]
         let advancedFilterGroup: FilterGroup?
         let customSortField: CustomMetadataFieldDefinition?
@@ -1707,68 +1603,14 @@ final class LibraryViewModel {
         return base.filter { selectedStars.contains($0.rating) }
     }
 
-    /// Applies all active built-in-field quick filters (AND across fields). Reads `Video` fields
-    /// directly (no external maps needed). Videos missing the relevant value fail the filter, same
-    /// convention as custom-field filtering (e.g. an unknown resolution can't match a Quality
-    /// filter). Date-range max bounds are treated as "through the end of that day," since a `.date`
-    /// DatePicker returns midnight and a user picking a max date means "up to and including" it.
-    private nonisolated static func applyBuiltinFilters(_ filters: [BuiltinFilterField: BuiltinFilterCriterion], base: [Video]) -> [Video] {
-        guard !filters.isEmpty else { return base }
-        let cal = Calendar.current
-        var result = base
-        for (field, criterion) in filters {
-            switch criterion {
-            case .quality(let buckets):
-                guard !buckets.isEmpty else { continue }
-                result = result.filter { v in
-                    guard let label = v.resolutionLabel else { return false }
-                    return buckets.contains(label)
-                }
-            case .sizeRange(let min, let max):
-                guard min != nil || max != nil else { continue }
-                result = result.filter { v in
-                    let bytes = Double(v.fileSize)
-                    if let min, bytes < min { return false }
-                    if let max, bytes > max { return false }
-                    return true
-                }
-            case .dateRange(let min, let max):
-                guard min != nil || max != nil else { continue }
-                let lower = min.map { cal.startOfDay(for: $0) }
-                // Exclusive upper bound = start of the day *after* the picked max day, so the whole
-                // max day is included.
-                let upperExclusive = max.flatMap { cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: $0)) }
-                result = result.filter { v in
-                    let date: Date? = (field == .dateCreated) ? v.creationDate : v.dateAdded
-                    guard let date else { return false }
-                    if let lower, date < lower { return false }
-                    if let upperExclusive, date >= upperExclusive { return false }
-                    return true
-                }
-            case .plays(let mode):
-                guard let mode else { continue }
-                result = result.filter { v in
-                    switch mode {
-                    case .unplayed: return v.playCount == 0
-                    case .played:   return v.playCount > 0
-                    }
-                }
-            case .contains(let rawNeedle):
-                let needle = rawNeedle.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !needle.isEmpty else { continue }
-                result = result.filter { v in
-                    let haystack: String
-                    switch field {
-                    case .codec: haystack = v.codec ?? ""
-                    case .fileExtension: haystack = (v.filePath as NSString).pathExtension
-                    case .folder: haystack = URL(fileURLWithPath: v.filePath).deletingLastPathComponent().lastPathComponent
-                    default: haystack = ""
-                    }
-                    return haystack.localizedCaseInsensitiveContains(needle)
-                }
-            }
+    /// Quality buckets are OR’d: video matches if its `resolutionLabel` is in the selected set.
+    /// Videos with unknown resolution fail the filter (same convention as Advanced Quality).
+    private nonisolated static func applyQualityFilter(buckets: Set<String>, base: [Video]) -> [Video] {
+        guard !buckets.isEmpty else { return base }
+        return base.filter { v in
+            guard let label = v.resolutionLabel else { return false }
+            return buckets.contains(label)
         }
-        return result
     }
 
     /// Sorts by the per-video ranks generated in `shuffleOrder()`. A video with no assigned rank
@@ -1821,7 +1663,7 @@ final class LibraryViewModel {
     }
 
     /// Shared raw-string → typed-value parsing for a custom metadata field, used by both
-    /// custom-field sort (`sortByCustomField`) and custom-field filter (`applyCustomFieldFilters`)
+    /// custom-field sort (`sortByCustomField`) and the advanced/Collections `FilterMatcher`,
     /// so there is exactly one implementation of "how do I read a `.number`/`.date`/`.dateTime`/
     /// `.string` raw value." Builds the map once per field (O(videos)), not once per comparison.
     private enum CustomFieldValueParser {
@@ -1891,54 +1733,6 @@ final class LibraryViewModel {
     /// fields build smaller maps once earlier fields have already narrowed the set. A video with no
     /// stored value for an actively-filtered field is excluded (parallels "missing sorts last" in
     /// `sortByCustomField`: here, "missing" fails the filter rather than being ambiguously included).
-    private nonisolated static func applyCustomFieldFilters(
-        _ filters: [UUID: CustomFieldFilterCriterion],
-        fieldDefinitionsById: [UUID: CustomMetadataFieldDefinition],
-        metadata: [Int64: [UUID: String]],
-        base: [Video]
-    ) -> [Video] {
-        guard !filters.isEmpty else { return base }
-        var result = base
-        for (fieldId, criterion) in filters {
-            // Field deleted since the filter was set -- ignore the stale entry (view-model layer
-            // also prunes these on deletion, but this guard keeps the pure function safe regardless).
-            guard let field = fieldDefinitionsById[fieldId] else { continue }
-            switch criterion {
-            case .contains(let rawNeedle):
-                let needle = rawNeedle.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !needle.isEmpty else { continue } // inert/blank row -- not yet active
-                let values = CustomFieldValueParser.stringValues(result, fieldId: fieldId, metadata: metadata)
-                result = result.filter { video in
-                    guard let vid = video.databaseId, let v = values[vid] else { return false }
-                    return v.localizedCaseInsensitiveContains(needle)
-                }
-            case .numberRange(let min, let max):
-                guard min != nil || max != nil else { continue }
-                let values = CustomFieldValueParser.numberValues(result, fieldId: fieldId, metadata: metadata)
-                result = result.filter { video in
-                    guard let vid = video.databaseId, let v = values[vid] else { return false }
-                    if let min, v < min { return false }
-                    if let max, v > max { return false }
-                    return true
-                }
-            case .dateRange(let min, let max):
-                guard min != nil || max != nil else { continue }
-                let values = field.valueType == .dateTime
-                    ? CustomFieldValueParser.dateTimeValues(result, fieldId: fieldId, metadata: metadata)
-                    : CustomFieldValueParser.dateValues(result, fieldId: fieldId, metadata: metadata)
-                result = result.filter { video in
-                    guard let vid = video.databaseId, let v = values[vid] else { return false }
-                    if let min, v < min { return false }
-                    if let max, v > max { return false }
-                    return true
-                }
-            }
-        }
-        return result
-    }
-
-    /// Sort by a custom metadata field. Pre-builds a typed value map so comparisons are concrete (no per-pair
-    /// string parsing). Missing/empty values sort last when ascending, first when descending.
     private nonisolated static func sortByCustomField(
         _ videos: [Video],
         field: CustomMetadataFieldDefinition,
@@ -2072,16 +1866,9 @@ final class LibraryViewModel {
             baseResult = baseResult.filter { ($0.duration ?? 0) <= maxD }
         }
 
-        baseResult = Self.applyBuiltinFilters(snapshot.builtinFilters, base: baseResult)
+        baseResult = Self.applyQualityFilter(buckets: snapshot.selectedQualityBuckets, base: baseResult)
 
-        baseResult = Self.applyCustomFieldFilters(
-            snapshot.customFieldFilters,
-            fieldDefinitionsById: snapshot.customFieldDefinitionsById,
-            metadata: snapshot.listCustomMetadataByVideoId,
-            base: baseResult
-        )
-
-        // Advanced boolean rules (Phase 3 UI). Compiled once; a nil/empty group is skipped entirely.
+        // Advanced boolean rules. Compiled once; a nil/empty group is skipped entirely.
         if let group = snapshot.advancedFilterGroup, !group.isEmpty {
             let matcher = FilterMatcher(group: group, customFields: snapshot.customFieldDefinitionsById)
             baseResult = baseResult.filter { video in
@@ -2379,6 +2166,8 @@ final class LibraryViewModel {
         if let maxD = maxDurationSeconds {
             result = result.filter { ($0.duration ?? 0) <= maxD }
         }
+
+        result = Self.applyQualityFilter(buckets: selectedQualityBuckets, base: result)
 
         return result
     }
@@ -3841,16 +3630,15 @@ final class LibraryViewModel {
         !selectedRatingStars.isEmpty
     }
 
-    /// True if any non-search filter is active (sidebar/collection, tags, rating, or duration).
-    /// Used for badge on Filters button and for showing the pills row.
+    /// True if any non-search filter is active (sidebar/collection, tags, rating, duration, quality,
+    /// or Advanced Filter). Used for badge on Filters button and for showing the pills row.
     var hasActiveFilters: Bool {
         if case .collection = sidebarFilter { return true }
         if sidebarFilter != nil && sidebarFilter != .all { return true }
         if !selectedTagIds.isEmpty { return true }
         if !selectedRatingStars.isEmpty { return true }
         if minDurationSeconds != nil || maxDurationSeconds != nil { return true }
-        if hasActiveBuiltinFilters { return true }
-        if hasActiveCustomFieldFilters { return true }
+        if !selectedQualityBuckets.isEmpty { return true }
         if hasActiveAdvancedFilter { return true }
         return false
     }
@@ -3865,26 +3653,28 @@ final class LibraryViewModel {
         maxDurationSeconds = nil
     }
 
+    func clearQualityFilter() {
+        selectedQualityBuckets = []
+    }
+
     /// Clears tag filters and the per-star rating filter (View menu **⌘⌥C**).
     func clearFilters() {
         clearTagFilters()
         clearRatingFilter()
         clearDurationFilter()
-        clearBuiltinFilters()
-        clearCustomFieldFilters()
+        clearQualityFilter()
         advancedFilterGroup = nil
         // Note: we intentionally do not reset sidebarFilter here; caller can do if desired.
     }
 
-    /// Resets all filters (sidebar to All, tags, rating, duration). Useful for "Clear all" in drawer.
+    /// Resets all filters (sidebar to All, tags, rating, duration, quality, Advanced). Useful for "Clear all" in drawer.
     func resetAllFilters() {
         sidebarFilter = .all
         selectedTagIds = []
         selectedRatingStars = []
         minDurationSeconds = nil
         maxDurationSeconds = nil
-        builtinFilters = [:]
-        customFieldFilters = [:]
+        selectedQualityBuckets = []
         advancedFilterGroup = nil
     }
 
@@ -3996,6 +3786,85 @@ final class LibraryViewModel {
             sidebarFilter = .all
         }
         await loadCollections()
+    }
+
+    /// Phase 4 bridge: persist the live advanced `FilterGroup` as a named Collection.
+    /// Returns `false` if there is nothing to save or the name is blank.
+    @discardableResult
+    func saveAdvancedFilterAsCollection(name: String) async -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let group = advancedFilterGroup, !group.isEmpty else { return false }
+        let inputs = Self.ruleGroupInputs(from: group)
+        guard !inputs.isEmpty else { return false }
+
+        let collection = VideoCollection(name: trimmed, dateCreated: Date(), matchMode: group.mode)
+        guard let saved = try? await collectionRepo.insert(collection), let id = saved.id else { return false }
+        try? await collectionRepo.replaceRuleGroups(for: id, with: inputs)
+        await loadCollections()
+        return true
+    }
+
+    /// Phase 4 bridge: load a Collection's rule tree into the live Advanced Filter and open the
+    /// drawer (exclusive mode — clears Quick Filter).
+    func editCollectionAsAdvancedFilter(_ collection: VideoCollection) {
+        guard let id = collection.id else { return }
+        let groups = cachedCollectionRuleGroups[id] ?? []
+        let rules = cachedCollectionRules[id] ?? []
+        let rulesByGroup = Dictionary(grouping: rules, by: \.groupId)
+        let group = collectionRepo.filterGroup(for: collection, groups: groups, rulesByGroup: rulesByGroup)
+        guard !group.isEmpty else { return }
+
+        clearQuickFilters()
+        // Don't leave the sidebar stuck on this collection — Advanced Filter now owns matching.
+        if case .collection(let selected) = sidebarFilter, selected.id == collection.id {
+            sidebarFilter = .all
+        }
+        advancedFilterGroup = group
+        filtersDrawerMode = .advanced
+        isCuratedWallFiltersDrawerOpen = true
+    }
+
+    /// Maps a working `FilterGroup` onto the two-level shape `replaceRuleGroups` expects.
+    /// Top-level conditions (no nesting) are wrapped in a single ALL group.
+    private static func ruleGroupInputs(
+        from group: FilterGroup
+    ) -> [(mode: MatchMode, rules: [CollectionRule])] {
+        var inputs: [(mode: MatchMode, rules: [CollectionRule])] = []
+        var looseConditions: [CollectionRule] = []
+
+        for node in group.nodes {
+            switch node {
+            case .group(let inner):
+                let rules: [CollectionRule] = inner.nodes.compactMap { child in
+                    guard case .condition(let c) = child else { return nil }
+                    return CollectionRule(
+                        collectionId: 0,
+                        groupId: 0,
+                        attribute: c.field,
+                        comparison: c.comparison,
+                        value: c.value,
+                        value2: c.value2
+                    )
+                }
+                if !rules.isEmpty {
+                    inputs.append((mode: inner.mode, rules: rules))
+                }
+            case .condition(let c):
+                looseConditions.append(CollectionRule(
+                    collectionId: 0,
+                    groupId: 0,
+                    attribute: c.field,
+                    comparison: c.comparison,
+                    value: c.value,
+                    value2: c.value2
+                ))
+            }
+        }
+
+        if !looseConditions.isEmpty {
+            inputs.insert((mode: .all, rules: looseConditions), at: 0)
+        }
+        return inputs
     }
 
     private func refreshTagsByVideoId() async {

@@ -31,6 +31,16 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.34.0 (build 720) - 2026-07-09
+
+- **Added Quality chips to Quick Filter** (after Duration): SD / 480p / 720p / 1080p / 1440p / 4K / 8K+ multi-select, OR within the set. Same buckets as Advanced Filter Quality; Width/Height stay Advanced-only.
+- **Renamed the basic drawer to Quick Filter.** Header button / drawer title / tooltips now say **Quick Filter** (⌘⇧F), pairing with **Advanced Filter** (⌘⇧V).
+- **Moved Advanced Filter back into the shared filters drawer** as an exclusive content mode (Quick Filter cards *or* Advanced editor — never both). Quick Filter (⌘⇧F) / Advanced Filter (⌘⇧V) still open their own mode and clear the other; Save as Collection… and Clear live in the Advanced drawer header. Removed the Advanced Filter modal sheet.
+- **Split Quick Filter and Advanced Filter into exclusive modes.** Separate header buttons and shortcuts. Opening either clears the other so they never AND together. Renamed "Advanced Rules" → **Advanced Filter** throughout (drawer title, pills, Collections "Edit as Advanced Filter…").
+- **Added filter ⇄ Collection bridges (Phase 4).** Advanced Filter gains **Save as Collection…** — persists the live boolean tree as a named smart collection (live filter stays active). Collections context menu gains **Edit as Advanced Filter…** — loads that collection's rules into the Advanced Filter drawer (clears Quick Filter / deselects the collection in the sidebar so Advanced owns matching).
+- **Simplified filtering to Quick Filter + Advanced Filter.** Removed the intermediate "More Filters" card (built-in quick rows and custom-field quick filters). The Quick Filter drawer is now Smart Libraries, Collections, Rating, Duration, Quality, and Tags.
+- **Added Quality to Advanced Filter and Collections** as a first-class attribute (alongside Width/Height). Value editor is the familiar SD / 480p / 720p / 1080p / 1440p / 4K / 8K+ chip multi-select (OR within the set); operators are "is" / "is none of".
+
 ## 0.33.0 (build 708) - 2026-07-07
 
 - **Filters Drawer now covers the major built-in fields, not just rating/duration/tags/custom.** The old "Custom Fields" card is now a unified "More Filters" card with one "Add filter" menu offering every built-in field — Quality (resolution buckets SD…8K+), File Size (MB range), Date Added, Date Created (quick presets + custom range), Plays (Unplayed/Played), Codec, Extension, Folder — plus your custom fields. Each pick adds a removable, type-appropriate row; all rows AND together with each other and with the pinned filters, and each shows a removable pill. (Phase 1 of the layered-filtering design — quick-filter completeness, no rule-engine change yet.)

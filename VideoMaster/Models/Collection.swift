@@ -107,6 +107,10 @@ enum RuleAttribute: String, Codable, CaseIterable, Identifiable {
     case duration
     case height
     case width
+    /// Resolution bucket derived from `Video.resolutionLabel` (SD…8K+). Distinct from raw
+    /// `height`/`width` pixel tests — the value is one or more bucket labels (comma-separated),
+    /// matched with OR-within-set semantics via the Quality chip editor.
+    case quality
     case codec
     case dateImported
     case dateCreated
@@ -127,6 +131,7 @@ enum RuleAttribute: String, Codable, CaseIterable, Identifiable {
         case .duration: "Duration"
         case .height: "Height"
         case .width: "Width"
+        case .quality: "Quality"
         case .codec: "Video Codec"
         case .dateImported: "Date Imported"
         case .dateCreated: "Date Created"
@@ -144,6 +149,9 @@ enum RuleAttribute: String, Codable, CaseIterable, Identifiable {
             return [.equals, .notEquals, .lessThan, .greaterThan, .lessThanOrEqual, .greaterThanOrEqual, .between]
         case .dateImported, .dateCreated:
             return [.equals, .lessThan, .greaterThan, .between]
+        case .quality:
+            // Chip multi-select: "is any of" / "is none of" the selected buckets.
+            return [.equals, .notEquals]
         }
     }
 
@@ -167,6 +175,7 @@ enum RuleAttribute: String, Codable, CaseIterable, Identifiable {
         case .duration: "Duration in minutes"
         case .height: "Pixels"
         case .width: "Pixels"
+        case .quality: "1080p, 4K, …"
         case .codec: "h264, hevc, etc."
         case .dateImported: "YYYY-MM-DD"
         case .dateCreated: "YYYY-MM-DD"

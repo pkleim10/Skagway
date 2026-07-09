@@ -8,6 +8,7 @@ enum FilterFieldKind {
     case date
     case rating
     case tag
+    case quality
 }
 
 extension FilterField {
@@ -20,6 +21,7 @@ extension FilterField {
             case .fileSize, .duration, .height, .width, .playCount: return .number
             case .rating: return .rating
             case .dateImported, .dateCreated: return .date
+            case .quality: return .quality
             }
         case .custom(let id):
             switch customFields[id]?.valueType {
@@ -49,6 +51,8 @@ extension FilterField {
                 return [.equals, .notEquals, .lessThan, .greaterThan, .lessThanOrEqual, .greaterThanOrEqual, .between]
             case .date:
                 return [.equals, .lessThan, .greaterThan, .between]
+            case .quality:
+                return [.equals, .notEquals]
             }
         }
     }

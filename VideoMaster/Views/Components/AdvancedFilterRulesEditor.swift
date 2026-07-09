@@ -1,83 +1,59 @@
-import GRDB
 import SwiftUI
 
-struct CollectionEditorView: View {
-    let dbPool: DatabasePool
-    let collection: VideoCollection?
-    /// Custom metadata fields, so rules can target them (and value editors know their type).
+/// Live Advanced Filter boolean editor. Edits a working `FilterGroup` with the same two-level
+/// ALL/ANY + type-aware value controls as the Collections editor, writing through `group` on every
+/// change so the library filter updates live. Incomplete rules are omitted from the published
+/// group (so mid-typing doesn't match incorrectly); an empty tree publishes `nil`.
+struct AdvancedFilterRulesEditor: View {
+    @Binding var group: FilterGroup?
     var customFields: [CustomMetadataFieldDefinition] = []
-    /// Existing tags, offered as a menu when a rule targets the Tag attribute.
     var tags: [Tag] = []
-    let onSave: () -> Void
 
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var name: String = ""
     @State private var outerMatchMode: MatchMode = .all
     @State private var groups: [EditableGroup] = [EditableGroup()]
+    /// Suppresses publish→load feedback when we just wrote `group` ourselves.
+    @State private var isPublishing = false
 
-    struct EditableRule: Identifiable {
-        let id = UUID()
-        var field: FilterField = .builtin(.name)
-        var comparison: RuleComparison = .equals
-        var value: String = ""
-        var value2: String = ""
+    struct EditableRule: Identifiable, Equatable {
+        let id: UUID
+        var field: FilterField
+        var comparison: RuleComparison
+        var value: String
+        var value2: String
+
+        init(
+            id: UUID = UUID(),
+            field: FilterField = .builtin(.name),
+            comparison: RuleComparison = .contains,
+            value: String = "",
+            value2: String = ""
+        ) {
+            self.id = id
+            self.field = field
+            self.comparison = comparison
+            self.value = value
+            self.value2 = value2
+        }
     }
 
-    struct EditableGroup: Identifiable {
-        let id = UUID()
-        var matchMode: MatchMode = .all
-        var rules: [EditableRule] = [EditableRule()]
-    }
+    struct EditableGroup: Identifiable, Equatable {
+        let id: UUID
+        var matchMode: MatchMode
+        var rules: [EditableRule]
 
-    private var repository: CollectionRepository {
-        CollectionRepository(dbPool: dbPool)
+        init(id: UUID = UUID(), matchMode: MatchMode = .all, rules: [EditableRule] = [EditableRule()]) {
+            self.id = id
+            self.matchMode = matchMode
+            self.rules = rules
+        }
     }
 
     private var customFieldsById: [UUID: CustomMetadataFieldDefinition] {
         Dictionary(uniqueKeysWithValues: customFields.map { ($0.id, $0) })
     }
 
-    private var isValid: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty
-            && !groups.isEmpty
-            && groups.allSatisfy { group in
-                !group.rules.isEmpty && group.rules.allSatisfy { ruleIsValid($0) }
-            }
-    }
-
-    private func ruleIsValid(_ rule: EditableRule) -> Bool {
-        guard !rule.value.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
-        if rule.comparison.usesSecondValue {
-            return !rule.value2.trimmingCharacters(in: .whitespaces).isEmpty
-        }
-        return true
-    }
-
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-            groupsArea
-            Divider()
-            footer
-        }
-        .frame(width: 660, height: 500)
-        .onAppear { loadExisting() }
-    }
-
-    private var header: some View {
-        HStack {
-            Text("Collection Name:")
-                .fontWeight(.medium)
-            TextField("e.g. Large Files", text: $name)
-                .textFieldStyle(.roundedBorder)
-        }
-        .padding()
-    }
-
-    private var groupsArea: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 4) {
                 Text("Match")
                     .font(.callout)
@@ -88,38 +64,62 @@ struct CollectionEditorView: View {
                 Text("of the following groups:")
                     .font(.callout)
                     .foregroundStyle(Color.appTextSecondary)
+
+                Spacer(minLength: 0)
             }
 
-            ScrollView {
-                VStack(spacing: 12) {
-                    ForEach(Array(groups.enumerated()), id: \.element.id) { groupIndex, _ in
-                        groupCard(groupIndex: groupIndex)
-                    }
+            VStack(spacing: 10) {
+                ForEach(Array(groups.enumerated()), id: \.element.id) { groupIndex, _ in
+                    groupCard(groupIndex: groupIndex)
+                }
+            }
 
-                    Button(action: addGroup) {
-                        Label("Add Group", systemImage: "plus.circle.fill")
-                            .contentShape(Rectangle())
+            HStack(spacing: 16) {
+                Button(action: addGroup) {
+                    Label("Add group", systemImage: "plus.circle.fill")
+                        .font(.caption)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.appAccent)
+
+                Spacer(minLength: 0)
+
+                if group != nil {
+                    Button("Reset") {
+                        resetEditor()
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(Color.appAccent)
+                    .font(.caption)
+                    .foregroundStyle(Color.appTextSecondary)
+                    .help("Clear Advanced Filter")
                 }
-                .padding(.vertical, 4)
             }
-            .frame(maxHeight: .infinity)
         }
-        .padding()
+        .onAppear { loadFromBinding() }
+        .onChange(of: group) { _, newValue in
+            guard !isPublishing else { return }
+            // External clear (Clear all / pill ✕) resets the editor.
+            if newValue == nil || newValue?.isEmpty == true {
+                resetEditor(publish: false)
+            }
+        }
+        .onChange(of: outerMatchMode) { _, _ in publish() }
+        .onChange(of: groups) { _, _ in publish() }
     }
+
+    // MARK: - Group card
 
     private func groupCard(groupIndex: Int) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 4) {
-                Text("Match videos where")
+                Text("Match")
                     .font(.callout)
                     .foregroundStyle(Color.appTextSecondary)
 
                 modeToggle($groups[groupIndex].matchMode)
 
-                Text("of the following are true:")
+                Text("of the following:")
                     .font(.callout)
                     .foregroundStyle(Color.appTextSecondary)
 
@@ -128,6 +128,7 @@ struct CollectionEditorView: View {
                 Button(action: { removeGroup(at: groupIndex) }) {
                     Image(systemName: "trash")
                         .foregroundStyle(Color.appTextSecondary)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderless)
                 .disabled(groups.count <= 1)
@@ -139,6 +140,14 @@ struct CollectionEditorView: View {
                     ruleRow(groupIndex: groupIndex, ruleIndex: ruleIndex)
                 }
             }
+
+            Button(action: { addRule(toGroup: groupIndex) }) {
+                Label("Add condition", systemImage: "plus")
+                    .font(.caption)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.appAccent)
         }
         .padding(10)
         .background(
@@ -152,7 +161,11 @@ struct CollectionEditorView: View {
     }
 
     private func modeToggle(_ mode: Binding<MatchMode>) -> some View {
-        Button(action: { withAnimation(.easeInOut(duration: 0.15)) { mode.wrappedValue = mode.wrappedValue == .all ? .any : .all } }) {
+        Button(action: {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                mode.wrappedValue = mode.wrappedValue == .all ? .any : .all
+            }
+        }) {
             Text(mode.wrappedValue == .all ? "ALL" : "ANY")
                 .font(.callout)
                 .fontWeight(.bold)
@@ -167,11 +180,12 @@ struct CollectionEditorView: View {
         .buttonStyle(.plain)
     }
 
+    // MARK: - Rule row
+
     private func ruleRow(groupIndex: Int, ruleIndex: Int) -> some View {
         let rule = $groups[groupIndex].rules[ruleIndex]
         let fields = customFieldsById
         return HStack(spacing: 8) {
-            // Attribute: built-in fields, then custom fields (sectioned).
             Picker("Attribute", selection: rule.field) {
                 ForEach(RuleAttribute.allCases) { attr in
                     Text(attr.label).tag(FilterField.builtin(attr))
@@ -185,14 +199,12 @@ struct CollectionEditorView: View {
                 }
             }
             .labelsHidden()
-            .frame(width: 140)
+            .frame(minWidth: 120, idealWidth: 140, maxWidth: 160)
             .onChange(of: rule.wrappedValue.field) { _, newField in
                 let supported = newField.supportedComparisons(customFields: fields)
                 if !supported.contains(rule.wrappedValue.comparison) {
                     rule.wrappedValue.comparison = supported.first ?? .equals
                 }
-                // Prefill a default for controls that always show something (date picker, stars),
-                // so a freshly-picked date/rating field isn't invalid-because-empty.
                 if rule.wrappedValue.value.isEmpty {
                     prefillDefault(rule.value, kind: newField.kind(customFields: fields))
                 }
@@ -204,7 +216,7 @@ struct CollectionEditorView: View {
                 }
             }
             .labelsHidden()
-            .frame(width: 150)
+            .frame(minWidth: 120, idealWidth: 140, maxWidth: 160)
             .onChange(of: rule.wrappedValue.comparison) { _, newComp in
                 if newComp.usesSecondValue && rule.wrappedValue.value2.isEmpty {
                     prefillDefault(rule.value2, kind: rule.wrappedValue.field.kind(customFields: fields))
@@ -215,26 +227,22 @@ struct CollectionEditorView: View {
 
             Spacer(minLength: 0)
 
-            Button(action: { addRule(toGroup: groupIndex) }) {
-                Image(systemName: "plus.circle.fill")
-                    .foregroundStyle(.green)
-            }
-            .buttonStyle(.borderless)
-
             Button(action: { removeRule(at: ruleIndex, inGroup: groupIndex) }) {
                 Image(systemName: "minus.circle.fill")
                     .foregroundStyle(.red)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
             .disabled(groups[groupIndex].rules.count <= 1)
+            .help("Remove condition")
         }
     }
 
-    /// Type-aware value editor: the control fits the field's kind (stars for rating, a date picker
-    /// for dates, a tag menu for tags, numeric/text fields otherwise), and shows a second control
-    /// for the `.between` range operator.
     @ViewBuilder
-    private func ruleValueEditor(_ rule: Binding<EditableRule>, fields: [UUID: CustomMetadataFieldDefinition]) -> some View {
+    private func ruleValueEditor(
+        _ rule: Binding<EditableRule>,
+        fields: [UUID: CustomMetadataFieldDefinition]
+    ) -> some View {
         let kind = rule.wrappedValue.field.kind(customFields: fields)
         let isBetween = rule.wrappedValue.comparison.usesSecondValue
         switch kind {
@@ -301,6 +309,8 @@ struct CollectionEditorView: View {
         }
     }
 
+    /// Multi-select resolution chips. Selection is stored as a comma-separated list of bucket
+    /// labels (OR within the set); empty = no match until the user picks at least one.
     private func qualityChips(_ value: Binding<String>) -> some View {
         let selected = ResolutionBucket.decode(value.wrappedValue)
         return HStack(spacing: 4) {
@@ -345,18 +355,6 @@ struct CollectionEditorView: View {
         }
     }
 
-    private var footer: some View {
-        HStack {
-            Spacer()
-            Button("Cancel") { dismiss() }
-                .keyboardShortcut(.cancelAction)
-            Button(collection == nil ? "Create" : "Save") { save() }
-                .keyboardShortcut(.defaultAction)
-                .disabled(!isValid)
-        }
-        .padding()
-    }
-
     // MARK: - Actions
 
     private func addRule(toGroup groupIndex: Int) {
@@ -377,65 +375,87 @@ struct CollectionEditorView: View {
         groups.remove(at: index)
     }
 
-    private func loadExisting() {
-        guard let existing = collection else {
-            groups = [EditableGroup()]
-            return
-        }
-        name = existing.name
-        outerMatchMode = existing.matchMode
-        Task {
-            guard let id = existing.id else { return }
-            let dbGroups = (try? await repository.fetchRuleGroups(for: id)) ?? []
-            let dbRules = (try? await repository.fetchRules(for: id)) ?? []
-            if dbGroups.isEmpty {
-                groups = [EditableGroup()]
-            } else {
-                let rulesByGroup = Dictionary(grouping: dbRules, by: \.groupId)
-                groups = dbGroups.sorted { $0.orderIndex < $1.orderIndex }.map { g in
-                    let groupRules = (rulesByGroup[g.id ?? -1] ?? []).map { r in
-                        EditableRule(field: r.attribute, comparison: r.comparison, value: r.value, value2: r.value2 ?? "")
-                    }
-                    return EditableGroup(matchMode: g.matchMode, rules: groupRules.isEmpty ? [EditableRule()] : groupRules)
-                }
-            }
+    private func resetEditor(publish: Bool = true) {
+        outerMatchMode = .all
+        groups = [EditableGroup()]
+        if publish {
+            isPublishing = true
+            group = nil
+            isPublishing = false
         }
     }
 
-    private func save() {
-        let trimmedName = name.trimmingCharacters(in: .whitespaces)
-        Task {
-            let groupInputs: [(mode: MatchMode, rules: [CollectionRule])] = groups.map { g in
-                (
-                    mode: g.matchMode,
-                    rules: g.rules.map { r in
-                        CollectionRule(
-                            collectionId: 0,
-                            groupId: 0,
-                            attribute: r.field,
-                            comparison: r.comparison,
-                            value: r.value.trimmingCharacters(in: .whitespaces),
-                            value2: r.comparison.usesSecondValue ? r.value2.trimmingCharacters(in: .whitespaces) : nil
-                        )
-                    }
+    private func ruleIsValid(_ rule: EditableRule) -> Bool {
+        guard !rule.value.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
+        if rule.comparison.usesSecondValue {
+            return !rule.value2.trimmingCharacters(in: .whitespaces).isEmpty
+        }
+        return true
+    }
+
+    private func publish() {
+        let nodes: [FilterNode] = groups.compactMap { g in
+            let conditions: [FilterNode] = g.rules.compactMap { r in
+                guard ruleIsValid(r) else { return nil }
+                return .condition(FilterCondition(
+                    field: r.field,
+                    comparison: r.comparison,
+                    value: r.value.trimmingCharacters(in: .whitespaces),
+                    value2: r.comparison.usesSecondValue
+                        ? r.value2.trimmingCharacters(in: .whitespaces)
+                        : nil
+                ))
+            }
+            guard !conditions.isEmpty else { return nil }
+            return .group(FilterGroup(mode: g.matchMode, nodes: conditions))
+        }
+
+        let next: FilterGroup? = nodes.isEmpty
+            ? nil
+            : FilterGroup(mode: outerMatchMode, nodes: nodes)
+
+        guard next != group else { return }
+        isPublishing = true
+        group = next
+        isPublishing = false
+    }
+
+    private func loadFromBinding() {
+        guard let existing = group, !existing.isEmpty else {
+            outerMatchMode = .all
+            groups = [EditableGroup()]
+            return
+        }
+        outerMatchMode = existing.mode
+        let loaded: [EditableGroup] = existing.nodes.compactMap { node in
+            switch node {
+            case .group(let inner):
+                let rules: [EditableRule] = inner.nodes.compactMap { child in
+                    guard case .condition(let c) = child else { return nil }
+                    return EditableRule(
+                        field: c.field,
+                        comparison: c.comparison,
+                        value: c.value,
+                        value2: c.value2 ?? ""
+                    )
+                }
+                return EditableGroup(
+                    matchMode: inner.mode,
+                    rules: rules.isEmpty ? [EditableRule()] : rules
+                )
+            case .condition(let c):
+                // Flat top-level condition → wrap in a single ALL group for editing.
+                return EditableGroup(
+                    matchMode: .all,
+                    rules: [EditableRule(
+                        field: c.field,
+                        comparison: c.comparison,
+                        value: c.value,
+                        value2: c.value2 ?? ""
+                    )]
                 )
             }
-            if var existing = collection {
-                existing.name = trimmedName
-                existing.matchMode = outerMatchMode
-                try? await repository.update(existing)
-                if let id = existing.id {
-                    try? await repository.replaceRuleGroups(for: id, with: groupInputs)
-                }
-            } else {
-                let newCollection = VideoCollection(name: trimmedName, dateCreated: Date(), matchMode: outerMatchMode)
-                let saved = try? await repository.insert(newCollection)
-                if let id = saved?.id {
-                    try? await repository.replaceRuleGroups(for: id, with: groupInputs)
-                }
-            }
-            onSave()
-            dismiss()
         }
+        groups = loaded.isEmpty ? [EditableGroup()] : loaded
     }
 }
