@@ -697,8 +697,8 @@ struct CuratedWallInspector: View {
 }
 
 /// A tag chip in the inspector's Tags section. Preserves the existing capsule appearance and,
-/// like the filters-drawer chip, reveals the full tag name in a small popover on hover — but
-/// only when the name is actually truncated, so it never just duplicates a name that fits.
+/// like the filters-drawer chip, reveals the full tag name on hover when truncated — via a
+/// click-through tip (not `.popover`, which stole the click).
 private struct InspectorTagChip: View {
     let tag: Tag
     let applied: Bool
@@ -717,6 +717,8 @@ private struct InspectorTagChip: View {
     private var isTruncated: Bool {
         fullTextWidth > visibleTextWidth + 1
     }
+
+    private var showTip: Bool { isHovering && isTruncated }
 
     // Assigned tags read as "active": bolder weight + a stronger fill/border of the same accent
     // color (no new color introduced, matching the app's existing selected-state convention).
@@ -752,23 +754,14 @@ private struct InspectorTagChip: View {
         }
         .buttonStyle(.plain)
         .frame(maxWidth: fillWidth ? .infinity : nil, alignment: .leading)
-        .onHover { hovering in
-            isHovering = hovering
+        .onHover { isHovering = $0 }
+        .overlay(alignment: .top) {
+            if showTip {
+                TruncatedTagNameTip(name: tag.name, font: chipFont)
+                    .offset(y: -34)
+            }
         }
-        .popover(
-            isPresented: Binding(
-                get: { isHovering && isTruncated },
-                set: { newValue in if !newValue { isHovering = false } }
-            ),
-            arrowEdge: .top
-        ) {
-            Text(tag.name)
-                .font(chipFont)
-                .foregroundStyle(Color.appTextPrimary)
-                .fixedSize()
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-        }
+        .zIndex(showTip ? 100 : 0)
     }
 
     /// Reports the rendered width of the view it backs into `width` (kept current on resize).

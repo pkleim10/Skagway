@@ -31,6 +31,10 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.39.0 (build 745) - 2026-07-09
+
+- **Fixed truncated Quick Filter / Inspector tag chips not being clickable while their full-name tip was showing** — replaced the hover `.popover` (which stole the click) with a click-through overlay tip (popover-style bubble + tail) that still shows the full name when truncated.
+
 ## 0.38.0 (build 740) - 2026-07-09
 
 - **Fixed intermittent 6–8s freezes before the play panel appears.** Sidecar subtitle discovery and SRT parsing no longer run on the main thread during SPACE/`start()` (they run in parallel with `isPlayable`). Play-time `hasSubtitles` updates no longer reassign `filteredVideos` or reload the library via GRDB observation. Grid “Open With” Launch Services results cache synchronously per extension so eager context menus don’t re-query on every new type.
