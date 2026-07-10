@@ -31,6 +31,9 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Fixed Export Metadata default filenames ending in `.jsonl.jsonl`** — `NSSavePanel` already appends the format extension from the allowed content type; the suggested name no longer includes a duplicate suffix.
+- **Added Open Default Library** — File menu and landing screen when the default App Support library exists. Switches back to `~/Library/Application Support/VideoMaster/VideoMaster.VideoMaster` (path shown in the button help). Disabled while that library is already active.
+
 ## 0.36.0 (build 728) - 2026-07-09
 
 - **Added Export Metadata (CSV + JSON Lines).** File → Export Metadata… (⌘⇧E) exports the current filtered set; Grid/List context menu Export Metadata… exports the selection. Shared sheet: format selector (CSV / JSON Lines), single field list with checkboxes and drag-reorder (optional fields start unchecked at the bottom), read-only scope summary. RFC 4180 CSV with UTF-8 BOM; JSONL uses human custom-field names (e.g. `Featuring`) when unique, falling back to `custom:<uuid>` on collisions. Format and column prefs persist.

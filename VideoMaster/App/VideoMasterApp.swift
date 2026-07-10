@@ -264,6 +264,13 @@ struct VideoMasterApp: App {
                         DatabaseExportImport.createLibraryInDefaultLocation()
                     }
                     .disabled(appState.hasLibrary)
+                    .help("Creates \(DatabaseExportImport.defaultLibraryPathForDisplay)")
+                } else {
+                    Button("Open Default Library") {
+                        DatabaseExportImport.openDefaultLibrary()
+                    }
+                    .disabled(DatabaseExportImport.isDefaultLibraryActive)
+                    .help(DatabaseExportImport.defaultLibraryPathForDisplay)
                 }
                 Button("New Library\u{2026}") {
                     DatabaseExportImport.createNewLibrary()

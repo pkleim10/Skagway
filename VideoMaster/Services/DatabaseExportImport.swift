@@ -48,6 +48,21 @@ enum DatabaseExportImport {
         FileManager.default.fileExists(atPath: defaultLibraryURL.path)
     }
 
+    /// Whether the library that would open on launch is the default App Support library.
+    static var isDefaultLibraryActive: Bool {
+        guard let path = databasePathForLaunch() else { return false }
+        return (path as NSString).standardizingPath
+            == (defaultLibraryURL.path as NSString).standardizingPath
+    }
+
+    /// Short path shown in help / alerts (tilde-abbreviated when under the home directory).
+    static var defaultLibraryPathForDisplay: String {
+        defaultLibraryURL.path.replacingOccurrences(
+            of: NSHomeDirectory(),
+            with: "~"
+        )
+    }
+
     /// Whether the user explicitly closed the library. Checked once at launch, then cleared.
     static var userClosedLibrary: Bool {
         UserDefaults.standard.bool(forKey: userClosedLibraryKey)
@@ -283,18 +298,42 @@ enum DatabaseExportImport {
         guard !fm.fileExists(atPath: destURL.path) else {
             let alert = NSAlert()
             alert.messageText = "Library Already Exists"
-            alert.informativeText = "A library already exists at the default location. Use Open Library to open it, or choose a different location with Create library…"
+            alert.informativeText = "A library already exists at the default location. Use Open Default Library to open it, or choose a different location with Create library…"
             alert.alertStyle = .informational
             alert.runModal()
             return
         }
         do {
             try DatabaseMigration.createEmptyDatabase(at: destURL.path)
+            clearUserClosedLibrary()
+            addToRecent(url: destURL)
             relaunchAfterTerminate()
             NSApplication.shared.terminate(nil)
         } catch {
             NSAlert(error: error).runModal()
         }
+    }
+
+    /// Switches to the default App Support library (`~/Library/Application Support/VideoMaster/VideoMaster.VideoMaster`) and relaunches.
+    /// Clears any active library bookmark so launch falls back to the fixed default path.
+    static func openDefaultLibrary() {
+        guard defaultLibraryExists else {
+            let alert = NSAlert()
+            alert.messageText = "Default Library Not Found"
+            alert.informativeText = "No library exists at \(defaultLibraryPathForDisplay). Use Create library in default location to create one."
+            alert.alertStyle = .informational
+            alert.runModal()
+            return
+        }
+        if isDefaultLibraryActive {
+            return
+        }
+        checkpointAndCleanWAL()
+        UserDefaults.standard.removeObject(forKey: activeLibraryBookmarkKey)
+        clearUserClosedLibrary()
+        addToRecent(url: defaultLibraryURL)
+        relaunchAfterTerminate()
+        NSApplication.shared.terminate(nil)
     }
 
     /// Creates a new empty library at user-chosen path and switches to it.

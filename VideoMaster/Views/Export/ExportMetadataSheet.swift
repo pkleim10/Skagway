@@ -165,9 +165,11 @@ struct ExportMetadataSheet: View {
         }
     }
 
+    /// Basename only — `NSSavePanel` appends the extension from `allowedContentTypes`,
+    /// so including `.jsonl` / `.csv` here would produce `….jsonl.jsonl`.
     private func defaultFileName() -> String {
         let stamp = ISO8601DateFormatter().string(from: Date())
             .replacingOccurrences(of: ":", with: "-")
-        return "VideoMaster-metadata-\(stamp).\(format.fileExtension)"
+        return "VideoMaster-metadata-\(stamp)"
     }
 }

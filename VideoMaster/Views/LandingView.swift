@@ -23,7 +23,17 @@ struct LandingView: View {
             VStack(spacing: AppSpacing.lg) {
                 // Primary create actions
                 VStack(spacing: AppSpacing.md) {
-                    if !DatabaseExportImport.defaultLibraryExists {
+                    if DatabaseExportImport.defaultLibraryExists {
+                        Button(action: { DatabaseExportImport.openDefaultLibrary() }) {
+                            Label("Open default library", systemImage: "building.columns.fill")
+                                .frame(maxWidth: 260)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.appAccent)
+                        .controlSize(.large)
+                        .help(DatabaseExportImport.defaultLibraryPathForDisplay)
+                        .disabled(DatabaseExportImport.isDefaultLibraryActive)
+                    } else {
                         Button(action: { DatabaseExportImport.createLibraryInDefaultLocation() }) {
                             Label("Create library in default location", systemImage: "plus.circle.fill")
                                 .frame(maxWidth: 260)
@@ -31,6 +41,7 @@ struct LandingView: View {
                         .buttonStyle(.borderedProminent)
                         .tint(Color.appAccent)
                         .controlSize(.large)
+                        .help("Creates \(DatabaseExportImport.defaultLibraryPathForDisplay)")
                     }
 
                     Button(action: { DatabaseExportImport.createNewLibrary() }) {
