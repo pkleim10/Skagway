@@ -366,11 +366,11 @@ private struct LibraryContentView: View {
                         vm.savePreferences()
                     }
                 ),
-                items: [ViewMode.list, .grid],
+                items: [ViewMode.grid, .list],
                 tooltip: { mode in
                     switch mode {
-                    case .list: "List view (⌘1)"
-                    case .grid: "Grid view (⌘2)"
+                    case .grid: "Grid view (⌘1)"
+                    case .list: "List view (⌘2)"
                     }
                 }
             ) { mode in

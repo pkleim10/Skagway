@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Swapped List/Grid order and shortcuts** — Grid is first in the header segmented control and View menu; **⌘1** is Grid, **⌘2** is List (was the reverse).
+
 ## 0.37.0 (build 736) - 2026-07-09
 
 - **Renamed metadata Apply → Import, and folder “Import New” → Scan for New Videos.** File → **Import Metadata…** (⌘⌥I) pairs with Export Metadata… (⌘⌥E); smart library is **Last Metadata Import**. File / toolbar **Scan for New Videos** has no shortcut (Add Folder remains ⌘⇧O). Header status uses “Scanning…” so it doesn’t collide with metadata Import.

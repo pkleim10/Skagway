@@ -17,17 +17,17 @@ struct VideoMasterApp: App {
         .defaultSize(width: 1200, height: 800)
         .commands {
             CommandGroup(after: .sidebar) {
-                Button("List View") {
+                Button("Grid View") {
                     appState.libraryViewModel?.scrollToSelectedOnViewSwitch = true
-                    appState.libraryViewModel?.viewMode = .list
+                    appState.libraryViewModel?.viewMode = .grid
                     appState.libraryViewModel?.savePreferences()
                 }
                 .keyboardShortcut("1", modifiers: .command)
                 .disabled(!appState.hasLibrary)
 
-                Button("Grid View") {
+                Button("List View") {
                     appState.libraryViewModel?.scrollToSelectedOnViewSwitch = true
-                    appState.libraryViewModel?.viewMode = .grid
+                    appState.libraryViewModel?.viewMode = .list
                     appState.libraryViewModel?.savePreferences()
                 }
                 .keyboardShortcut("2", modifiers: .command)
