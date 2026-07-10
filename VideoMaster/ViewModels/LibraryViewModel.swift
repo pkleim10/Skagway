@@ -537,6 +537,76 @@ final class LibraryViewModel {
     var pendingDeleteIds: Set<String> = []
     var showDeleteConfirmation: Bool = false
 
+    // MARK: - Album name prompts
+
+    enum AlbumNamePrompt: Identifiable, Equatable {
+        case createFromSelection(Set<String>)
+        case createEmpty
+        case rename(VideoCollection)
+
+        var id: String {
+            switch self {
+            case .createFromSelection: return "createFromSelection"
+            case .createEmpty: return "createEmpty"
+            case .rename(let c): return "rename-\(c.id ?? 0)"
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .createFromSelection: return "New Album from Selection"
+            case .createEmpty: return "New Album"
+            case .rename: return "Rename Album"
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .createFromSelection: return "Creates an album containing the selected videos."
+            case .createEmpty: return "Creates an empty album. Add videos from the context menu."
+            case .rename: return "Enter a new name for this album."
+            }
+        }
+    }
+
+    var albumNamePrompt: AlbumNamePrompt? = nil
+    var albumNameDraft: String = ""
+
+    func presentNewAlbumFromSelection(_ paths: Set<String>) {
+        guard !paths.isEmpty else { return }
+        albumNameDraft = ""
+        albumNamePrompt = .createFromSelection(paths)
+    }
+
+    func presentNewEmptyAlbum() {
+        albumNameDraft = ""
+        albumNamePrompt = .createEmpty
+    }
+
+    func presentRenameAlbum(_ album: VideoCollection) {
+        guard album.isAlbum else { return }
+        albumNameDraft = album.name
+        albumNamePrompt = .rename(album)
+    }
+
+    func confirmAlbumNamePrompt() {
+        let draft = albumNameDraft
+        let prompt = albumNamePrompt
+        albumNamePrompt = nil
+        albumNameDraft = ""
+        guard let prompt else { return }
+        Task {
+            switch prompt {
+            case .createFromSelection(let paths):
+                _ = await createAlbum(name: draft, fromVideoPaths: paths)
+            case .createEmpty:
+                _ = await createEmptyAlbum(name: draft)
+            case .rename(let album):
+                await renameCollection(album, to: draft)
+            }
+        }
+    }
+
     // MARK: - Metadata export
 
     /// Non-nil while the Export Metadata sheet is presented. Scope is fixed by the entry point.
@@ -926,6 +996,8 @@ final class LibraryViewModel {
     var libraryCounts = LibraryCounts()
     private var cachedCollectionRules: [Int64: [CollectionRule]] = [:]
     private var cachedCollectionRuleGroups: [Int64: [CollectionRuleGroup]] = [:]
+    /// Album membership: collectionId → video database ids.
+    private var cachedAlbumVideoIds: [Int64: Set<Int64>] = [:]
     private var collectionCountTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
     private var ftsMatchIds: Set<String>?
@@ -1985,6 +2057,7 @@ final class LibraryViewModel {
             tagsByVideoId: tagsByVideoId,
             cachedCollectionRules: cachedCollectionRules,
             cachedCollectionRuleGroups: cachedCollectionRuleGroups,
+            cachedAlbumVideoIds: cachedAlbumVideoIds,
             sidebarFilter: sidebarFilter,
             selectedTagIds: selectedTagIds,
             tagFilterMode: tagFilterMode,
@@ -2029,6 +2102,7 @@ final class LibraryViewModel {
         let tagsByVideoId: [Int64: [Tag]]
         let cachedCollectionRules: [Int64: [CollectionRule]]
         let cachedCollectionRuleGroups: [Int64: [CollectionRuleGroup]]
+        let cachedAlbumVideoIds: [Int64: Set<Int64>]
         let sidebarFilter: SidebarFilter?
         let selectedTagIds: Set<Int64>
         let tagFilterMode: MatchMode
@@ -2296,23 +2370,31 @@ final class LibraryViewModel {
             guard let collectionId = collection.id else {
                 return ([], [:])
             }
-            let groups = snapshot.cachedCollectionRuleGroups[collectionId] ?? []
-            if groups.isEmpty {
-                return ([], [:])
-            }
-            let rules = snapshot.cachedCollectionRules[collectionId] ?? []
-            let rulesByGroup = Dictionary(grouping: rules, by: \.groupId)
-            let matcher = collectionRepo.compileMatcher(
-                for: collection, groups: groups, rulesByGroup: rulesByGroup,
-                customFields: snapshot.customFieldDefinitionsById
-            )
-            baseResult = baseResult.filter { video in
-                let dbId = video.databaseId
-                return matcher.matches(
-                    video,
-                    tags: snapshot.tagsByVideoId[dbId ?? -1] ?? [],
-                    customValues: dbId.flatMap { snapshot.listCustomMetadataByVideoId[$0] } ?? [:]
+            if collection.kind == .album {
+                let members = snapshot.cachedAlbumVideoIds[collectionId] ?? []
+                baseResult = baseResult.filter { video in
+                    guard let dbId = video.databaseId else { return false }
+                    return members.contains(dbId)
+                }
+            } else {
+                let groups = snapshot.cachedCollectionRuleGroups[collectionId] ?? []
+                if groups.isEmpty {
+                    return ([], [:])
+                }
+                let rules = snapshot.cachedCollectionRules[collectionId] ?? []
+                let rulesByGroup = Dictionary(grouping: rules, by: \.groupId)
+                let matcher = collectionRepo.compileMatcher(
+                    for: collection, groups: groups, rulesByGroup: rulesByGroup,
+                    customFields: snapshot.customFieldDefinitionsById
                 )
+                baseResult = baseResult.filter { video in
+                    let dbId = video.databaseId
+                    return matcher.matches(
+                        video,
+                        tags: snapshot.tagsByVideoId[dbId ?? -1] ?? [],
+                        customValues: dbId.flatMap { snapshot.listCustomMetadataByVideoId[$0] } ?? [:]
+                    )
+                }
             }
         default:
             break
@@ -2610,19 +2692,27 @@ final class LibraryViewModel {
             result = result.filter { recentlyAppliedPaths.contains($0.filePath) }
         case .collection(let collection):
             guard let collectionId = collection.id else { return [] }
-            let groups = cachedCollectionRuleGroups[collectionId] ?? []
-            if groups.isEmpty { return [] }
-            let rules = cachedCollectionRules[collectionId] ?? []
-            let rulesByGroup = Dictionary(grouping: rules, by: \.groupId)
-            let customFields = Dictionary(uniqueKeysWithValues: customMetadataFieldDefinitions.map { ($0.id, $0) })
-            let matcher = collectionRepo.compileMatcher(for: collection, groups: groups, rulesByGroup: rulesByGroup, customFields: customFields)
-            result = result.filter { video in
-                let dbId = video.databaseId
-                return matcher.matches(
-                    video,
-                    tags: tagsByVideoId[dbId ?? -1] ?? [],
-                    customValues: dbId.flatMap { listCustomMetadataByVideoId[$0] } ?? [:]
-                )
+            if collection.kind == .album {
+                let members = cachedAlbumVideoIds[collectionId] ?? []
+                result = result.filter { video in
+                    guard let dbId = video.databaseId else { return false }
+                    return members.contains(dbId)
+                }
+            } else {
+                let groups = cachedCollectionRuleGroups[collectionId] ?? []
+                if groups.isEmpty { return [] }
+                let rules = cachedCollectionRules[collectionId] ?? []
+                let rulesByGroup = Dictionary(grouping: rules, by: \.groupId)
+                let customFields = Dictionary(uniqueKeysWithValues: customMetadataFieldDefinitions.map { ($0.id, $0) })
+                let matcher = collectionRepo.compileMatcher(for: collection, groups: groups, rulesByGroup: rulesByGroup, customFields: customFields)
+                result = result.filter { video in
+                    let dbId = video.databaseId
+                    return matcher.matches(
+                        video,
+                        tags: tagsByVideoId[dbId ?? -1] ?? [],
+                        customValues: dbId.flatMap { listCustomMetadataByVideoId[$0] } ?? [:]
+                    )
+                }
             }
         default:
             break
@@ -4209,10 +4299,16 @@ final class LibraryViewModel {
 
     // MARK: - Collections
 
+    /// Albums only (manual membership), sorted with the full collections list.
+    var albums: [VideoCollection] {
+        collections.filter(\.isAlbum)
+    }
+
     func loadCollections() async {
         collections = (try? await collectionRepo.fetchAll()) ?? []
         cachedCollectionRules = (try? await collectionRepo.fetchAllRulesGrouped()) ?? [:]
         cachedCollectionRuleGroups = (try? await collectionRepo.fetchAllRuleGroupsGrouped()) ?? [:]
+        cachedAlbumVideoIds = (try? await collectionRepo.fetchAllAlbumMemberships()) ?? [:]
         await refreshTagsByVideoId()
         await refreshCollectionCounts()
         recomputeFilteredVideos()
@@ -4234,6 +4330,7 @@ final class LibraryViewModel {
         let currentTags = tagsByVideoId
         let allRules = cachedCollectionRules
         let allGroups = cachedCollectionRuleGroups
+        let albumMembers = cachedAlbumVideoIds
         let cols = collections
         let repo = collectionRepo
         let customValuesById = listCustomMetadataByVideoId
@@ -4243,8 +4340,19 @@ final class LibraryViewModel {
             var counts: [Int64: Int] = [:]
             for collection in cols {
                 guard let id = collection.id else { continue }
+                if collection.kind == .album {
+                    let members = albumMembers[id] ?? []
+                    counts[id] = baseVideos.filter { video in
+                        guard let dbId = video.databaseId else { return false }
+                        return members.contains(dbId)
+                    }.count
+                    continue
+                }
                 let groups = allGroups[id] ?? []
-                if groups.isEmpty { continue }
+                if groups.isEmpty {
+                    counts[id] = 0
+                    continue
+                }
                 let rulesByGroup = Dictionary(grouping: allRules[id] ?? [], by: \.groupId)
                 let matcher = repo.compileMatcher(for: collection, groups: groups, rulesByGroup: rulesByGroup, customFields: customFields)
                 counts[id] = baseVideos.filter { video in
@@ -4270,6 +4378,66 @@ final class LibraryViewModel {
         await loadCollections()
     }
 
+    /// Creates an Album from the given video paths (selection), selects it in the sidebar.
+    @discardableResult
+    func createAlbum(name: String, fromVideoPaths paths: Set<String>) async -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        let dbIds = paths.compactMap { videosByPath[$0]?.databaseId }
+        guard !dbIds.isEmpty else { return false }
+
+        let album = VideoCollection(name: trimmed, dateCreated: Date(), matchMode: .all, kind: .album)
+        guard let saved = try? await collectionRepo.insert(album), let id = saved.id else { return false }
+        try? await collectionRepo.replaceAlbumMembership(for: id, videoIds: dbIds)
+        await loadCollections()
+        if let refreshed = collections.first(where: { $0.id == id }) {
+            sidebarFilter = .collection(refreshed)
+        }
+        return true
+    }
+
+    /// Creates an empty Album (drawer affordance).
+    @discardableResult
+    func createEmptyAlbum(name: String) async -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        let album = VideoCollection(name: trimmed, dateCreated: Date(), matchMode: .all, kind: .album)
+        guard let saved = try? await collectionRepo.insert(album), let id = saved.id else { return false }
+        await loadCollections()
+        if let refreshed = collections.first(where: { $0.id == id }) {
+            sidebarFilter = .collection(refreshed)
+        }
+        return true
+    }
+
+    func addVideos(paths: Set<String>, toAlbum album: VideoCollection) async {
+        guard album.isAlbum, let albumId = album.id else { return }
+        let dbIds = paths.compactMap { videosByPath[$0]?.databaseId }
+        guard !dbIds.isEmpty else { return }
+        try? await collectionRepo.addVideos(dbIds, toAlbum: albumId)
+        await loadCollections()
+    }
+
+    func removeVideos(paths: Set<String>, fromAlbum album: VideoCollection) async {
+        guard album.isAlbum, let albumId = album.id else { return }
+        let dbIds = paths.compactMap { videosByPath[$0]?.databaseId }
+        guard !dbIds.isEmpty else { return }
+        try? await collectionRepo.removeVideos(dbIds, fromAlbum: albumId)
+        await loadCollections()
+    }
+
+    func renameCollection(_ collection: VideoCollection, to name: String) async {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var updated = collection
+        updated.name = trimmed
+        try? await collectionRepo.update(updated)
+        if case .collection(let selected) = sidebarFilter, selected.id == collection.id {
+            sidebarFilter = .collection(updated)
+        }
+        await loadCollections()
+    }
+
     /// Phase 4 bridge: persist the live advanced `FilterGroup` as a named Collection.
     /// Returns `false` if there is nothing to save or the name is blank.
     @discardableResult
@@ -4279,7 +4447,7 @@ final class LibraryViewModel {
         let inputs = Self.ruleGroupInputs(from: group)
         guard !inputs.isEmpty else { return false }
 
-        let collection = VideoCollection(name: trimmed, dateCreated: Date(), matchMode: group.mode)
+        let collection = VideoCollection(name: trimmed, dateCreated: Date(), matchMode: group.mode, kind: .smart)
         guard let saved = try? await collectionRepo.insert(collection), let id = saved.id else { return false }
         try? await collectionRepo.replaceRuleGroups(for: id, with: inputs)
         await loadCollections()
@@ -4287,9 +4455,9 @@ final class LibraryViewModel {
     }
 
     /// Phase 4 bridge: load a Collection's rule tree into the live Advanced Filter and open the
-    /// drawer (exclusive mode — clears Quick Filter).
+    /// drawer (exclusive mode — clears Quick Filter). Albums have no rules — no-op.
     func editCollectionAsAdvancedFilter(_ collection: VideoCollection) {
-        guard let id = collection.id else { return }
+        guard collection.isSmart, let id = collection.id else { return }
         let groups = cachedCollectionRuleGroups[id] ?? []
         let rules = cachedCollectionRules[id] ?? []
         let rulesByGroup = Dictionary(grouping: rules, by: \.groupId)

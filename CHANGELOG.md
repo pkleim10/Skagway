@@ -31,6 +31,10 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.40.0 (build 747) - 2026-07-10
+
+- **Added Albums** — manual membership collections listed with Smart Collections in Quick Filter (`rectangle.stack` vs `folder`). Context menu: **New Album from Selection…**, **Add to Album**, and **Remove from “Name”** when an album is active. Drawer: New Album / Rename / Delete. Membership is stored explicitly (not path-OR rules).
+
 ## 0.39.0 (build 745) - 2026-07-09
 
 - **Fixed truncated Quick Filter / Inspector tag chips not being clickable while their full-name tip was showing** — replaced the hover `.popover` (which stole the click) with a click-through overlay tip (popover-style bubble + tail) that still shows the full name when truncated.

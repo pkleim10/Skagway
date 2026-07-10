@@ -90,6 +90,55 @@ struct CollectionRepository {
             }
         }
     }
+
+    // MARK: - Album membership (manual collections)
+
+    /// All album memberships: collectionId → set of video database ids.
+    func fetchAllAlbumMemberships() async throws -> [Int64: Set<Int64>] {
+        try await dbPool.read { db in
+            let rows = try CollectionVideo.fetchAll(db)
+            var map: [Int64: Set<Int64>] = [:]
+            for row in rows {
+                map[row.collectionId, default: []].insert(row.videoId)
+            }
+            return map
+        }
+    }
+
+    func addVideos(_ videoIds: [Int64], toAlbum collectionId: Int64) async throws {
+        guard !videoIds.isEmpty else { return }
+        let now = Date()
+        try await dbPool.write { db in
+            for videoId in videoIds {
+                var row = CollectionVideo(videoId: videoId, collectionId: collectionId, dateAdded: now)
+                try row.insert(db, onConflict: .ignore)
+            }
+        }
+    }
+
+    func removeVideos(_ videoIds: [Int64], fromAlbum collectionId: Int64) async throws {
+        guard !videoIds.isEmpty else { return }
+        try await dbPool.write { db in
+            try CollectionVideo
+                .filter(Column("collectionId") == collectionId)
+                .filter(videoIds.contains(Column("videoId")))
+                .deleteAll(db)
+        }
+    }
+
+    /// Replaces album membership with exactly `videoIds` (used when creating from selection).
+    func replaceAlbumMembership(for collectionId: Int64, videoIds: [Int64]) async throws {
+        let now = Date()
+        try await dbPool.write { db in
+            try CollectionVideo
+                .filter(Column("collectionId") == collectionId)
+                .deleteAll(db)
+            for videoId in videoIds {
+                var row = CollectionVideo(videoId: videoId, collectionId: collectionId, dateAdded: now)
+                try row.insert(db)
+            }
+        }
+    }
 }
 
 // MARK: - Rule Matching Engine

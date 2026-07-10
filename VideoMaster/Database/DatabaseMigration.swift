@@ -189,6 +189,26 @@ enum DatabaseMigration {
             }
         }
 
+        migrator.registerMigration("v11_albums") { db in
+            // Albums = manual membership collections. Existing rows default to smart (rule-based).
+            try db.alter(table: "collection") { t in
+                t.add(column: "kind", .text).notNull().defaults(to: CollectionKind.smart.rawValue)
+            }
+            try db.create(table: "collection_video") { t in
+                t.column("videoId", .integer).notNull()
+                    .references("video", onDelete: .cascade)
+                t.column("collectionId", .integer).notNull()
+                    .references("collection", onDelete: .cascade)
+                t.column("dateAdded", .datetime).notNull()
+                t.primaryKey(["videoId", "collectionId"])
+            }
+            try db.create(
+                index: "idx_collection_video_collectionId",
+                on: "collection_video",
+                columns: ["collectionId"]
+            )
+        }
+
         try migrator.migrate(pool)
     }
 }

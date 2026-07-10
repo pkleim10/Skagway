@@ -428,14 +428,23 @@ struct CuratedWallFiltersDrawer: View {
                     }
                 }
 
-                // Add a new (smart) collection.
-                Button { showNewCollectionSheet = true } label: {
-                    Label("New Collection", systemImage: "plus")
-                        .font(.caption)
-                        .contentShape(Rectangle())
+                HStack(spacing: 12) {
+                    Button { showNewCollectionSheet = true } label: {
+                        Label("New Collection", systemImage: "plus")
+                            .font(.caption)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.appAccent)
+
+                    Button { viewModel.presentNewEmptyAlbum() } label: {
+                        Label("New Album", systemImage: "rectangle.stack.badge.plus")
+                            .font(.caption)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.appAccent)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.appAccent)
                 .padding(.top, 4)
             }
         }
@@ -450,9 +459,14 @@ struct CuratedWallFiltersDrawer: View {
         Button {
             viewModel.sidebarFilter = .collection(collection)
         } label: {
-            HStack {
+            HStack(spacing: 6) {
+                Image(systemName: collection.isAlbum ? "rectangle.stack" : "folder")
+                    .font(.caption)
+                    .foregroundStyle(isSelected ? Color.appAccent : Color.appTextTertiary)
+                    .frame(width: 14)
                 Text(collection.name)
                     .foregroundStyle(isSelected ? Color.appTextPrimary : Color.appTextSecondary)
+                    .lineLimit(1)
                 Spacer()
                 if let id = collection.id, let c = viewModel.collectionCounts[id] {
                     Text("\(c)").font(.caption.monospacedDigit()).foregroundStyle(Color.appTextTertiary)
@@ -468,12 +482,18 @@ struct CuratedWallFiltersDrawer: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button("Edit as Advanced Filter\u{2026}") {
-                viewModel.editCollectionAsAdvancedFilter(collection)
+            if collection.isSmart {
+                Button("Edit as Advanced Filter\u{2026}") {
+                    viewModel.editCollectionAsAdvancedFilter(collection)
+                }
+                Button("Edit Collection\u{2026}") { editingCollection = collection }
+            } else {
+                Button("Rename Album\u{2026}") {
+                    viewModel.presentRenameAlbum(collection)
+                }
             }
-            Button("Edit Collection\u{2026}") { editingCollection = collection }
             Divider()
-            Button("Delete Collection", role: .destructive) {
+            Button(collection.isAlbum ? "Delete Album" : "Delete Collection", role: .destructive) {
                 Task { await viewModel.deleteCollection(collection) }
             }
         }

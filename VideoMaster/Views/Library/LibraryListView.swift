@@ -297,6 +297,24 @@ struct LibraryListView: View {
                     viewModel.presentExportMetadata(scope: .selection)
                 }
                 Divider()
+                Button("New Album from Selection\u{2026}") {
+                    viewModel.presentNewAlbumFromSelection(ids)
+                }
+                if !viewModel.albums.isEmpty {
+                    Menu("Add to Album") {
+                        ForEach(viewModel.albums, id: \.listId) { album in
+                            Button(album.name) {
+                                Task { await viewModel.addVideos(paths: ids, toAlbum: album) }
+                            }
+                        }
+                    }
+                }
+                if case .collection(let active) = viewModel.sidebarFilter, active.isAlbum {
+                    Button("Remove from \"\(active.name)\"") {
+                        Task { await viewModel.removeVideos(paths: ids, fromAlbum: active) }
+                    }
+                }
+                Divider()
                 Button("Remove from Library") {
                     Task { await viewModel.removeVideosFromLibrary(ids) }
                 }

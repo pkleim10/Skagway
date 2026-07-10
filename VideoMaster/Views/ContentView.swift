@@ -773,6 +773,23 @@ private struct LibraryContentView: View {
         .sheet(item: $vm.metadataApplySummary) { summary in
             ApplyMetadataSummarySheet(viewModel: vm, summary: summary)
         }
+        .alert(
+            vm.albumNamePrompt?.title ?? "Album",
+            isPresented: Binding(
+                get: { vm.albumNamePrompt != nil },
+                set: { if !$0 { vm.albumNamePrompt = nil; vm.albumNameDraft = "" } }
+            )
+        ) {
+            TextField("Album name", text: $vm.albumNameDraft)
+            Button("Cancel", role: .cancel) {
+                vm.albumNamePrompt = nil
+                vm.albumNameDraft = ""
+            }
+            Button("Save") { vm.confirmAlbumNamePrompt() }
+                .disabled(vm.albumNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        } message: {
+            Text(vm.albumNamePrompt?.message ?? "")
+        }
         .onChange(of: vm.focusSearchFieldToken) { _, _ in
             isSearchFocused = true
         }

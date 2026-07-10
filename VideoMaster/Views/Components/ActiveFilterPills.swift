@@ -145,7 +145,7 @@ struct ActiveFilterPills: View {
         case .missing: return "questionmark.circle"
         case .recentlyConverted: return "arrow.triangle.2.circlepath"
         case .recentlyApplied: return "square.and.arrow.down.on.square"
-        case .collection: return "folder"
+        case .collection(let c): return c.isAlbum ? "rectangle.stack" : "folder"
         }
     }
 }

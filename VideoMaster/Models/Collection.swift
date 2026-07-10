@@ -6,23 +6,39 @@ enum MatchMode: String, Codable, CaseIterable {
     case any
 }
 
+/// Smart = rule-based (classic Collection). Album = explicit video membership.
+enum CollectionKind: String, Codable, CaseIterable, Hashable {
+    case smart
+    case album
+}
+
 struct VideoCollection: Codable, Identifiable, Equatable, Hashable {
     var id: Int64?
     var name: String
     var dateCreated: Date
     var matchMode: MatchMode
+    var kind: CollectionKind
 
-    init(id: Int64? = nil, name: String, dateCreated: Date, matchMode: MatchMode = .all) {
+    init(
+        id: Int64? = nil,
+        name: String,
+        dateCreated: Date,
+        matchMode: MatchMode = .all,
+        kind: CollectionKind = .smart
+    ) {
         self.id = id
         self.name = name
         self.dateCreated = dateCreated
         self.matchMode = matchMode
+        self.kind = kind
     }
 
     var listId: String { "collection-\(id ?? 0)" }
+    var isAlbum: Bool { kind == .album }
+    var isSmart: Bool { kind == .smart }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, dateCreated, matchMode
+        case id, name, dateCreated, matchMode, kind
     }
 }
 
@@ -32,6 +48,17 @@ extension VideoCollection: FetchableRecord, MutablePersistableRecord {
     mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID
     }
+}
+
+/// Join row for Album membership (manual collections).
+struct CollectionVideo: Codable, Equatable {
+    var videoId: Int64
+    var collectionId: Int64
+    var dateAdded: Date
+}
+
+extension CollectionVideo: FetchableRecord, PersistableRecord {
+    static let databaseTableName = "collection_video"
 }
 
 // MARK: - Collection Rule Group

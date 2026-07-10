@@ -194,6 +194,30 @@ struct CuratedWallGrid: View {
                                 viewModel.presentExportMetadata(scope: .selection)
                             }
                             Divider()
+                            Button("New Album from Selection\u{2026}") {
+                                let ids = viewModel.selectedVideoIds.contains(video.id)
+                                    ? viewModel.selectedVideoIds : [video.id]
+                                viewModel.presentNewAlbumFromSelection(ids)
+                            }
+                            if !viewModel.albums.isEmpty {
+                                Menu("Add to Album") {
+                                    ForEach(viewModel.albums, id: \.listId) { album in
+                                        Button(album.name) {
+                                            let ids = viewModel.selectedVideoIds.contains(video.id)
+                                                ? viewModel.selectedVideoIds : [video.id]
+                                            Task { await viewModel.addVideos(paths: ids, toAlbum: album) }
+                                        }
+                                    }
+                                }
+                            }
+                            if case .collection(let active) = viewModel.sidebarFilter, active.isAlbum {
+                                Button("Remove from \"\(active.name)\"") {
+                                    let ids = viewModel.selectedVideoIds.contains(video.id)
+                                        ? viewModel.selectedVideoIds : [video.id]
+                                    Task { await viewModel.removeVideos(paths: ids, fromAlbum: active) }
+                                }
+                            }
+                            Divider()
                             Button("Remove from Library") {
                                 let ids = viewModel.selectedVideoIds.contains(video.id)
                                     ? viewModel.selectedVideoIds : [video.id]
