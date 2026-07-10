@@ -220,7 +220,7 @@ struct VideoMasterApp: App {
                 Button("Play in External Player") {
                     guard let vm = appState.libraryViewModel,
                           let videoId = vm.selectedVideoIds.first,
-                          let video = vm.filteredVideos.first(where: { $0.id == videoId })
+                          let video = vm.filteredVideo(forPath: videoId)
                     else { return }
                     NSWorkspace.shared.open(video.url)
                     Task { await vm.recordPlay(for: video) }
@@ -231,7 +231,7 @@ struct VideoMasterApp: App {
                 Button("Show in Finder") {
                     guard let vm = appState.libraryViewModel,
                           let videoId = vm.selectedVideoIds.first,
-                          let video = vm.filteredVideos.first(where: { $0.id == videoId })
+                          let video = vm.filteredVideo(forPath: videoId)
                     else { return }
                     NSWorkspace.shared.selectFile(video.filePath, inFileViewerRootedAtPath: "")
                 }
@@ -240,7 +240,7 @@ struct VideoMasterApp: App {
 
                 if let vm = appState.libraryViewModel,
                    let videoId = vm.selectedVideoIds.first,
-                   let video = vm.filteredVideos.first(where: { $0.id == videoId })
+                   let video = vm.filteredVideo(forPath: videoId)
                 {
                     Menu("Open With") {
                         let appURLs = NSWorkspace.shared.urlsForApplications(toOpen: video.url)

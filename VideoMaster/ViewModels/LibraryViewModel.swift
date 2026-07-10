@@ -8,6 +8,11 @@ import SwiftUI
 final class LibraryViewModel {
     var videos: [Video] = [] {
         didSet {
+            // Surgical field updates (e.g. hasSubtitles on play) assign `videos` but must not
+            // cascade into counts / filter recompute / custom-metadata refresh — those are O(n).
+            // Also skip the full path-index rebuild; callers update the one touched entry.
+            if suppressVideosDidSet { return }
+            rebuildVideosPathIndex()
             updateLibraryCounts()
             if !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
                 refreshSearchIfActive()
@@ -17,6 +22,66 @@ final class LibraryViewModel {
             scheduleCollectionCountRefresh()
             scheduleListCustomMetadataRefresh()
         }
+    }
+
+    /// Path → video for O(1) lookup. Rebuilt whenever `videos` is assigned. `@ObservationIgnored`
+    /// so reading it during selection/play does not register extra observation edges.
+    @ObservationIgnored private(set) var videosByPath: [String: Video] = [:]
+    /// Path → index into `videos` for O(1) in-place mutations.
+    @ObservationIgnored private var videoIndexByPath: [String: Int] = [:]
+    /// Path → index into `filteredVideos` for O(1) filtered lookup.
+    @ObservationIgnored private var filteredIndexByPath: [String: Int] = [:]
+    /// When true, `videos` didSet skips the O(n) cascade and path-index rebuild.
+    @ObservationIgnored private var suppressVideosDidSet = false
+    /// Discard the next N GRDB observation deliveries (play-time subtitle writes would otherwise
+    /// reload the entire library and re-trigger the O(n) cascade).
+    @ObservationIgnored private var discardObservationDeliveries = 0
+
+    /// O(1) library lookup by file path (`Video.id`).
+    func video(forPath path: String) -> Video? {
+        videosByPath[path]
+    }
+
+    /// O(1) filtered-set lookup by file path.
+    func filteredVideo(forPath path: String) -> Video? {
+        guard let idx = filteredIndexByPath[path] else { return nil }
+        return filteredVideos[idx]
+    }
+
+    /// Resolve a set of paths to videos in filtered order. O(selection log selection), not O(library).
+    func filteredVideos(forPaths paths: Set<String>) -> [Video] {
+        guard !paths.isEmpty else { return [] }
+        if paths.count == 1, let path = paths.first, let idx = filteredIndexByPath[path] {
+            return [filteredVideos[idx]]
+        }
+        return paths.compactMap { path -> (Int, Video)? in
+            guard let idx = filteredIndexByPath[path] else { return nil }
+            return (idx, filteredVideos[idx])
+        }
+        .sorted { $0.0 < $1.0 }
+        .map(\.1)
+    }
+
+    private func rebuildVideosPathIndex() {
+        var byPath: [String: Video] = [:]
+        var indexByPath: [String: Int] = [:]
+        byPath.reserveCapacity(videos.count)
+        indexByPath.reserveCapacity(videos.count)
+        for (idx, video) in videos.enumerated() {
+            byPath[video.filePath] = video
+            indexByPath[video.filePath] = idx
+        }
+        videosByPath = byPath
+        videoIndexByPath = indexByPath
+    }
+
+    private func rebuildFilteredPathIndex() {
+        var indexByPath: [String: Int] = [:]
+        indexByPath.reserveCapacity(filteredVideos.count)
+        for (idx, video) in filteredVideos.enumerated() {
+            indexByPath[video.filePath] = idx
+        }
+        filteredIndexByPath = indexByPath
     }
     var tags: [Tag] = []
     var collections: [VideoCollection] = []
@@ -503,8 +568,7 @@ final class LibraryViewModel {
         case .filtered:
             return filteredVideos
         case .selection:
-            let ids = selectedVideoIds
-            return filteredVideos.filter { ids.contains($0.id) }
+            return filteredVideos(forPaths: selectedVideoIds)
         }
     }
 
@@ -1741,6 +1805,10 @@ final class LibraryViewModel {
             do {
                 for try await videos in observation.values(in: dbPool) {
                     await MainActor.run {
+                        if self.discardObservationDeliveries > 0 {
+                            self.discardObservationDeliveries -= 1
+                            return
+                        }
                         self.videos = videos
                         // Kick off the fingerprint backfill from *here* — the first delivery is when
                         // `videos` is actually populated. Calling it from `startObserving` ran it
@@ -2328,6 +2396,7 @@ final class LibraryViewModel {
         let newSet = Set(newValue.map(\.id))
         let structureChanged = oldSet != newSet
         filteredVideos = newValue
+        rebuildFilteredPathIndex()
         if structureChanged {
             filteredVideosVersion &+= 1
             if let id = pendingScrollToAfterRename, newValue.contains(where: { $0.id == id }) {
@@ -2920,8 +2989,6 @@ final class LibraryViewModel {
         }
     }
 
-    /// Sets the `hasSubtitles` flag in-memory and persists to the DB. No-op if the flag already matches,
-    /// so repeated calls (e.g. from the detail pane on every selection) are free.
     /// Re-extracts metadata for a video that appears corrupt. Called when the user views a
     /// corrupt video in the detail pane — covers files repaired externally (e.g. via ffmpeg)
     /// that now have valid metadata but whose DB record still shows nil fields.
@@ -2929,7 +2996,7 @@ final class LibraryViewModel {
         guard isCorrupt(video) else { return }
         let metadata = await MetadataExtractor().extract(from: video.url)
         guard metadata.duration != nil || metadata.width != nil else { return }
-        guard let idx = videos.firstIndex(where: { $0.filePath == video.filePath }) else { return }
+        guard let idx = videoIndexByPath[video.filePath] else { return }
         var updated = videos
         updated[idx].duration = metadata.duration
         updated[idx].width = metadata.width
@@ -2951,7 +3018,7 @@ final class LibraryViewModel {
     }
 
     func setThumbnailPath(videoPath: String, url: URL) async {
-        guard let idx = videos.firstIndex(where: { $0.filePath == videoPath }) else { return }
+        guard let idx = videoIndexByPath[videoPath] else { return }
         var updated = videos
         updated[idx].thumbnailPath = url.path
         let dbId = updated[idx].databaseId
@@ -2967,7 +3034,7 @@ final class LibraryViewModel {
     /// deterministic hash of the file path and doesn't change between regenerations — so a bare write
     /// wouldn't produce a new value for anything keyed on it to react to.
     func setRegeneratedThumbnailPath(videoPath: String, url: URL) async {
-        guard let idx = videos.firstIndex(where: { $0.filePath == videoPath }) else { return }
+        guard let idx = videoIndexByPath[videoPath] else { return }
         var updated = videos
         let versioned = "\(url.path)#\(Date().timeIntervalSince1970)"
         updated[idx].thumbnailPath = versioned
@@ -2978,15 +3045,27 @@ final class LibraryViewModel {
         }
     }
 
+    /// Sets the `hasSubtitles` flag in-memory and persists to the DB. No-op if the flag already matches,
+    /// so repeated calls (e.g. from play start when the flag is already correct) are free.
+    /// Surgical: updates one row in `videos` / path index without the O(n) didSet cascade, does **not**
+    /// reassign `filteredVideos` (that would invalidate the whole grid ForEach), and discards the
+    /// GRDB observation echo from the DB write so play doesn't reload 12k rows.
     func setHasSubtitles(videoPath: String, hasSubtitles: Bool) async {
-        guard let idx = videos.firstIndex(where: { $0.filePath == videoPath }) else { return }
+        guard let idx = videoIndexByPath[videoPath] else { return }
         guard videos[idx].hasSubtitles != hasSubtitles else { return }
-        // Mutate a local copy first so the `didSet` observer on `videos` fires exactly once.
+
+        suppressVideosDidSet = true
         var updated = videos
         updated[idx].hasSubtitles = hasSubtitles
         let dbId = updated[idx].databaseId
         videos = updated
+        videosByPath[videoPath] = updated[idx]
+        // Intentionally do not assign `filteredVideos` — Observation would re-diff the full grid.
+        // Card badges refresh on the next natural filter recompute; play path doesn't need them live.
+        suppressVideosDidSet = false
+
         if let dbId {
+            discardObservationDeliveries += 1
             try? await videoRepo.updateHasSubtitles(videoId: dbId, hasSubtitles: hasSubtitles)
         }
     }
@@ -4099,15 +4178,14 @@ final class LibraryViewModel {
         await refreshTagsByVideoId()
     }
 
-    /// Tags common to every video in the selection. Single pass over `videos` with O(1) set
-    /// lookups — the old per-id `videos.first(where:)` was O(selection × library) and, called
-    /// per-tag from the Inspector's render path, hung the app for over a minute on a
-    /// 1500-video select-all.
+    /// Tags common to every video in the selection. Iterates the selection only (O(selection)),
+    /// resolving each path via `videosByPath` and intersecting `tagsByVideoId`. The old full-library
+    /// scan was O(library) on every Inspector render — multi-second stalls at ~12k videos.
     func tagsForVideos(_ videoIds: Set<String>) -> [Tag] {
         guard !videoIds.isEmpty else { return [] }
         var commonTagIds: Set<Int64>?
-        for video in videos where videoIds.contains(video.filePath) {
-            guard let dbId = video.databaseId else { continue }
+        for path in videoIds {
+            guard let video = videosByPath[path], let dbId = video.databaseId else { continue }
             let videoTagIds = Set((tagsByVideoId[dbId] ?? []).compactMap(\.id))
             if commonTagIds == nil {
                 commonTagIds = videoTagIds

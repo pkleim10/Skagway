@@ -57,7 +57,7 @@ private struct LibraryContentView: View {
     /// The video shown in the detail pane / overlay (primary selection). Shared by `detailContent` and the overlay.
     private var selectedVideo: Video? {
         guard let id = vm.lastSelectedVideoId ?? vm.selectedVideoIds.first else { return nil }
-        return vm.filteredVideos.first(where: { $0.id == id })
+        return vm.filteredVideo(forPath: id)
     }
 
     private var navigationTitle: String {
@@ -807,7 +807,7 @@ private struct LibraryContentView: View {
                lvm.selectedVideoIds.count == 1,
                let videoId = lvm.selectedVideoIds.first,
                !lvm.activeMoveVideoIds.contains(videoId),
-               let video = lvm.filteredVideos.first(where: { $0.id == videoId })
+               let video = lvm.filteredVideo(forPath: videoId)
             {
                 DispatchQueue.main.async {
                     lvm.renameText = video.fileName

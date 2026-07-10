@@ -47,17 +47,31 @@ final class InlinePlaybackController {
         currentVideo = video
         playerError = nil
         statusTask?.cancel()
-        discoverSidecarSubtitles(for: video)
+        // Clear previous track immediately; discovery + SRT parse run off the main thread
+        // inside statusTask so SPACE never blocks on directory scans / large sidecar files
+        // before the floating panel can appear.
+        subtitleTrack.unload()
+
+        let videoURL = video.url
+        let videoPath = video.filePath
 
         statusTask = Task { @MainActor in
+            // Sidecar discovery (directory listing + SRT parse) off the main actor, in parallel
+            // with the isPlayable preflight — both can take seconds on cold/NAS files.
+            async let sidecarResult: (url: URL, cues: [SubtitleCue])? = Task.detached(priority: .userInitiated) {
+                guard let srt = SubtitleTrack.findSidecarSRT(for: videoURL) else { return nil }
+                let cues = SRTParser.parseFile(at: srt) ?? []
+                return (srt, cues)
+            }.value
+
             // Pre-flight: ask AVFoundation whether it can play this file before creating the player,
             // so unsupported formats are rejected immediately rather than showing a blank player.
-            let asset = AVURLAsset(url: video.url)
+            let asset = AVURLAsset(url: videoURL)
             let playable = (try? await asset.load(.isPlayable)) ?? false
             guard !Task.isCancelled else { return }
             guard playable else {
-                if FileManager.default.fileExists(atPath: video.filePath) {
-                    let ext = video.url.pathExtension.uppercased()
+                if FileManager.default.fileExists(atPath: videoPath) {
+                    let ext = videoURL.pathExtension.uppercased()
                     playerError = ext.isEmpty
                         ? "This file cannot be played by the built-in player."
                         : "\(ext) files cannot be played by the built-in player."
@@ -68,13 +82,20 @@ final class InlinePlaybackController {
                 return
             }
 
-            let newPlayer = AVPlayer(url: video.url)
+            let newPlayer = AVPlayer(url: videoURL)
             player = newPlayer
+
+            if let sidecar = await sidecarResult, !Task.isCancelled {
+                _ = subtitleTrack.applyLoadedCues(sidecar.cues, sourceURL: sidecar.url)
+                Task { await viewModel.setHasSubtitles(videoPath: videoPath, hasSubtitles: true) }
+            } else if !Task.isCancelled {
+                Task { await viewModel.setHasSubtitles(videoPath: videoPath, hasSubtitles: false) }
+            }
             subtitleTrack.attach(to: newPlayer)
 
             let resumeSeconds: Double? = {
                 guard seconds == 0, !ignoreResume else { return nil }
-                guard let s = PlaybackPositionStore.loadSeconds(filePath: video.filePath) else { return nil }
+                guard let s = PlaybackPositionStore.loadSeconds(filePath: videoPath) else { return nil }
                 guard s >= 1.0 else { return nil }
                 if let duration = video.duration, duration > 0, s >= duration - 5.0 { return nil }
                 return s
@@ -234,17 +255,6 @@ final class InlinePlaybackController {
     }
 
     // MARK: - Internals
-
-    private func discoverSidecarSubtitles(for video: Video) {
-        let videoPath = video.filePath
-        if let srt = SubtitleTrack.findSidecarSRT(for: video.url) {
-            _ = subtitleTrack.load(from: srt)
-            Task { await viewModel.setHasSubtitles(videoPath: videoPath, hasSubtitles: true) }
-        } else {
-            subtitleTrack.unload()
-            Task { await viewModel.setHasSubtitles(videoPath: videoPath, hasSubtitles: false) }
-        }
-    }
 
     private func cancelResumeBannerFadeTask() {
         resumeBannerFadeTask?.cancel()

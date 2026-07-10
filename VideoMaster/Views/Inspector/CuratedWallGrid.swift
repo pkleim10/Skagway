@@ -30,6 +30,12 @@ private final class CardSelectionStore {
     }
 }
 
+/// Process-wide Launch Services cache for "Open With" menus. Filled synchronously on miss so
+/// eager `.contextMenu` builders don't re-query LS for every visible card of a new extension.
+private enum OpenWithAppCache {
+    static var byExtension: [String: [URL]] = [:]
+}
+
 // MARK: - Grid
 
 /// The elegant "Wall" browsing surface for the Curated Wall experience.
@@ -45,10 +51,6 @@ struct CuratedWallGrid: View {
     @FocusState private var renameFocus: Bool
     @State private var selectionStore = CardSelectionStore()
     @State private var filmstripVideo: Video?
-
-    // "Open With" available-apps lookup, cached per file extension (which apps can open a file
-    // only depends on its type, not the specific file) — see `installedAppURLs(for:)` below.
-    @State private var appURLsByExtension: [String: [URL]] = [:]
 
     // Target from the full-window mock + checklist decisions: 5 columns, generous breathing.
     // `columns` is the single source of truth for the grid width — arrow-key row navigation in
@@ -348,17 +350,15 @@ struct CuratedWallGrid: View {
         return viewModel.filteredVideos.filter { ids.contains($0.id) }.map(\.url)
     }
 
-    /// Which apps can open this video's file type — a real Launch Services query, so it's cached
-    /// per extension rather than re-queried per card on every grid render (the `.contextMenu`
-    /// builder that calls this runs eagerly, once per instantiated card, on every update). Reads
-    /// the cache synchronously; a miss still returns the right answer immediately and schedules
-    /// the cache fill for the *next* run loop turn, since mutating `@State` synchronously inside
-    /// a view-update pass is not safe.
+    /// Which apps can open this video's file type — Launch Services, cached per extension in
+    /// `OpenWithAppCache` (process-wide). Eager `.contextMenu` builders call this per visible card
+    /// on every grid update; a miss fills the cache synchronously so the next card of the same
+    /// type is free (async `@State` fill left every new extension re-querying LS for all cells).
     private func installedAppURLs(for video: Video) -> [URL] {
         let ext = video.url.pathExtension.lowercased()
-        if let cached = appURLsByExtension[ext] { return cached }
+        if let cached = OpenWithAppCache.byExtension[ext] { return cached }
         let urls = NSWorkspace.shared.urlsForApplications(toOpen: video.url)
-        DispatchQueue.main.async { appURLsByExtension[ext] = urls }
+        OpenWithAppCache.byExtension[ext] = urls
         return urls
     }
 }

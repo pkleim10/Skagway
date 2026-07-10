@@ -407,7 +407,7 @@ struct CuratedWallInspector: View {
 
     private func factsRow(for v: Video) -> some View {
         let videos: [Video] = selectedIds.count > 1
-            ? viewModel.filteredVideos.filter { selectedIds.contains($0.id) }
+            ? viewModel.filteredVideos(forPaths: selectedIds)
             : [v]
         let multi = videos.count > 1
 
@@ -477,7 +477,10 @@ struct CuratedWallInspector: View {
     }
 
     private func currentRating(for ids: Set<String>) -> Int {
-        let vals = viewModel.filteredVideos.filter { ids.contains($0.id) }.map(\.rating)
+        if ids.count == 1 {
+            return video?.rating ?? 0
+        }
+        let vals = viewModel.filteredVideos(forPaths: ids).map(\.rating)
         if let first = vals.first, vals.allSatisfy({ $0 == first }) { return first }
         return video?.rating ?? 0
     }
@@ -515,7 +518,7 @@ struct CuratedWallInspector: View {
                 customFieldValues[field.id] = viewModel.listCustomMetadataByVideoId[dbId]?[field.id] ?? ""
             }
         } else if selectedIds.count > 1 {
-            let sel = viewModel.filteredVideos.filter { selectedIds.contains($0.id) }
+            let sel = viewModel.filteredVideos(forPaths: selectedIds)
             for field in defs {
                 let vals = sel.map { v -> String? in
                     guard let id = v.databaseId else { return nil }

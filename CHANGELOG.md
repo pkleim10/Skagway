@@ -31,6 +31,10 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.38.0 (build 740) - 2026-07-09
+
+- **Fixed intermittent 6–8s freezes before the play panel appears.** Sidecar subtitle discovery and SRT parsing no longer run on the main thread during SPACE/`start()` (they run in parallel with `isPlayable`). Play-time `hasSubtitles` updates no longer reassign `filteredVideos` or reload the library via GRDB observation. Grid “Open With” Launch Services results cache synchronously per extension so eager context menus don’t re-query on every new type.
+- **Fixed multi-second stalls when selecting or playing in large libraries (~12k).** Selection/Inspector no longer scan the full library for tags or the selected video (path index + O(selection) tag intersection). Play-time subtitle flag updates no longer cascade into a full filter/counts/custom-metadata refresh. Grid is first in the header; **⌘1** Grid / **⌘2** List.
 - **Swapped List/Grid order and shortcuts** — Grid is first in the header segmented control and View menu; **⌘1** is Grid, **⌘2** is List (was the reverse).
 
 ## 0.37.0 (build 736) - 2026-07-09

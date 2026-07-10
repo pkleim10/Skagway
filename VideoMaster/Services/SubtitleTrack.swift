@@ -39,8 +39,14 @@ final class SubtitleTrack {
     @discardableResult
     func load(from url: URL) -> Int {
         let parsed = SRTParser.parseFile(at: url) ?? []
+        return applyLoadedCues(parsed, sourceURL: url)
+    }
+
+    /// Applies already-parsed cues (e.g. from a background parse). Clears any previous cues.
+    @discardableResult
+    func applyLoadedCues(_ parsed: [SubtitleCue], sourceURL: URL?) -> Int {
         cues = parsed
-        sourceURL = url
+        self.sourceURL = sourceURL
         lastIndex = -1
         updateCurrentCue()
         return parsed.count
