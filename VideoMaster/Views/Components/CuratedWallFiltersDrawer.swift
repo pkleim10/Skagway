@@ -389,6 +389,9 @@ struct CuratedWallFiltersDrawer: View {
                 if viewModel.showRecentlyConverted {
                     libraryRow("Recently Converted", icon: "arrow.triangle.2.circlepath", count: viewModel.libraryCounts.recentlyConverted, filter: .recentlyConverted)
                 }
+                if viewModel.libraryCounts.recentlyApplied > 0 {
+                    libraryRow("Last Metadata Import", icon: "square.and.arrow.down.on.square", count: viewModel.libraryCounts.recentlyApplied, filter: .recentlyApplied)
+                }
             }
         }
     }

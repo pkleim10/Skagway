@@ -203,11 +203,11 @@ struct VideoMasterApp: App {
                 .keyboardShortcut("o", modifiers: [.command, .shift])
                 .disabled(!appState.hasLibrary)
 
-                Button("Import New") {
+                Button("Scan for New Videos") {
                     Task { await appState.libraryViewModel?.importNew() }
                 }
-                .keyboardShortcut("i", modifiers: .command)
                 .disabled(!appState.hasLibrary || (appState.libraryViewModel?.isScanning ?? false))
+                .help("Scan your library folders for newly added video files")
 
                 Button("Scan for Subtitles") {
                     Task { await appState.libraryViewModel?.scanForSubtitles() }
@@ -301,10 +301,23 @@ struct VideoMasterApp: App {
                 Button("Export Metadata\u{2026}") {
                     appState.libraryViewModel?.presentExportMetadata(scope: .filtered)
                 }
-                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .keyboardShortcut("e", modifiers: [.command, .option])
                 .disabled(!(appState.hasLibrary)
                     || (appState.libraryViewModel?.filteredVideos.isEmpty ?? true))
                 .help("Export metadata for the current filtered video set")
+                Button("Import Metadata\u{2026}") {
+                    ApplyMetadataFilePicker.present(
+                        onPicked: { url, data in
+                            appState.libraryViewModel?.presentApplyMetadata(from: url, data: data)
+                        },
+                        onReadError: { message in
+                            appState.libraryViewModel?.presentApplyMetadataReadError(message)
+                        }
+                    )
+                }
+                .keyboardShortcut("i", modifiers: [.command, .option])
+                .disabled(!appState.hasLibrary)
+                .help("Import metadata from a CSV or JSON Lines file (updates matched videos)")
                 Divider()
                 Button("Close Library\u{2026}") {
                     DatabaseExportImport.closeLibrary()

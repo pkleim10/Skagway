@@ -565,6 +565,209 @@ final class LibraryViewModel {
         UserDefaults.standard.set(Array(sanitized), forKey: Self.metadataExportIncludedColumnsKey)
     }
 
+    // MARK: - Import Metadata
+
+    struct MetadataApplySummary: Identifiable, Equatable {
+        let id = UUID()
+        let sourceURL: URL
+        let format: MetadataApplyFormat
+        let matchedCount: Int
+        let updatedVideoCount: Int
+        let unmatchedCount: Int
+        let skippedUnknownColumns: [String]
+        let ignoredReadOnlyColumns: [String]
+        let rowErrors: [String]
+    }
+
+    var metadataApplySummary: MetadataApplySummary? = nil
+    var metadataApplyProgress: (current: Int, total: Int)? = nil
+    var metadataApplyErrorMessage: String? = nil
+    var metadataApplyUnmatchedRows: [MetadataApplyUnmatchedRow]? = nil
+    /// Bytes of the file chosen for Apply (kept so Pass 2 does not re-open the URL).
+    private var metadataApplySourceData: Data? = nil
+    private var metadataApplyTask: Task<Void, Never>?
+
+    func presentApplyMetadata(from url: URL, data: Data) {
+        metadataApplyErrorMessage = nil
+        metadataApplyUnmatchedRows = nil
+        metadataApplyProgress = nil
+        metadataApplySourceData = data
+        runMetadataApply(from: url, data: data)
+    }
+
+    func presentApplyMetadataReadError(_ message: String) {
+        metadataApplyErrorMessage = message
+        metadataApplySummary = MetadataApplySummary(
+            sourceURL: URL(fileURLWithPath: "/"),
+            format: .jsonl,
+            matchedCount: 0,
+            updatedVideoCount: 0,
+            unmatchedCount: 0,
+            skippedUnknownColumns: [],
+            ignoredReadOnlyColumns: [],
+            rowErrors: [message]
+        )
+    }
+
+    func dismissMetadataApplySummary() {
+        metadataApplySummary = nil
+        metadataApplyUnmatchedRows = nil
+        metadataApplyErrorMessage = nil
+        metadataApplyProgress = nil
+        metadataApplySourceData = nil
+    }
+
+    func runMetadataApply(from url: URL, data: Data) {
+        metadataApplyTask?.cancel()
+        let videosSnapshot = videos
+        let tagsSnapshot = tagsByVideoId
+        let customSnapshot = listCustomMetadataByVideoId
+        let customDefs = customMetadataFieldDefinitions
+        let videoRepo = videoRepo
+        let tagRepo = tagRepo
+
+        metadataApplyProgress = (0, 1)
+        metadataApplyTask = Task { [weak self] in
+            do {
+                let format = try MetadataApplyParser.detectFormat(url: url, data: data)
+                let (rows, skipped, resolved) = try MetadataApplyParser.parse(
+                    data: data,
+                    format: format,
+                    customFields: customDefs
+                )
+                let index = MetadataApplier.buildIndex(
+                    videos: videosSnapshot,
+                    tagsByVideoId: tagsSnapshot,
+                    customByVideoId: customSnapshot,
+                    customFieldDefinitions: customDefs
+                )
+                let pass1 = try MetadataApplier.pass1(
+                    rows: rows,
+                    resolvedColumnIDs: resolved,
+                    skippedUnknownColumns: skipped,
+                    index: index
+                )
+
+                // Persist updates on main actor via existing repo APIs.
+                await MainActor.run { self?.metadataApplyProgress = (1, max(pass1.matchedCount, 1)) }
+
+                for (dbId, rating) in pass1.ratingUpdates {
+                    try? await videoRepo.updateRating(videoId: dbId, rating: rating)
+                }
+                for (fieldId, byVideo) in pass1.customUpdates {
+                    for (dbId, value) in byVideo {
+                        try? await videoRepo.upsertCustomMetadata(videoId: dbId, fieldId: fieldId, value: value)
+                    }
+                }
+                for (dbId, tagNames) in pass1.tagMerges {
+                    for name in tagNames {
+                        if let tag = try? await tagRepo.findOrCreate(name: name), let tagId = tag.id {
+                            try? await tagRepo.addTag(tagId, to: dbId)
+                        }
+                    }
+                }
+
+                await MainActor.run {
+                    guard let self else { return }
+                    // Reflect rating updates in memory
+                    if !pass1.ratingUpdates.isEmpty {
+                        var updated = self.videos
+                        for i in updated.indices {
+                            if let id = updated[i].databaseId, let r = pass1.ratingUpdates[id] {
+                                updated[i].rating = r
+                            }
+                        }
+                        self.videos = updated
+                    }
+                    for (fieldId, byVideo) in pass1.customUpdates {
+                        for (dbId, value) in byVideo {
+                            self.mergeListCustomMetadataCache(videoId: dbId, fieldId: fieldId, value: value)
+                        }
+                    }
+                    if !pass1.tagMerges.isEmpty {
+                        Task { await self.refreshTagsByVideoId() }
+                    }
+
+                    self.recentlyAppliedPaths = Set(pass1.matchedPaths)
+                    self.sidebarFilter = .recentlyApplied
+                    self.updateLibraryCounts()
+                    self.recomputeFilteredVideos()
+
+                    self.metadataApplyProgress = nil
+                    self.metadataApplySummary = MetadataApplySummary(
+                        sourceURL: url,
+                        format: format,
+                        matchedCount: pass1.matchedCount,
+                        updatedVideoCount: pass1.updatedVideoCount,
+                        unmatchedCount: pass1.unmatchedCount,
+                        skippedUnknownColumns: pass1.skippedUnknownColumns,
+                        ignoredReadOnlyColumns: pass1.ignoredReadOnlyColumns,
+                        rowErrors: pass1.rowErrors
+                    )
+                    let text = "Imported metadata: \(pass1.matchedCount) matched, \(pass1.updatedVideoCount) updated"
+                    self.scanProgress = text
+                    Task { [weak self] in
+                        try? await Task.sleep(for: .seconds(4))
+                        if self?.scanProgress == text { self?.scanProgress = "" }
+                    }
+                }
+            } catch {
+                let ext = url.pathExtension.lowercased()
+                let formatHint: MetadataApplyFormat =
+                    (ext == "jsonl" || ext == "json") ? .jsonl : .csv
+                await MainActor.run {
+                    self?.metadataApplyProgress = nil
+                    self?.metadataApplyErrorMessage = error.localizedDescription
+                    // Still present an empty summary shell so the user sees the error in-sheet
+                    self?.metadataApplySummary = MetadataApplySummary(
+                        sourceURL: url,
+                        format: formatHint,
+                        matchedCount: 0,
+                        updatedVideoCount: 0,
+                        unmatchedCount: 0,
+                        skippedUnknownColumns: [],
+                        ignoredReadOnlyColumns: [],
+                        rowErrors: [error.localizedDescription]
+                    )
+                }
+            }
+        }
+    }
+
+    func loadUnmatchedForCurrentApply() {
+        guard let summary = metadataApplySummary,
+              let data = metadataApplySourceData else { return }
+        let url = summary.sourceURL
+        let videosSnapshot = videos
+        let tagsSnapshot = tagsByVideoId
+        let customSnapshot = listCustomMetadataByVideoId
+        let customDefs = customMetadataFieldDefinitions
+        Task { [weak self] in
+            do {
+                let format = try MetadataApplyParser.detectFormat(url: url, data: data)
+                let (rows, _, _) = try MetadataApplyParser.parse(
+                    data: data,
+                    format: format,
+                    customFields: customDefs
+                )
+                let index = MetadataApplier.buildIndex(
+                    videos: videosSnapshot,
+                    tagsByVideoId: tagsSnapshot,
+                    customByVideoId: customSnapshot,
+                    customFieldDefinitions: customDefs
+                )
+                let unmatched = MetadataApplier.pass2Unmatched(rows: rows, index: index)
+                await MainActor.run {
+                    self?.metadataApplyUnmatchedRows = unmatched
+                }
+            } catch {
+                await MainActor.run {
+                    self?.metadataApplyErrorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
     func makeMetadataExportContext() -> MetadataExportContext {
         MetadataExportContext(
             tagsByVideoId: tagsByVideoId,
@@ -664,6 +867,12 @@ final class LibraryViewModel {
     private var ftsMatchIds: Set<String>?
     private var duplicateVideoIds: Set<String> = []
     private var missingVideoIds: Set<String> = []
+    /// Paths matched by the last successful Import Metadata run (Last Metadata Import smart library).
+    private(set) var recentlyAppliedPaths: Set<String> = [] {
+        didSet {
+            UserDefaults.standard.set(Array(recentlyAppliedPaths), forKey: Self.recentlyAppliedPathsKey)
+        }
+    }
     private(set) var missingCountScanned: Bool = false
     private(set) var isRefreshingMissing: Bool = false
     private var filterGeneration: Int = 0
@@ -749,6 +958,7 @@ final class LibraryViewModel {
     private static let showMissingKey = "VideoMaster.showMissing"
     private static let showRecentlyConvertedKey = "VideoMaster.showRecentlyConverted"
     private static let recentlyConvertedEntriesKey = "VideoMaster.recentlyConvertedEntries"
+    private static let recentlyAppliedPathsKey = "VideoMaster.recentlyAppliedPaths"
     private static let conversionJobsKey = "VideoMaster.conversionJobs"
     private static let moveJobsKey = "VideoMaster.moveJobs"
     private static let ffmpegPathKey = "VideoMaster.ffmpegPath"
@@ -1428,6 +1638,9 @@ final class LibraryViewModel {
         if let v = defaults.string(forKey: Self.ffmpegPathKey) { ffmpegUserPath = v }
         if let v = defaults.object(forKey: Self.showMissingKey) as? Bool { showMissing = v }
         if let v = defaults.object(forKey: Self.showRecentlyConvertedKey) as? Bool { showRecentlyConverted = v }
+        if let paths = defaults.stringArray(forKey: Self.recentlyAppliedPathsKey) {
+            recentlyAppliedPaths = Set(paths)
+        }
         if let data = defaults.data(forKey: Self.conversionJobsKey),
            let decoded = try? JSONDecoder().decode([ConversionJob].self, from: data)
         {
@@ -1719,6 +1932,7 @@ final class LibraryViewModel {
             recentlyPlayedDays: recentlyPlayedDays,
             topRatedMinRating: topRatedMinRating,
             recentlyConvertedDates: recentlyConvertedDates,
+            recentlyAppliedPaths: recentlyAppliedPaths,
             minDurationSeconds: minDurationSeconds,
             maxDurationSeconds: maxDurationSeconds,
             selectedQualityBuckets: selectedQualityBuckets,
@@ -1762,6 +1976,7 @@ final class LibraryViewModel {
         let recentlyPlayedDays: Int
         let topRatedMinRating: Int
         let recentlyConvertedDates: [String: Date]
+        let recentlyAppliedPaths: Set<String>
         let minDurationSeconds: Double?
         let maxDurationSeconds: Double?
         let selectedQualityBuckets: Set<String>
@@ -2007,6 +2222,8 @@ final class LibraryViewModel {
             baseResult = baseResult.filter { snapshot.missingVideoIds.contains($0.id) }
         case .recentlyConverted:
             baseResult = baseResult.filter { snapshot.recentlyConvertedDates[$0.filePath] != nil }
+        case .recentlyApplied:
+            baseResult = baseResult.filter { snapshot.recentlyAppliedPaths.contains($0.filePath) }
         case .collection(let collection):
             guard let collectionId = collection.id else {
                 return ([], [:])
@@ -2199,6 +2416,7 @@ final class LibraryViewModel {
         duplicateVideoIds = dupIds
 
         let recentlyConverted = videos.filter { convertedPaths.contains($0.filePath) }.count
+        let recentlyApplied = videos.filter { recentlyAppliedPaths.contains($0.filePath) }.count
 
         libraryCounts = LibraryCounts(
             all: allCount,
@@ -2209,6 +2427,7 @@ final class LibraryViewModel {
             corrupt: corrupt,
             missing: missingCountScanned ? missingVideoIds.count : 0,
             recentlyConverted: recentlyConverted,
+            recentlyApplied: recentlyApplied,
             byRating: byRating
         )
     }
@@ -2316,6 +2535,10 @@ final class LibraryViewModel {
             result = result.filter { Self.isCorrupt($0, thumbnailsSettled: thumbnailsSettled) }
         case .missing:
             result = result.filter { missingVideoIds.contains($0.id) }
+        case .recentlyConverted:
+            result = result.filter { recentlyConvertedDates[$0.filePath] != nil }
+        case .recentlyApplied:
+            result = result.filter { recentlyAppliedPaths.contains($0.filePath) }
         case .collection(let collection):
             guard let collectionId = collection.id else { return [] }
             let groups = cachedCollectionRuleGroups[collectionId] ?? []
@@ -2392,7 +2615,7 @@ final class LibraryViewModel {
                         if scanProgress == "No new files found" { scanProgress = "" }
                     }
                 } else if failureCount > 0 {
-                    let message = "Imported \(scanTotal - failureCount)/\(scanTotal) — \(failureCount) failed (see console)"
+                    let message = "Added \(scanTotal - failureCount)/\(scanTotal) — \(failureCount) failed (see console)"
                     scanProgress = message
                     Task { [message] in
                         try? await Task.sleep(for: .seconds(4))
@@ -2432,7 +2655,7 @@ final class LibraryViewModel {
         }
 
         isScanning = true
-        scanProgress = "Importing dropped files..."
+        scanProgress = "Scanning dropped files…"
         stopObserving()
         var failureCount = 0
 
@@ -2448,7 +2671,7 @@ final class LibraryViewModel {
                 failureCount = count
             case .completed:
                 if failureCount > 0 {
-                    let message = "Imported \(scanTotal - failureCount)/\(scanTotal) — \(failureCount) failed (see console)"
+                    let message = "Added \(scanTotal - failureCount)/\(scanTotal) — \(failureCount) failed (see console)"
                     scanProgress = message
                     Task { [message] in
                         try? await Task.sleep(for: .seconds(4))
@@ -2579,7 +2802,7 @@ final class LibraryViewModel {
                 failureCount = count
             case .completed:
                 if failureCount > 0 {
-                    let message = "Imported \(scanTotal - failureCount)/\(scanTotal) — \(failureCount) failed (see console)"
+                    let message = "Added \(scanTotal - failureCount)/\(scanTotal) — \(failureCount) failed (see console)"
                     scanProgress = message
                     Task { [message] in
                         try? await Task.sleep(for: .seconds(4))
@@ -3635,6 +3858,8 @@ final class LibraryViewModel {
             duplicates: libraryCounts.duplicates,
             corrupt: libraryCounts.corrupt,
             missing: missIds.count,
+            recentlyConverted: libraryCounts.recentlyConverted,
+            recentlyApplied: libraryCounts.recentlyApplied,
             byRating: libraryCounts.byRating
         )
         recomputeFilteredVideos()
@@ -3670,6 +3895,8 @@ final class LibraryViewModel {
             duplicates: libraryCounts.duplicates,
             corrupt: libraryCounts.corrupt,
             missing: missingVideoIds.count,
+            recentlyConverted: libraryCounts.recentlyConverted,
+            recentlyApplied: libraryCounts.recentlyApplied,
             byRating: libraryCounts.byRating
         )
         recomputeFilteredVideos()

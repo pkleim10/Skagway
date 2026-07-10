@@ -210,6 +210,51 @@ enum MetadataExportColumnRegistry {
     ) -> [String] {
         ids.map { jsonlKey(forColumnId: $0, columnsByID: columnsByID) }
     }
+
+    /// Columns Apply can write in v1.
+    static let writableColumnIDs: Set<String> = ["rating", "tags"]
+
+    static func isWritableColumnID(_ id: String) -> Bool {
+        if writableColumnIDs.contains(id) { return true }
+        return MetadataExportColumn.customFieldUUID(fromColumnId: id) != nil
+    }
+
+    static func isMatchKeyColumnID(_ id: String) -> Bool {
+        id == "filePath" || id == "contentFingerprint"
+    }
+
+    /// Resolve a CSV header or JSONL object key to an internal column id.
+    /// - Built-in machine ids and human labels map to builtins.
+    /// - Custom: `custom:<uuid>`, or unique case-insensitive field name.
+    /// - Unknown → nil (Apply skips).
+    static func resolveIncomingColumnKey(
+        _ key: String,
+        customFields: [CustomMetadataFieldDefinition]
+    ) -> String? {
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if builtinIDs.contains(trimmed) { return trimmed }
+
+        let lower = trimmed.lowercased()
+        for col in builtins {
+            if col.label.lowercased() == lower { return col.id }
+        }
+
+        if let uuid = MetadataExportColumn.customFieldUUID(fromColumnId: trimmed),
+           customFields.contains(where: { $0.id == uuid })
+        {
+            return MetadataExportColumn.customFieldId(uuid)
+        }
+
+        let nameMatches = customFields.filter {
+            $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == lower
+        }
+        if nameMatches.count == 1 {
+            return MetadataExportColumn.customFieldId(nameMatches[0].id)
+        }
+        return nil
+    }
 }
 
 /// Snapshot of library state needed to resolve one video’s export row.
@@ -385,6 +430,7 @@ enum MetadataExportRowBuilder {
     }
 
     static func formatDouble(_ d: Double) -> String {
+        guard d.isFinite else { return "" }
         if d.rounded() == d, d >= Double(Int64.min), d <= Double(Int64.max) {
             return String(Int64(d))
         }

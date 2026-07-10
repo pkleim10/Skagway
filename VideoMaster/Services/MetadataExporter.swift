@@ -56,6 +56,8 @@ enum JSONLWriter {
         case .int(let n):
             return String(n)
         case .double(let d):
+            // JSON forbids NaN / Infinity; emit null so Apply can round-trip the file.
+            guard d.isFinite else { return "null" }
             return MetadataExportRowBuilder.formatDouble(d)
         case .bool(let b):
             return b ? "true" : "false"

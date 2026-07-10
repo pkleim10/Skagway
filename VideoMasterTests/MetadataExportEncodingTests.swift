@@ -58,6 +58,22 @@ final class MetadataExportEncodingTests: XCTestCase {
         XCTAssertTrue(obj["duration"] is NSNull)
     }
 
+    func testJSONL_nonFiniteDoubleEmitsNull() throws {
+        let line = try JSONLWriter.line(
+            orderedKeys: ["frameRate", "duration"],
+            values: [
+                "frameRate": .double(.nan),
+                "duration": .double(.infinity),
+            ]
+        )
+        let data = Data(line.dropLast().utf8)
+        let obj = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertTrue(obj["frameRate"] is NSNull)
+        XCTAssertTrue(obj["duration"] is NSNull)
+        XCTAssertFalse(line.contains("nan"))
+        XCTAssertFalse(line.lowercased().contains("inf"))
+    }
+
     func testCustomFieldId_roundTrip() {
         let uuid = UUID()
         let id = MetadataExportColumn.customFieldId(uuid)

@@ -31,6 +31,12 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.37.0 (build 736) - 2026-07-09
+
+- **Renamed metadata Apply → Import, and folder “Import New” → Scan for New Videos.** File → **Import Metadata…** (⌘⌥I) pairs with Export Metadata… (⌘⌥E); smart library is **Last Metadata Import**. File / toolbar **Scan for New Videos** has no shortcut (Add Folder remains ⌘⇧O). Header status uses “Scanning…” so it doesn’t collide with metadata Import.
+- **Added Import Metadata (CSV / JSON Lines).** File → Import Metadata… (⌘⌥I) opens a file, auto-detects format, matches rows by Path then Content Fingerprint (no Database ID), updates differing rating / tags (merge) / custom fields, skips unknown and read-only columns. Summary sheet reports matched / updated / unmatched; **Review unmatched…** re-reads the file on demand (Pass 2). Successful imports select the **Last Metadata Import** smart library.
+- **Fixed Import Metadata failing on exported JSONL** with Cocoa’s opaque “data isn’t in the correct format” — JSON parse errors now report the line number; the open panel reads the file while security-scoped access is active (bytes kept for Pass 2); JSONL export emits `null` for non-finite doubles (`NaN` / `Infinity`) so files stay valid JSON.
+- **Added Last Metadata Import smart library** — shows paths from the last successful Import Metadata run (persisted); appears in Smart Libraries when non-empty.
 - **Fixed Export Metadata default filenames ending in `.jsonl.jsonl`** — `NSSavePanel` already appends the format extension from the allowed content type; the suggested name no longer includes a duplicate suffix.
 - **Added Open Default Library** — File menu and landing screen when the default App Support library exists. Switches back to `~/Library/Application Support/VideoMaster/VideoMaster.VideoMaster` (path shown in the button help). Disabled while that library is already active.
 

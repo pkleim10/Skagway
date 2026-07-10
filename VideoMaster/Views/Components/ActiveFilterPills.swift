@@ -129,6 +129,7 @@ struct ActiveFilterPills: View {
         case .corrupt: return "Corrupt"
         case .missing: return "Missing"
         case .recentlyConverted: return "Recently Converted"
+        case .recentlyApplied: return "Last Metadata Import"
         case .collection(let c): return c.name
         }
     }
@@ -143,6 +144,7 @@ struct ActiveFilterPills: View {
         case .corrupt: return "exclamationmark.triangle"
         case .missing: return "questionmark.circle"
         case .recentlyConverted: return "arrow.triangle.2.circlepath"
+        case .recentlyApplied: return "square.and.arrow.down.on.square"
         case .collection: return "folder"
         }
     }

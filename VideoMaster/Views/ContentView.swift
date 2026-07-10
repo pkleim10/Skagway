@@ -128,8 +128,8 @@ private struct LibraryContentView: View {
     /// scan message (e.g. "No new files found" / "No data sources — add a folder first").
     private var headerStatusText: String {
         if vm.isScanning {
-            if vm.scanTotal > 0 { return "Importing \(vm.scanCurrent)/\(vm.scanTotal)" }
-            return vm.scanProgress.isEmpty ? "Importing…" : vm.scanProgress
+            if vm.scanTotal > 0 { return "Scanning \(vm.scanCurrent)/\(vm.scanTotal)" }
+            return vm.scanProgress.isEmpty ? "Scanning…" : vm.scanProgress
         }
         if !vm.scanProgress.isEmpty { return vm.scanProgress }
         if vm.isFingerprintingInProgress {
@@ -328,8 +328,7 @@ private struct LibraryContentView: View {
             .buttonStyle(.plain)
             .foregroundStyle(Color.appTextSecondary)
             .disabled(vm.isScanning)
-            .help("Import New — scan your folders for newly added video files (⌘I)")
-            .keyboardShortcut("i", modifiers: .command)
+            .help("Scan for New Videos — scan your folders for newly added video files")
 
             Button {
                 vm.surpriseMePickRandom()
@@ -770,6 +769,9 @@ private struct LibraryContentView: View {
                 scope: presentation.scope,
                 videoCount: presentation.videoCount
             )
+        }
+        .sheet(item: $vm.metadataApplySummary) { summary in
+            ApplyMetadataSummarySheet(viewModel: vm, summary: summary)
         }
         .onChange(of: vm.focusSearchFieldToken) { _, _ in
             isSearchFocused = true
