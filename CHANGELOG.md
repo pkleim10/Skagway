@@ -1,6 +1,6 @@
 # Changelog
 
-**VideoMaster changelogs are maintained live by agents.**
+**Skagway changelogs are maintained live by agents.**
 
 ## How maintenance works (for agents)
 
@@ -31,9 +31,14 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.60.0 (build 755) - 2026-07-12
+
+- **Full internal rename to Skagway (0% former product name in steady-state runtime)** — source folder `Skagway/`, XcodeGen target/scheme `Skagway`, bundle ID `com.machiilabs.skagway`, UserDefaults keys `Skagway.*`, Save Copy defaults to `Skagway-<timestamp>.machii`. One-shot `LegacyRenameMigrator` copies prefs/library/thumbnails from the old identity on first launch (non-destructive). Open/save panels are `.machii` only.
+- **Library format** — default library remains `~/Library/Application Support/Skagway/Skagway.machii`.
+
 ## 0.50.0 (build 751) - 2026-07-12
 
-- **Customer-facing rename to Skagway** — Dock/Finder app name (`Skagway.app`), display name, About, landing title, window titles, and settings copy. Bundle ID, App Support paths, and `.VideoMaster` library files unchanged (repo rename later).
+- **Customer-facing rename to Skagway** — Dock/Finder app name (`Skagway.app`), display name, About, landing title, window titles, and settings copy. Bundle ID and source module still used the pre-rename identity in this build (completed in a later Unreleased change).
 - **New app icon** — replaced the skeuomorphic film-reel mark with a modern video-first play-in-viewport icon in a northern-cool palette (midnight slate, ice play glyph, subtle aurora).
 - **Fixed ~6s “first frame frozen” stall when starting playback in large libraries.** Playback no longer waits for sidecar subtitle discovery before calling `play()` (large folders made directory scans delay motion). `recordPlay` no longer triggers a full GRDB library reload + O(n) filter cascade on every play.
 
@@ -58,7 +63,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 - **Fixed Import Metadata failing on exported JSONL** with Cocoa’s opaque “data isn’t in the correct format” — JSON parse errors now report the line number; the open panel reads the file while security-scoped access is active (bytes kept for Pass 2); JSONL export emits `null` for non-finite doubles (`NaN` / `Infinity`) so files stay valid JSON.
 - **Added Last Metadata Import smart library** — shows paths from the last successful Import Metadata run (persisted); appears in Smart Libraries when non-empty.
 - **Fixed Export Metadata default filenames ending in `.jsonl.jsonl`** — `NSSavePanel` already appends the format extension from the allowed content type; the suggested name no longer includes a duplicate suffix.
-- **Added Open Default Library** — File menu and landing screen when the default App Support library exists. Switches back to `~/Library/Application Support/VideoMaster/VideoMaster.VideoMaster` (path shown in the button help). Disabled while that library is already active.
+- **Added Open Default Library** — File menu and landing screen when the default App Support library exists. Switches back to `~/Library/Application Support/Skagway/Skagway.Skagway` (path shown in the button help). Disabled while that library is already active.
 
 ## 0.36.0 (build 728) - 2026-07-09
 
@@ -68,7 +73,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 - **Added a proper repo README** — overview, features, requirements, build/install, layout, versioning, and doc index (replaces the previous stub).
 - **Renamed Wall → Grid in the UI.** Segmented control, View menu, tooltips, inspector empty state, and Settings copy now say Grid (standard List/Grid terminology). Internal type names unchanged.
-- **Dark-only appearance.** Removed the Application Settings Appearance picker (System / Light / Dark). VideoMaster always locks to dark mode.
+- **Dark-only appearance.** Removed the Application Settings Appearance picker (System / Light / Dark). Skagway always locks to dark mode.
 
 ## 0.34.0 (build 720) - 2026-07-09
 
@@ -433,14 +438,14 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## 0.14.1 (378) - 2026-06-27
 
-- videomaster-playback-test pass: reviewed full checklist against implementation; fixed list view not receiving explicit centered scroll re-anchor after leaving detail-pane playback (now sets scrollToVideoId for both grid and list on exit).
+- skagway-playback-test pass: reviewed full checklist against implementation; fixed list view not receiving explicit centered scroll re-anchor after leaving detail-pane playback (now sets scrollToVideoId for both grid and list on exit).
 
 ## 0.14.0 (376) - 2026-06-27
 
 - Foundation and agent workflow release:
   - Added `AGENTS.md`, `ROADMAP.md`, `SKILLS.md` as the core foundation documents.
-  - Reconciled build/deploy rules; created `.cursor/rules/release-workflow.mdc` for VideoMaster.
-  - Created `videomaster-playback-test` skill.
+  - Reconciled build/deploy rules; created `.cursor/rules/release-workflow.mdc` for Skagway.
+  - Created `skagway-playback-test` skill.
   - Retired `IMPROVEMENTS.md` and `DEVELOPMENT_SUMMARY.md` (key ideas folded into `ROADMAP.md`).
   - Cleared `docs/USER_GUIDE.md` (full guide deferred until closer to production release).
   - Introduced live `CHANGELOG.md` process: agents maintain high-level changes in `## Unreleased` on every commit; content is consolidated into versioned release entries on release.
@@ -472,11 +477,11 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## 0.8.1 (281) - 2026-04-02
 
-- Release VideoMaster 0.8.1 (build 281)
+- Release Skagway 0.8.1 (build 281)
 
 ## 0.8.0 - 2026-03-27
 
-- Release VideoMaster 0.8.0
+- Release Skagway 0.8.0
 
 ## Earlier releases
 

@@ -6,13 +6,13 @@
 
 ## 1. Context
 
-VideoMaster just shipped custom-field filtering (v0.32.0), but the live **Filters Drawer** still has three gaps that read as unfinished for a pro-level product:
+Skagway just shipped custom-field filtering (v0.32.0), but the live **Filters Drawer** still has three gaps that read as unfinished for a pro-level product:
 
 - **Missing built-in fields.** The drawer can filter on rating, duration, tags, and custom fields — but not file size, resolution, dates, play count, codec, folder, extension, etc.
 - **AND-only.** Every filter category is AND'd together; there's no way to express "marvel OR dc".
 - **No complexity gradient.** It's one flat surface — no room to grow into power-user territory without cluttering the common case.
 
-**The key discovery (from code exploration):** VideoMaster *already contains a complete boolean rule engine* — the **Collections** system. `RuleAttribute` (`Models/Collection.swift:86`) covers 15 built-in fields (name, extension, path, parentFolder, volume, fileSize, duration, height, width, codec, dateImported, dateCreated, playCount, rating, tag); `RuleComparison` (`:168`) has 10 operators; `CollectionRuleGroup` + `VideoCollection` give **two-level AND/OR grouping**; and `CollectionRepository.GroupedMatcher`/`compileRule` compile rules into fast per-video predicate closures. This engine is a **strict superset** of the drawer's field coverage.
+**The key discovery (from code exploration):** Skagway *already contains a complete boolean rule engine* — the **Collections** system. `RuleAttribute` (`Models/Collection.swift:86`) covers 15 built-in fields (name, extension, path, parentFolder, volume, fileSize, duration, height, width, codec, dateImported, dateCreated, playCount, rating, tag); `RuleComparison` (`:168`) has 10 operators; `CollectionRuleGroup` + `VideoCollection` give **two-level AND/OR grouping**; and `CollectionRepository.GroupedMatcher`/`compileRule` compile rules into fast per-video predicate closures. This engine is a **strict superset** of the drawer's field coverage.
 
 So today there are **two parallel, non-shared filter systems**: the live drawer (simple, AND-only, limited fields + custom fields) and the Collections engine (rich, AND/OR, all built-in fields — but *saved* smart folders only, with a weak plain-text editor and no custom-field support).
 

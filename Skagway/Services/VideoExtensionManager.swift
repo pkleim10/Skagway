@@ -12,7 +12,7 @@ struct VideoExtensionEntry: Identifiable {
 final class VideoExtensionManager {
     static let shared = VideoExtensionManager()
 
-    private static let userDefaultsKey = "VideoMaster.videoExtensions"
+    private static let userDefaultsKey = PrefsKeys.videoExtensions
     private static let defaultExtensions: [(String, Bool)] = [
         ("mp4", true), ("mov", true), ("m4v", true), ("avi", true), ("mkv", true),
         ("wmv", true), ("flv", true), ("webm", true), ("mpg", true), ("mpeg", true),

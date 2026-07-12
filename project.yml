@@ -1,6 +1,6 @@
-name: VideoMaster
+name: Skagway
 options:
-  bundleIdPrefix: com.videomaster
+  bundleIdPrefix: com.machiilabs
   deploymentTarget:
     macOS: "26.0"
   generateEmptyDirectories: true
@@ -12,19 +12,19 @@ packages:
     from: "7.0.0"
 
 targets:
-  VideoMaster:
+  Skagway:
     type: application
     platform: macOS
     sources:
-      - path: VideoMaster
+      - path: Skagway
         excludes:
           - "**/.DS_Store"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.videomaster.VideoMaster
+        PRODUCT_BUNDLE_IDENTIFIER: com.machiilabs.skagway
         PRODUCT_NAME: Skagway
-        MARKETING_VERSION: "0.50.0"
-        CURRENT_PROJECT_VERSION: "751"
+        MARKETING_VERSION: "0.60.0"
+        CURRENT_PROJECT_VERSION: "755"
         GENERATE_INFOPLIST_FILE: "YES"
         INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
         INFOPLIST_KEY_CFBundleDisplayName: Skagway
@@ -32,25 +32,34 @@ targets:
         SWIFT_EMIT_LOC_STRINGS: "YES"
         ENABLE_PREVIEWS: "YES"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        CODE_SIGN_ENTITLEMENTS: VideoMaster/VideoMaster.entitlements
+        CODE_SIGN_ENTITLEMENTS: Skagway/Skagway.entitlements
         CODE_SIGN_IDENTITY: "-"
         SWIFT_VERSION: "5"
         ENABLE_TESTABILITY: "YES"
+    info:
+      path: Skagway/Info.plist
+      properties:
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Skagway Library
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Owner
+            CFBundleTypeExtensions:
+              - machii
     dependencies:
       - package: GRDB
         product: GRDB
-  VideoMasterTests:
+  SkagwayTests:
     type: bundle.unit-test
     platform: macOS
     sources:
-      - path: VideoMasterTests
+      - path: SkagwayTests
     dependencies:
-      - target: VideoMaster
+      - target: Skagway
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.videomaster.VideoMasterTests
+        PRODUCT_BUNDLE_IDENTIFIER: com.machiilabs.skagway.tests
         GENERATE_INFOPLIST_FILE: "YES"
         CODE_SIGN_IDENTITY: "-"
         SWIFT_VERSION: "5"
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/VideoMaster.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/VideoMaster"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Skagway.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Skagway"
         BUNDLE_LOADER: "$(TEST_HOST)"

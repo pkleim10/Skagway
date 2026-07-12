@@ -9,10 +9,15 @@ struct RecentLibraryItem: Identifiable {
 }
 
 enum DatabaseExportImport {
-    private static let activeLibraryBookmarkKey = "VideoMaster.activeLibraryBookmark"
-    private static let recentLibraryBookmarksKey = "VideoMaster.recentLibraryBookmarks"
-    private static let userClosedLibraryKey = "VideoMaster.userClosedLibrary"
+    private static let activeLibraryBookmarkKey = PrefsKeys.activeLibraryBookmark
+    private static let recentLibraryBookmarksKey = PrefsKeys.recentLibraryBookmarks
+    private static let userClosedLibraryKey = PrefsKeys.userClosedLibrary
     private static let maxRecentLibraries = 10
+
+    /// On-disk library extension (Mach II Labs).
+    static let libraryFilenameExtension = "machii"
+    private static let appSupportFolderName = "Skagway"
+    private static let defaultLibraryFileName = "Skagway.machii"
 
     /// Stored reference to the active dbPool, set by AppState on init.
     nonisolated(unsafe) static var activeDbPool: DatabasePool?
@@ -31,16 +36,17 @@ enum DatabaseExportImport {
         }
     }
 
+    private static var applicationSupportRootURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    }
+
     static var dbDirectoryURL: URL {
-        let appSupport = FileManager.default.urls(
-            for: .applicationSupportDirectory, in: .userDomainMask
-        ).first!
-        return appSupport.appendingPathComponent("VideoMaster", isDirectory: true)
+        applicationSupportRootURL.appendingPathComponent(appSupportFolderName, isDirectory: true)
     }
 
     /// Default library path — always in App Support. Used when no active bookmark.
     static var defaultLibraryURL: URL {
-        dbDirectoryURL.appendingPathComponent("VideoMaster.VideoMaster", isDirectory: false)
+        dbDirectoryURL.appendingPathComponent(defaultLibraryFileName, isDirectory: false)
     }
 
     /// Whether the default library file exists on disk.
@@ -103,7 +109,7 @@ enum DatabaseExportImport {
     /// Returns display name for a library URL.
     private static func displayName(for url: URL) -> String {
         let name = url.lastPathComponent
-        for ext in [".videomaster", ".sqlite", ".db", ".sqlite3"] {
+        for ext in [".machii", ".sqlite", ".db", ".sqlite3"] {
             if name.lowercased().hasSuffix(ext) {
                 return String(name.dropLast(ext.count))
             }
@@ -119,15 +125,11 @@ enum DatabaseExportImport {
 
     static func defaultExportFileName() -> String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "MMddyyyy"
-        let datePart = formatter.string(from: Date())
-        formatter.dateFormat = "HHmmss"
-        let timePart = formatter.string(from: Date())
-        let ms = Calendar.current.component(.nanosecond, from: Date()) / 1_000_000
-        return "Library-\(datePart)-\(timePart)\(String(format: "%03d", ms)).VideoMaster"
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        return "Skagway-\(formatter.string(from: Date())).\(libraryFilenameExtension)"
     }
 
-    /// Validates that the file is a valid VideoMaster database (has video table).
+    /// Validates that the file is a valid Skagway library database (has video table).
     static func validateImportFile(at url: URL) throws {
         let db = try DatabaseQueue(path: url.path)
         _ = try db.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM video") }
@@ -210,7 +212,7 @@ enum DatabaseExportImport {
         #!/bin/bash
         sleep 2
         open "\(appPath)"
-        launchctl remove com.videomaster.relaunch 2>/dev/null || true
+        launchctl remove com.machiilabs.skagway.relaunch 2>/dev/null || true
         """
         let scriptURL = dbDirectoryURL.appendingPathComponent("relaunch.sh", isDirectory: false)
         do {
@@ -219,7 +221,7 @@ enum DatabaseExportImport {
             let task = Process()
             task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
             task.arguments = [
-                "submit", "-l", "com.videomaster.relaunch",
+                "submit", "-l", "com.machiilabs.skagway.relaunch",
                 "-o", dbDirectoryURL.appendingPathComponent("relaunch_out.log").path,
                 "-e", dbDirectoryURL.appendingPathComponent("relaunch_err.log").path,
                 "--", "/bin/bash", scriptURL.path
@@ -236,7 +238,7 @@ enum DatabaseExportImport {
     static func saveCopy(dbPool: DatabasePool) {
         guard let sourceURL = activeLibraryURL() else { return }
         let panel = NSSavePanel()
-        panel.allowedFileTypes = ["VideoMaster"]
+        panel.allowedFileTypes = [libraryFilenameExtension]
         panel.nameFieldStringValue = defaultExportFileName()
         panel.title = "Save Copy"
         panel.message = "Save a copy of the current library to a file."
@@ -260,8 +262,8 @@ enum DatabaseExportImport {
     /// Shows open panel and switches to the selected library.
     static func openLibraryFromUserSelection() {
         let panel = NSOpenPanel()
-        panel.allowedFileTypes = ["VideoMaster", "sqlite", "db", "sqlite3"]
-        panel.allowsOtherFileTypes = true
+        panel.allowedFileTypes = [libraryFilenameExtension]
+        panel.allowsOtherFileTypes = false
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.title = "Open Library"
@@ -314,7 +316,7 @@ enum DatabaseExportImport {
         }
     }
 
-    /// Switches to the default App Support library (`~/Library/Application Support/VideoMaster/VideoMaster.VideoMaster`) and relaunches.
+    /// Switches to the default App Support library (`~/Library/Application Support/Skagway/Skagway.machii`) and relaunches.
     /// Clears any active library bookmark so launch falls back to the fixed default path.
     static func openDefaultLibrary() {
         guard defaultLibraryExists else {
@@ -339,8 +341,8 @@ enum DatabaseExportImport {
     /// Creates a new empty library at user-chosen path and switches to it.
     static func createNewLibrary() {
         let panel = NSSavePanel()
-        panel.allowedFileTypes = ["VideoMaster"]
-        panel.nameFieldStringValue = "New Library.VideoMaster"
+        panel.allowedFileTypes = [libraryFilenameExtension]
+        panel.nameFieldStringValue = "New Library.\(libraryFilenameExtension)"
         panel.title = "New Library"
         panel.message = "Choose a location for the new library."
 
@@ -406,46 +408,13 @@ enum DatabaseExportImport {
 
     // MARK: - Launch
 
-    /// Run at app launch. Migrates legacy library.sqlite if needed. Does not create default.
+    /// Run at app launch. Ensures App Support folder exists. Does not create a default library.
     static func prepareDatabaseForLaunch() throws {
         let fm = FileManager.default
         try fm.createDirectory(at: dbDirectoryURL, withIntermediateDirectories: true)
 
-        let defaultPath = defaultLibraryURL.path
-
-        // Migrate library.sqlite → VideoMaster.VideoMaster
-        let legacyPath = dbDirectoryURL.appendingPathComponent("library.sqlite", isDirectory: false).path
-        if !fm.fileExists(atPath: defaultPath), fm.fileExists(atPath: legacyPath) {
-            try fm.moveItem(atPath: legacyPath, toPath: defaultPath)
-            for ext in ["-wal", "-shm"] {
-                let legacyExt = legacyPath + ext
-                if fm.fileExists(atPath: legacyExt) {
-                    try? fm.moveItem(atPath: legacyExt, toPath: defaultPath + ext)
-                }
-            }
-        }
-
-        // Migrate VideoMaster.sqlite → VideoMaster.VideoMaster
-        let oldDefaultPath = dbDirectoryURL.appendingPathComponent("VideoMaster.sqlite", isDirectory: false).path
-        if !fm.fileExists(atPath: defaultPath), fm.fileExists(atPath: oldDefaultPath) {
-            try fm.moveItem(atPath: oldDefaultPath, toPath: defaultPath)
-            for ext in ["-wal", "-shm"] {
-                let oldExt = oldDefaultPath + ext
-                if fm.fileExists(atPath: oldExt) {
-                    try? fm.moveItem(atPath: oldExt, toPath: defaultPath + ext)
-                }
-            }
-        }
-
-        // Ensure default library is in recents if it exists
-        if fm.fileExists(atPath: defaultPath) {
+        if fm.fileExists(atPath: defaultLibraryURL.path) {
             addToRecent(url: defaultLibraryURL)
-        }
-
-        if UserDefaults.standard.data(forKey: activeLibraryBookmarkKey) == nil,
-           let legacy = UserDefaults.standard.data(forKey: "VideoMaster.lastOpenedLibraryBookmark") {
-            UserDefaults.standard.set(legacy, forKey: activeLibraryBookmarkKey)
-            UserDefaults.standard.removeObject(forKey: "VideoMaster.lastOpenedLibraryBookmark")
         }
 
         try? fm.removeItem(at: dbDirectoryURL.appendingPathComponent("relaunch.sh", isDirectory: false))

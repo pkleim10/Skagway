@@ -1,10 +1,10 @@
-# AGENTS.md — VideoMaster
+# AGENTS.md — Skagway
 
-This document defines how AI agents (Cursor, Claude, etc.) should work on the VideoMaster project.
+This document defines how AI agents (Cursor, Claude, etc.) should work on the Skagway project.
 
 ## Project Snapshot
 
-- **Name**: VideoMaster
+- **Name**: Skagway
 - **Type**: Native macOS SwiftUI application
 - **Target**: macOS 26 (Tahoe)
 - **Stack**: SwiftUI + GRDB.swift (SQLite) + AVFoundation
@@ -21,7 +21,7 @@ This document defines how AI agents (Cursor, Claude, etc.) should work on the Vi
      bash scripts/build_and_install.sh
      ```
    - This bumps the build number, regenerates the Xcode project, builds Release, installs to `/Applications`, and cleans up.
-   - Always announce the new version (e.g. `✓ VideoMaster 0.13.0 (375) [Release]`).
+   - Always announce the new version (e.g. `✓ Skagway 0.13.0 (375) [Release]`).
    - **Stage all changes**: Use `git add -A` (or equivalent) to include every tracked modification **and** every untracked file.
    - **Update `CHANGELOG.md`**: Add high-level bullet points describing the changes to the `## Unreleased` section. Do this on/around every commit so the changelog reflects work as it happens.
    - Commit the changes (including the changelog update) as part of the work.
@@ -75,7 +75,7 @@ This document defines how AI agents (Cursor, Claude, etc.) should work on the Vi
 ## Build & Environment Notes
 
 - `SWIFT_VERSION: "5"` is pinned in `project.yml` for compatibility with the Swift 6.2.4 compiler.
-- App sandboxing is disabled (see `VideoMaster.entitlements`).
+- App sandboxing is disabled (see `Skagway.entitlements`).
 - `eraseDatabaseOnSchemaChange` is deliberately **not** used in the GRDB migrator — it would wipe user data on schema changes. See the comment in `DatabaseMigration.swift`.
 
 ## Documentation & Planning
@@ -113,4 +113,4 @@ See `SKILLS.md` for the current set of recommended skills and when to invoke spe
 
 ---
 
-This file should be the first thing an agent reads when starting work on VideoMaster.
+This file should be the first thing an agent reads when starting work on Skagway.

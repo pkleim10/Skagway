@@ -1,4 +1,4 @@
-# VideoMaster — Claude / Cursor Instructions
+# Skagway — Claude / Cursor Instructions
 
 See the following foundation documents for how to work on this project:
 
@@ -16,6 +16,6 @@ bash scripts/build_and_install.sh
 
 This script handles build number bump, `xcodegen`, Release build, install to `/Applications`, and cleanup.
 
-Always announce the resulting version (e.g. `✓ VideoMaster 0.13.0 (375) [Release]`).
+Always announce the resulting version (e.g. `✓ Skagway 0.13.0 (375) [Release]`).
 
 For full release process (patch/minor/major), see `.cursor/rules/release-workflow.mdc` and the Release Commands section of `.cursor/rules/build-deploy.mdc`.

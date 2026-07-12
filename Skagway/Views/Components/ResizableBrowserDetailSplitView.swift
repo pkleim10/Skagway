@@ -182,8 +182,8 @@ struct ResizableBrowserDetailSplitView<Content: View, Detail: View>: NSViewRepre
         private var frozenReflowWork: DispatchWorkItem?
         var playbackDividerPositions: (browser: CGFloat, detail: CGFloat)? = {
             let defaults = UserDefaults.standard
-            let b = defaults.double(forKey: "playbackDividerSidebar")
-            let d = defaults.double(forKey: "playbackDividerContent")
+            let b = defaults.double(forKey: "Skagway.playbackDividerSidebar")
+            let d = defaults.double(forKey: "Skagway.playbackDividerContent")
             guard b > 0, d > 0 else { return nil }
             return (CGFloat(b), CGFloat(d))
         }()
@@ -196,8 +196,8 @@ struct ResizableBrowserDetailSplitView<Content: View, Detail: View>: NSViewRepre
             let detailW = subviews[1].frame.width
             if contentContainer?.isFrozen == true {
                 playbackDividerPositions = (browserW, detailW)
-                UserDefaults.standard.set(Double(browserW), forKey: "playbackDividerSidebar")
-                UserDefaults.standard.set(Double(detailW), forKey: "playbackDividerContent")
+                UserDefaults.standard.set(Double(browserW), forKey: "Skagway.playbackDividerSidebar")
+                UserDefaults.standard.set(Double(detailW), forKey: "Skagway.playbackDividerContent")
                 // Reflow the clipped grid to the new browser width once the drag settles.
                 frozenReflowWork?.cancel()
                 let work = DispatchWorkItem { [weak self] in self?.contentContainer?.reflowToCurrentWidth() }

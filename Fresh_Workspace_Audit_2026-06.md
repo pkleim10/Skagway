@@ -18,7 +18,7 @@ Support for both rapid scanning/browsing and careful, deliberate work on individ
 
 ---
 
-## Baseline: Current VideoMaster Detail / Inspector Layout (as of latest main)
+## Baseline: Current Skagway Detail / Inspector Layout (as of latest main)
 
 **Hero / Media Area (top, dominant height)**
 - Large framed area for either:

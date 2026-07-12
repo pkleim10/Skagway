@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - VideoMaster Design System
+// MARK: - Skagway Design System
 //
 // Single source of truth for the **Cinematic Blue** visual language.
 // Opinionated dark-first theme with blue accents, blue gradients,

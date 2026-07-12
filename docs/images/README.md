@@ -6,7 +6,7 @@ These images and the shot list below are preserved for when the guide is revived
 
 ## How to capture
 
-1. Use **VideoMaster 0.6.6** or newer.
+1. Use **Skagway 0.6.6** or newer.
 2. Prefer **window ~1200×800** (or your usual size) and **light or dark** mode — pick one and stay consistent across shots.
 3. Hide unrelated apps; use a **clean desktop** or blur if you share publicly.
 4. Save as **PNG** (good for UI) into this folder with the filenames below.
@@ -24,7 +24,7 @@ These images and the shot list below are preserved for when the guide is revived
 | `detail-pane.png` | Detail: thumbnail or filmstrip + metadata | One video selected; optional filmstrip tab |
 | `detail-tags.png` | Tag chips in detail (optional) | Same; scroll to Tags if needed |
 | `toolbar.png` | Top toolbar: Add Folder, Import, view mode, Surprise Me, sort | Crop top of browsing pane |
-| `settings-library.png` | Settings → Library tab | **VideoMaster → Settings…** (library must be open) |
+| `settings-library.png` | Settings → Library tab | **Skagway → Settings…** (library must be open) |
 | `settings-video.png` | Settings → Video tab | Same |
 | `settings-data-sources.png` | Settings → Data Sources with at least one folder | Same |
 | `settings-file-ext.png` | Settings → File Ext | Same |

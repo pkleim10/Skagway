@@ -1,5 +1,5 @@
 import XCTest
-@testable import VideoMaster
+@testable import Skagway
 
 final class MetadataApplyTests: XCTestCase {
     private let featuringID = UUID(uuidString: "938F1A76-3FD9-4F51-B073-083CA5CF7EE7")!

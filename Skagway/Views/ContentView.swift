@@ -12,7 +12,7 @@ struct ContentView: View {
                 .appDesignSystem()
         } else if let vm = appState.libraryViewModel {
             LibraryContentView(vm: vm, thumbService: appState.thumbnailService)
-                .appDesignSystem()   // Injects VideoMaster design tokens + theme
+                .appDesignSystem()   // Injects Skagway design tokens + theme
         }
     }
 }
@@ -62,8 +62,8 @@ private struct LibraryContentView: View {
 
     private var navigationTitle: String {
         let name = DatabaseExportImport.activeLibraryDisplayName
-        // Default library file remains VideoMaster.VideoMaster on disk; show product name.
-        if name.isEmpty || name == "VideoMaster" { return "Skagway" }
+        // Default library basename is Skagway (file Skagway.machii).
+        if name.isEmpty || name == "Skagway" { return "Skagway" }
         return "Skagway — \(name)"
     }
 
@@ -995,7 +995,7 @@ private struct LibraryContentView: View {
         // No ⌘A handling here — deliberately. Select All lives in the Edit menu, whose action
         // routes through the responder chain first (a focused text field selects its own text,
         // List's table selects its rows) and falls back to `selectAllVideos()` only when nothing
-        // claims it — see the pasteboard CommandGroup in `VideoMasterApp`. Intercepting ⌘A in
+        // claims it — see the pasteboard CommandGroup in `SkagwayApp`. Intercepting ⌘A in
         // this monitor is what repeatedly broke "select all text" in focused fields: the monitor
         // runs before menu dispatch, and no snapshot-in-advance focus check here can beat the
         // menu action's at-action-time responder-chain routing.

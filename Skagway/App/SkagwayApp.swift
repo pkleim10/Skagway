@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @main
-struct VideoMasterApp: App {
+struct SkagwayApp: App {
     @State private var appState = AppState()
 
     var body: some Scene {

@@ -1,5 +1,5 @@
 import XCTest
-@testable import VideoMaster
+@testable import Skagway
 
 final class MetadataExportEncodingTests: XCTestCase {
     func testCSVEscape_plain() {

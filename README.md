@@ -1,8 +1,8 @@
-# VideoMaster
+# Skagway
 
 A native macOS app for browsing, organizing, and playing personal video libraries — without moving files into a proprietary container.
 
-VideoMaster indexes folders you already have on disk, then adds ratings, tags, smart collections, custom metadata, and fast keyboard-driven browsing on top.
+Skagway indexes folders you already have on disk, then adds ratings, tags, smart collections, custom metadata, and fast keyboard-driven browsing on top.
 
 **Current version:** see `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in [`project.yml`](project.yml) (also reflected in [`CHANGELOG.md`](CHANGELOG.md)).
 
@@ -21,7 +21,7 @@ VideoMaster indexes folders you already have on disk, then adds ratings, tags, s
 - **Dark-only** cinematic UI tuned for media work
 - Built for **large libraries** (thousands of videos) with careful SwiftUI and filtering performance
 
-Files stay where you put them. VideoMaster indexes and enhances; it does not own your media.
+Files stay where you put them. Skagway indexes and enhances; it does not own your media.
 
 ---
 
@@ -31,10 +31,10 @@ Files stay where you put them. VideoMaster indexes and enhances; it does not own
 |------|--------|
 | **macOS** | 26.0+ (Tahoe) |
 | **Xcode** | Current toolchain with Swift 5 language mode (`SWIFT_VERSION: "5"` in `project.yml`) |
-| **[XcodeGen](https://github.com/yonaskolb/XcodeGen)** | Regenerates `VideoMaster.xcodeproj` from `project.yml` |
+| **[XcodeGen](https://github.com/yonaskolb/XcodeGen)** | Regenerates `Skagway.xcodeproj` from `project.yml` |
 | **ffmpeg** (optional) | Required only for re-encode; path configurable in Settings → Tools |
 
-The app is **not sandboxed** (`VideoMaster.entitlements`) so it can browse arbitrary folders and run tools like ffmpeg. Treat that as intentional for a local library manager, not a shipping App Store configuration yet.
+The app is **not sandboxed** (`Skagway.entitlements`) so it can browse arbitrary folders and run tools like ffmpeg. Treat that as intentional for a local library manager, not a shipping App Store configuration yet.
 
 ---
 
@@ -51,7 +51,7 @@ That script:
 1. Bumps `CURRENT_PROJECT_VERSION` in `project.yml` (unless `--no-bump`)
 2. Runs `xcodegen generate`
 3. Builds **Release** by default
-4. Installs to `/Applications/VideoMaster.app`
+4. Installs to `/Applications/Skagway.app`
 
 Useful flags:
 
@@ -68,8 +68,8 @@ Manual alternative:
 ```bash
 brew install xcodegen   # if needed
 xcodegen generate
-open VideoMaster.xcodeproj
-# Build & run the VideoMaster scheme from Xcode
+open Skagway.xcodeproj
+# Build & run the Skagway scheme from Xcode
 ```
 
 ---
@@ -77,11 +77,11 @@ open VideoMaster.xcodeproj
 ## Project layout
 
 ```
-VideoMaster/
+Skagway/
 ├── project.yml              # XcodeGen project + version numbers
 ├── scripts/
 │   └── build_and_install.sh # Canonical build / install
-├── VideoMaster/             # App sources
+├── Skagway/             # App sources
 │   ├── App/                 # App entry, AppState
 │   ├── Views/               # SwiftUI UI (library, inspector, filters, player, settings)
 │   ├── ViewModels/          # LibraryViewModel (primary state)
@@ -121,7 +121,7 @@ Release history and Unreleased notes live in [`CHANGELOG.md`](CHANGELOG.md). Hig
 | [`AGENTS.md`](AGENTS.md) | How agents should build, commit, and release |
 | [`SKILLS.md`](SKILLS.md) | Skills / subagent guidance |
 | [`GRID-PERFORMANCE.md`](GRID-PERFORMANCE.md) | Grid / filtering performance notes |
-| [`VideoMaster/Design/README.md`](VideoMaster/Design/README.md) | Design system (dark cinematic blue) |
+| [`Skagway/Design/README.md`](Skagway/Design/README.md) | Design system (dark cinematic blue) |
 
 A full end-user guide is intentionally light for now; use the in-app UI, menus, and Settings day to day. Broader user docs are planned closer to a public release.
 
@@ -129,7 +129,7 @@ A full end-user guide is intentionally light for now; use the in-app UI, menus, 
 
 ## Status
 
-VideoMaster is under active development toward a **v1.0** readiness pass (regression coverage, performance audit, polish). It is a personal / local library tool first — not yet a sandboxed Mac App Store product.
+Skagway is under active development toward a **v1.0** readiness pass (regression coverage, performance audit, polish). It is a personal / local library tool first — not yet a sandboxed Mac App Store product.
 
 ---
 

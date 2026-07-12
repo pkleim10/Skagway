@@ -1,6 +1,6 @@
-# SKILLS.md — VideoMaster
+# SKILLS.md — Skagway
 
-This document describes the skills, subagents, and specialized workflows used when developing VideoMaster with AI assistance.
+This document describes the skills, subagents, and specialized workflows used when developing Skagway with AI assistance.
 
 ## Philosophy
 
@@ -65,11 +65,11 @@ These are examples of when to invoke more focused agents (using Cursor's subagen
 
 ## Project-Specific Skills
 
-- `videomaster-playback-test` — Guide through testing all three playback modes + enter/exit/switch/scroll/column restore behavior.
-- `competitor-research` — Research assistant for VideoMaster competitors (direct peer: Cinematica; default top 3: Cinematica, Infuse, NeoFinder); feature / performance / cost comparison with canvas deliverable.
-- `videomaster-build-check` — Validate that a change follows build/deploy rules. *(planned)*
-- `videomaster-filter-audit` — Analyze current filter state and performance characteristics. *(planned)*
-- `videomaster-scroll-debug` — Help debug scroll position and retiling issues. *(planned)*
+- `skagway-playback-test` — Guide through testing all three playback modes + enter/exit/switch/scroll/column restore behavior.
+- `competitor-research` — Research assistant for Skagway competitors (direct peer: Cinematica; default top 3: Cinematica, Infuse, NeoFinder); feature / performance / cost comparison with canvas deliverable.
+- `skagway-build-check` — Validate that a change follows build/deploy rules. *(planned)*
+- `skagway-filter-audit` — Analyze current filter state and performance characteristics. *(planned)*
+- `skagway-scroll-debug` — Help debug scroll position and retiling issues. *(planned)*
 
 When we create reusable skills, document them here and place the implementation according to Cursor's skills system (global or project-local).
 
@@ -94,4 +94,4 @@ Use judgment. Overusing subagents can add more noise than value.
 - `AGENTS.md` — Overall agent behavior contract
 - `ROADMAP.md` — Strategic direction
 
-Update this file as we formalize more VideoMaster-specific skills.
+Update this file as we formalize more Skagway-specific skills.

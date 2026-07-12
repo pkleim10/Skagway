@@ -19,7 +19,7 @@ Compare `source.url` and `destination` volume identifiers (`URLResourceValues.vo
 - **Same volume:** `FileManager.moveItem` is an atomic rename — effectively instant, no partial-file risk. Run it synchronously, no queue entry, no freeze. (This is most "Move Files…" usage today — reorganizing within one library folder tree.)
 - **Cross volume:** real copy + delete, can take real wall-clock time, needs everything below.
 
-### 2. `MoveJob` model (new file: `VideoMaster/Models/MoveJob.swift`)
+### 2. `MoveJob` model (new file: `Skagway/Models/MoveJob.swift`)
 
 Same shape as `ConversionJob`, adapted:
 

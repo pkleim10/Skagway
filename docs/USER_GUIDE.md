@@ -1,8 +1,8 @@
-# VideoMaster User Guide
+# Skagway User Guide
 
 **Status: Intentionally minimal**
 
-A full, production-quality user guide (with screenshots, detailed workflows, keyboard reference, glossary, etc.) will be written when VideoMaster is closer to a public / production release.
+A full, production-quality user guide (with screenshots, detailed workflows, keyboard reference, glossary, etc.) will be written when Skagway is closer to a public / production release.
 
 ## For now
 

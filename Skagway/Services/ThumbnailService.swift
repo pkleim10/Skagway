@@ -99,7 +99,7 @@ final class ThumbnailService: @unchecked Sendable {
 
     init() {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        let dir = caches.appendingPathComponent("VideoMaster/thumbnails", isDirectory: true)
+        let dir = caches.appendingPathComponent("Skagway/thumbnails", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         cacheDirectory = dir
         memoryCache.countLimit = 5000
@@ -281,7 +281,7 @@ final class ThumbnailService: @unchecked Sendable {
 
     // MARK: - Detail preview (disk + memory; long edge from settings)
 
-    /// Loads cached detail JPEG from disk/memory, or generates once and persists under `~/Library/Caches/.../VideoMaster/thumbnails/`.
+    /// Loads cached detail JPEG from disk/memory, or generates once and persists under `~/Library/Caches/.../Skagway/thumbnails/`.
     func detailPreviewImage(for video: Video, longEdge: Int) async -> NSImage? {
         let path = video.filePath
         let edge = Self.normalizedDetailLongEdge(longEdge)

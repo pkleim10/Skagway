@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build Skagway (VideoMaster scheme/project) and install it to /Applications.
+# Build Skagway and install it to /Applications.
 #
 # Default: Release build, auto-bumps CURRENT_PROJECT_VERSION in project.yml.
 #
@@ -57,15 +57,15 @@ if [[ ! -d "$DEVELOPER_DIR_PATH" ]]; then
   exit 1
 fi
 
-BUILD_LOG=$(mktemp -t videomaster-build.XXXXXX)
+BUILD_LOG=$(mktemp -t skagway-build.XXXXXX)
 trap 'rm -f "$BUILD_LOG"' EXIT
 
 echo "Building (${CONFIG})... (log: ${BUILD_LOG})"
 set +e
 DEVELOPER_DIR="$DEVELOPER_DIR_PATH" \
   xcodebuild \
-    -project VideoMaster.xcodeproj \
-    -scheme VideoMaster \
+    -project Skagway.xcodeproj \
+    -scheme Skagway \
     -configuration "$CONFIG" \
     build >"$BUILD_LOG" 2>&1
 BUILD_STATUS=$?
@@ -79,7 +79,7 @@ fi
 
 # Locate the freshly-built app in DerivedData (Xcode build folder).
 BUILD_SETTINGS=$(DEVELOPER_DIR="$DEVELOPER_DIR_PATH" \
-  xcodebuild -project VideoMaster.xcodeproj -scheme VideoMaster -configuration "$CONFIG" -showBuildSettings 2>/dev/null)
+  xcodebuild -project Skagway.xcodeproj -scheme Skagway -configuration "$CONFIG" -showBuildSettings 2>/dev/null)
 BUILT_PRODUCTS_DIR=$(printf '%s\n' "$BUILD_SETTINGS" | awk -F' = ' '/BUILT_PRODUCTS_DIR/ { print $2; exit }')
 FULL_PRODUCT_NAME=$(printf '%s\n' "$BUILD_SETTINGS" | awk -F' = ' '/FULL_PRODUCT_NAME/ { print $2; exit }')
 APP_PATH="${BUILT_PRODUCTS_DIR}/${FULL_PRODUCT_NAME}"
@@ -95,11 +95,6 @@ if [[ $INSTALL -eq 1 ]]; then
   DEST="/Applications/${FULL_PRODUCT_NAME}"
   if [[ -d "$DEST" ]]; then
     rm -rf "$DEST"
-  fi
-  # Remove legacy install name after customer-facing rename to Skagway.
-  if [[ "${FULL_PRODUCT_NAME}" == "Skagway.app" && -d "/Applications/VideoMaster.app" ]]; then
-    rm -rf "/Applications/VideoMaster.app"
-    echo "Removed legacy: /Applications/VideoMaster.app"
   fi
   cp -R "$APP_PATH" "$DEST"
   echo "Installed: ${DEST}"

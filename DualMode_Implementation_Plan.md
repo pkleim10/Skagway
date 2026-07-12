@@ -2,7 +2,7 @@
 
 **Reference:** Dual Mode wireframe (`DualMode-82e55a9e-....png`) posted 2026-06-28.
 
-**Goal:** Implement a deliberate **Browse / Focus** mode switch that changes the primary workspace experience in VideoMaster.
+**Goal:** Implement a deliberate **Browse / Focus** mode switch that changes the primary workspace experience in Skagway.
 
 This is the second major workspace variation we are exploring (after Library Desk on `feature/library-desk`).
 
@@ -47,9 +47,9 @@ It is a **mode switch that changes the user's primary task and the density/empha
 
 ---
 
-## 2. How This Differs from Current VideoMaster and Library Desk
+## 2. How This Differs from Current Skagway and Library Desk
 
-| Aspect                    | Current VideoMaster (main)          | Library Desk (prototype)             | Dual Mode (target)                          |
+| Aspect                    | Current Skagway (main)          | Library Desk (prototype)             | Dual Mode (target)                          |
 |---------------------------|-------------------------------------|--------------------------------------|---------------------------------------------|
 | Workspace model           | Persistent split (browser + detail) | Biased "desk" layout with docked inspector | Explicit Browse vs Focus modes             |
 | Mode switch               | No high-level workspace mode        | None                                 | Top-level Browse / Focus toggle            |

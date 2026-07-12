@@ -615,9 +615,9 @@ final class LibraryViewModel {
     var metadataExportErrorMessage: String? = nil
     private var metadataExportTask: Task<Void, Never>?
 
-    private static let metadataExportFormatKey = "VideoMaster.metadataExportFormat"
-    private static let metadataExportColumnOrderKey = "VideoMaster.metadataExportColumnOrder"
-    private static let metadataExportIncludedColumnsKey = "VideoMaster.metadataExportIncludedColumns"
+    private static let metadataExportFormatKey = "Skagway.metadataExportFormat"
+    private static let metadataExportColumnOrderKey = "Skagway.metadataExportColumnOrder"
+    private static let metadataExportIncludedColumnsKey = "Skagway.metadataExportIncludedColumns"
 
     struct MetadataExportPresentation: Identifiable, Equatable {
         let id = UUID()
@@ -1056,55 +1056,55 @@ final class LibraryViewModel {
 
     // MARK: - Preferences Persistence
 
-    private static let viewModeKey = "VideoMaster.viewMode"
-    private static let gridSizeKey = "VideoMaster.gridSize"
-    private static let sortColumnKey = "VideoMaster.sortColumn"
-    private static let sortAscendingKey = "VideoMaster.sortAscending"
-    private static let excludeCorruptKey = "VideoMaster.excludeCorrupt"
-    private static let confirmDeletionsKey = "VideoMaster.confirmDeletions"
-    private static let showThumbnailInDetailKey = "VideoMaster.showThumbnailInDetail"
-    private static let detailPreviewMaxLongEdgeKey = "VideoMaster.detailPreviewMaxLongEdge"
-    private static let autoAdjustVideoPaneKey = "VideoMaster.autoAdjustVideoPane"
+    private static let viewModeKey = "Skagway.viewMode"
+    private static let gridSizeKey = "Skagway.gridSize"
+    private static let sortColumnKey = "Skagway.sortColumn"
+    private static let sortAscendingKey = "Skagway.sortAscending"
+    private static let excludeCorruptKey = "Skagway.excludeCorrupt"
+    private static let confirmDeletionsKey = "Skagway.confirmDeletions"
+    private static let showThumbnailInDetailKey = "Skagway.showThumbnailInDetail"
+    private static let detailPreviewMaxLongEdgeKey = "Skagway.detailPreviewMaxLongEdge"
+    private static let autoAdjustVideoPaneKey = "Skagway.autoAdjustVideoPane"
     /// Legacy Int padding stepper; migrated once to boolean toggle.
-    private static let legacyAutoAdjustVideoPanePaddingKey = "VideoMaster.autoAdjustVideoPanePadding"
-    private static let browsingLayoutKey = "VideoMaster.browsingLayout"
-    private static let filmstripRowsKey = "VideoMaster.filmstripRows"
-    private static let filmstripColumnsKey = "VideoMaster.filmstripColumns"
-    private static let lastAppliedFilmstripRowsKey = "VideoMaster.lastAppliedFilmstripRows"
-    private static let lastAppliedFilmstripColumnsKey = "VideoMaster.lastAppliedFilmstripColumns"
-    private static let surpriseMeAutoPlaysKey = "VideoMaster.surpriseMeAutoPlays"
-    private static let playerFloatingWidthKey = "VideoMaster.playerFloatingWidth"
-    private static let playerFloatingHeightKey = "VideoMaster.playerFloatingHeight"
-    private static let playerFloatingPositionXKey = "VideoMaster.playerFloatingPositionX"
-    private static let playerFloatingPositionYKey = "VideoMaster.playerFloatingPositionY"
-    private static let playerStartPreferenceKey = "VideoMaster.playerStartPreference"
-    private static let playerSizeIsCompactKey = "VideoMaster.playerSizeIsCompact"
-    private static let playerLastWasFullScreenKey = "VideoMaster.playerLastWasFullScreen"
-    private static let fadeResumeBannerAutomaticallyKey = "VideoMaster.fadeResumeBannerAutomatically"
-    private static let resumeBannerFadeDelaySecondsKey = "VideoMaster.resumeBannerFadeDelaySeconds"
-    private static let tagBlindDefaultStateKey = "VideoMaster.tagBlindDefaultState"
-    private static let recentlyAddedDaysKey = "VideoMaster.recentlyAddedDays"
-    private static let recentlyPlayedDaysKey = "VideoMaster.recentlyPlayedDays"
-    private static let topRatedMinRatingKey = "VideoMaster.topRatedMinRating"
-    private static let showRecentlyAddedKey = "VideoMaster.showRecentlyAdded"
-    private static let showRecentlyPlayedKey = "VideoMaster.showRecentlyPlayed"
-    private static let showTopRatedKey = "VideoMaster.showTopRated"
-    private static let showDuplicatesKey = "VideoMaster.showDuplicates"
-    private static let showCorruptKey = "VideoMaster.showCorrupt"
-    private static let showMissingKey = "VideoMaster.showMissing"
-    private static let showRecentlyConvertedKey = "VideoMaster.showRecentlyConverted"
-    private static let recentlyConvertedEntriesKey = "VideoMaster.recentlyConvertedEntries"
-    private static let recentlyAppliedPathsKey = "VideoMaster.recentlyAppliedPaths"
-    private static let conversionJobsKey = "VideoMaster.conversionJobs"
-    private static let moveJobsKey = "VideoMaster.moveJobs"
-    private static let ffmpegPathKey = "VideoMaster.ffmpegPath"
-    private static let customMetadataFieldDefinitionsKey = "VideoMaster.customMetadataFieldDefinitions"
-    private static let missingCountScannedKey = "VideoMaster.missingCountScanned"
-    private static let filtersDrawerHeightKey = "VideoMaster.filtersDrawerHeight"
-    private static let filterDrawerHeightModeKey = "VideoMaster.filterDrawerHeightMode"
-    private static let inspectorHeroHeightKey = "VideoMaster.inspectorHeroHeight"
-    private static let missingVideoIdsKey = "VideoMaster.missingVideoIds"
-    private static let listColumnPreferencesKey = "VideoMaster.listColumnPreferences"
+    private static let legacyAutoAdjustVideoPanePaddingKey = "Skagway.autoAdjustVideoPanePadding"
+    private static let browsingLayoutKey = "Skagway.browsingLayout"
+    private static let filmstripRowsKey = "Skagway.filmstripRows"
+    private static let filmstripColumnsKey = "Skagway.filmstripColumns"
+    private static let lastAppliedFilmstripRowsKey = "Skagway.lastAppliedFilmstripRows"
+    private static let lastAppliedFilmstripColumnsKey = "Skagway.lastAppliedFilmstripColumns"
+    private static let surpriseMeAutoPlaysKey = "Skagway.surpriseMeAutoPlays"
+    private static let playerFloatingWidthKey = "Skagway.playerFloatingWidth"
+    private static let playerFloatingHeightKey = "Skagway.playerFloatingHeight"
+    private static let playerFloatingPositionXKey = "Skagway.playerFloatingPositionX"
+    private static let playerFloatingPositionYKey = "Skagway.playerFloatingPositionY"
+    private static let playerStartPreferenceKey = "Skagway.playerStartPreference"
+    private static let playerSizeIsCompactKey = "Skagway.playerSizeIsCompact"
+    private static let playerLastWasFullScreenKey = "Skagway.playerLastWasFullScreen"
+    private static let fadeResumeBannerAutomaticallyKey = "Skagway.fadeResumeBannerAutomatically"
+    private static let resumeBannerFadeDelaySecondsKey = "Skagway.resumeBannerFadeDelaySeconds"
+    private static let tagBlindDefaultStateKey = "Skagway.tagBlindDefaultState"
+    private static let recentlyAddedDaysKey = "Skagway.recentlyAddedDays"
+    private static let recentlyPlayedDaysKey = "Skagway.recentlyPlayedDays"
+    private static let topRatedMinRatingKey = "Skagway.topRatedMinRating"
+    private static let showRecentlyAddedKey = "Skagway.showRecentlyAdded"
+    private static let showRecentlyPlayedKey = "Skagway.showRecentlyPlayed"
+    private static let showTopRatedKey = "Skagway.showTopRated"
+    private static let showDuplicatesKey = "Skagway.showDuplicates"
+    private static let showCorruptKey = "Skagway.showCorrupt"
+    private static let showMissingKey = "Skagway.showMissing"
+    private static let showRecentlyConvertedKey = "Skagway.showRecentlyConverted"
+    private static let recentlyConvertedEntriesKey = "Skagway.recentlyConvertedEntries"
+    private static let recentlyAppliedPathsKey = "Skagway.recentlyAppliedPaths"
+    private static let conversionJobsKey = "Skagway.conversionJobs"
+    private static let moveJobsKey = "Skagway.moveJobs"
+    private static let ffmpegPathKey = "Skagway.ffmpegPath"
+    private static let customMetadataFieldDefinitionsKey = "Skagway.customMetadataFieldDefinitions"
+    private static let missingCountScannedKey = "Skagway.missingCountScanned"
+    private static let filtersDrawerHeightKey = "Skagway.filtersDrawerHeight"
+    private static let filterDrawerHeightModeKey = "Skagway.filterDrawerHeightMode"
+    private static let inspectorHeroHeightKey = "Skagway.inspectorHeroHeight"
+    private static let missingVideoIdsKey = "Skagway.missingVideoIds"
+    private static let listColumnPreferencesKey = "Skagway.listColumnPreferences"
 
     var excludeCorrupt: Bool = false {
         didSet {
@@ -1846,14 +1846,14 @@ final class LibraryViewModel {
         } else {
             // Migrate from legacy keys
             var migrated = LayoutParams.browsingDefaults()
-            if let h = defaults.object(forKey: "VideoMaster.detailHeight") as? Double, h > 0 {
+            if let h = defaults.object(forKey: "Skagway.detailHeight") as? Double, h > 0 {
                 migrated.detailVideoHeight = h
             }
-            if let w = defaults.object(forKey: "VideoMaster.detailWidth") as? Double, w > 0 {
+            if let w = defaults.object(forKey: "Skagway.detailWidth") as? Double, w > 0 {
                 migrated.detailWidthGrid = w
                 migrated.detailWidthList = w
             }
-            if let data = defaults.data(forKey: "VideoMaster.columnCustomization"),
+            if let data = defaults.data(forKey: "Skagway.columnCustomization"),
                let _ = try? JSONDecoder().decode(TableColumnCustomization<Video>.self, from: data)
             {
                 migrated.columnCustomizationData = data

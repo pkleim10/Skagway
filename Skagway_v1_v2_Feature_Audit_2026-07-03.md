@@ -1,10 +1,10 @@
-# VideoMaster v1 → v2 Feature Audit
+# Skagway v1 → v2 Feature Audit
 
 **Date:** 2026-07-03
 **Compared:** `main` (v1, pre-redesign) vs `feature/curated-wall` (v2, current branch)
 **Relationship:** `main` is the exact merge-base — 0 commits diverged since the branch point. `feature/curated-wall` is 36 commits / 65 files ahead, including two large deletions replaced by new components:
-- `VideoMaster/Views/Detail/VideoDetailView.swift` (1597 lines) → `Views/Inspector/CuratedWallInspector.swift` + `CuratedWallCard.swift` + `CuratedWallGrid.swift`
-- `VideoMaster/Views/Sidebar/BottomFilterColumnsView.swift` (572 lines) → `Views/Components/CuratedWallFiltersDrawer.swift` + `ActiveFilterPills.swift`
+- `Skagway/Views/Detail/VideoDetailView.swift` (1597 lines) → `Views/Inspector/CuratedWallInspector.swift` + `CuratedWallCard.swift` + `CuratedWallGrid.swift`
+- `Skagway/Views/Sidebar/BottomFilterColumnsView.swift` (572 lines) → `Views/Components/CuratedWallFiltersDrawer.swift` + `ActiveFilterPills.swift`
 
 Method: `git diff`/`git show` across both branches for every changed file, cross-checked against the branch's own self-audit docs (`CuratedWall_Cleanup_Plan.md`, `Playback_Audit_2026-06-29.md`, `Playback_Redesign_Plan_2026-06-30.md`) and `CHANGELOG.md`. Every claim below is sourced from actual diffs/greps, not inference; the two most surprising findings (drag-and-drop import, collections cap) were independently re-verified against source in this session.
 
@@ -28,7 +28,7 @@ What's left, after checking filters/sidebar, the Inspector/detail view, and top-
 
 ### P1 — Drag-and-drop file import is gone
 - **v1:** `ContentView.swift:286` — `.onDrop(of: [.fileURL], isTargeted: nil) { ... Task { await vm.importDroppedFiles(urls) } }`
-- **v2:** Zero `onDrop` calls anywhere in the tree (verified via `git grep -n onDrop` across all of `VideoMaster/`). `importDroppedFiles` still exists at `LibraryViewModel.swift:1690` but has zero callers.
+- **v2:** Zero `onDrop` calls anywhere in the tree (verified via `git grep -n onDrop` across all of `Skagway/`). `importDroppedFiles` still exists at `LibraryViewModel.swift:1690` but has zero callers.
 - **Impact:** Dragging video files onto the window silently does nothing in v2 — no error, no feedback, the feature just isn't wired up.
 
 ### P2 — Collections list capped at 6, no overflow

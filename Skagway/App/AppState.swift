@@ -12,6 +12,7 @@ final class AppState {
     var hasLibrary: Bool { dbManager != nil }
 
     init() {
+        LegacyRenameMigrator.migrateIfNeeded()
         thumbnailService = ThumbnailService()
         var db: DatabaseManager?
         var vm: LibraryViewModel?
@@ -40,7 +41,7 @@ final class AppState {
         }
     }
 
-    /// VideoMaster is dark-only; lock `NSApp` so system light mode cannot wash out the UI.
+    /// Skagway is dark-only; lock `NSApp` so system light mode cannot wash out the UI.
     static func applyDarkAppearance() {
         NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
     }

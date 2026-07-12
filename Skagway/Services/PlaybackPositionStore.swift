@@ -11,7 +11,7 @@ import Foundation
 /// dictionary lookup even for a library with thousands of videos.
 enum PlaybackPositionStore {
     private static let defaults = UserDefaults.standard
-    private static let key = "videomaster.playback.lastPositionsByPath"
+    private static let key = PrefsKeys.playbackLastPositionsByPath
     private static var cache: [String: Double] = (defaults.dictionary(forKey: key) as? [String: Double]) ?? [:]
 
     static func loadSeconds(filePath: String) -> Double? {

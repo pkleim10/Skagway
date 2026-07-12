@@ -3,7 +3,7 @@
 **Saved:** 2026-07-11  
 **Status:** Planning / not executed  
 **Canonical Cursor plan:** `~/.cursor/plans/licensing_trial_purchase_5b99b9a9.plan.md`  
-**This copy:** [`docs/SKAGWAY-GTM-PLAN.md`](SKAGWAY-GTM-PLAN.md) in the VideoMaster repo — revisit here or in Cursor Plans.
+**This copy:** [`docs/SKAGWAY-GTM-PLAN.md`](SKAGWAY-GTM-PLAN.md) in the Skagway repo — revisit here or in Cursor Plans.
 
 **Overview:** Best Mac local video organizer + premium grid chrome (overlays/vignette); free launch with forever grandfathering; studio credibility first; site on machiilabs.com.
 
@@ -58,14 +58,14 @@
 - **Usability bar (locked after Truvo/Fern):** do not suggest names user can’t practically use — exact App Store consumer app with that name, or live major brand owning the word/.com. Soft SEO / place / pronunciation alone don’t kill. Common English words can work (Eagle DAM).
 - **Screening rules (locked):** Only reject for reasons that would also kill Infuse / Peakto / VidHub / IINA / Eagle — (1) in-lane Mac video-library peer, (2) wrong product signal, (3) platform giant’s word. Empty Google / soft SEO / metaphor / pronunciation / descriptiveness do **not** disqualify.
 - **Also considered (not chosen):** VideoHound (prior working lock — retired); Krag, Krall, Sprawny, Dakota (shortlist leftovers); Fern, Moss, Nebula, Symphony, Juniper, Antares, Fargo, and many others cut in chat deep dives.
-- **VideoMaster** retired for customer-facing use; codebase may keep `VideoMaster` until rename task.
+- **Skagway** retired for customer-facing use; codebase may keep `Skagway` until rename task.
 - **Product URL:** `https://machiilabs.com/skagway`
 - **Voice:** indie software lab shipping multiple Mac products; Skagway is the first public proof of craft, not the company’s only bet
 - **Studio home (`machiilabs.com/`):** short lab story + Skagway as flagship; room for “coming next” without overselling
 - **Do not** style the public studio brand as “Machii” (one word) — always **Mach II**
 - **Before ship:** light USPTO / handle pass on Skagway
 
-Why not Mac App Store first: app is unsandboxed ([`VideoMaster.entitlements`](file:///Volumes/SSD/CursorProjects/VideoMaster/VideoMaster/VideoMaster.entitlements)); MAS needs a separate sandboxing project ([`ROADMAP.md`](file:///Volumes/SSD/CursorProjects/VideoMaster/ROADMAP.md) Phase 4).
+Why not Mac App Store first: app is unsandboxed ([`Skagway.entitlements`](file:///Volumes/SSD/CursorProjects/Skagway/Skagway/Skagway.entitlements)); MAS needs a separate sandboxing project ([`ROADMAP.md`](file:///Volumes/SSD/CursorProjects/Skagway/ROADMAP.md) Phase 4).
 
 Defaults:
 - **Studio domain:** `machiilabs.com` (Cloudflare DNS/nameservers) — sole public web presence
@@ -111,7 +111,7 @@ flowchart TD
 
 1. **`LicenseManager`** — status: `.founding` / `.licensed` / `.trial` / `.expired` / `.developer` / `.unlockedFreePeriod`
 2. **Phase 1** — no gate; always stamp founding on first run
-3. **Phase 2** — gate non-founding; Buy → Paddle; `skagway://license?key=…` (or keep videomaster:// until rename)
+3. **Phase 2** — gate non-founding; Buy → Paddle; `skagway://license?key=…` (or keep skagway:// until rename)
 4. **License UI** — show status; Buy/Enter only when not founding/licensed
 5. **Gate** — session-start only; never on playback/filter hot path
 
@@ -133,9 +133,9 @@ Out of scope as revenue. Optional “Support Mach II Labs” link later; never i
 ### Starting point (exists today)
 
 Hobby-framed pages already live at:
-- [`/other-fun-stuff/VideoMaster`](file:///Volumes/SSD/CursorProjects/kleimeyer-dot-com/src/app/other-fun-stuff/VideoMaster/page.jsx) — overview + Download
-- [`/other-fun-stuff/VideoMaster/guide`](file:///Volumes/SSD/CursorProjects/kleimeyer-dot-com/src/app/other-fun-stuff/VideoMaster/guide/page.jsx) — user guide
-- DMG href in [`constants.js`](file:///Volumes/SSD/CursorProjects/kleimeyer-dot-com/src/app/other-fun-stuff/VideoMaster/constants.js)
+- [`/other-fun-stuff/Skagway`](file:///Volumes/SSD/CursorProjects/kleimeyer-dot-com/src/app/other-fun-stuff/Skagway/page.jsx) — overview + Download
+- [`/other-fun-stuff/Skagway/guide`](file:///Volumes/SSD/CursorProjects/kleimeyer-dot-com/src/app/other-fun-stuff/Skagway/guide/page.jsx) — user guide
+- DMG href in [`constants.js`](file:///Volumes/SSD/CursorProjects/kleimeyer-dot-com/src/app/other-fun-stuff/Skagway/constants.js)
 
 That is **not** a product site yet (buried under “other fun stuff,” personal-site chrome).
 
@@ -144,7 +144,7 @@ That is **not** a product site yet (buried under “other fun stuff,” personal
 1. **Studio domain (owned):** `machiilabs.com` via Cloudflare Registrar + Cloudflare nameservers.  
 2. **Hosting** — same Next.js app on Vercel; add `machiilabs.com` (and `www`) in Vercel; in Cloudflare DNS create Vercel’s records with **DNS only** (grey cloud).  
 3. **App routes** — on the Mach II Labs host: `/` = studio home, `/skagway` = product, `/skagway/guide` = docs (middleware when `Host` is `machiilabs.com`).  
-4. **Redirects** — `/other-fun-stuff/VideoMaster*` on kleimeyer.com → `https://machiilabs.com/skagway` (301).  
+4. **Redirects** — `/other-fun-stuff/Skagway*` on kleimeyer.com → `https://machiilabs.com/skagway` (301).  
 5. **Standalone product chrome** — no personal-site / OFS nav; wordmark **Mach II Labs** + **Skagway**.  
 6. **CTAs (Phase 1):** primary **Download free**; secondary **User guide**; quiet note that founding users stay free when paid pricing arrives.  
 7. **CTAs (Phase 2):** primary **Download trial** / **Buy — $29.99**; founding status explained in FAQ.  
@@ -182,7 +182,7 @@ Almost nobody will search **Skagway** at launch. They search jobs: **Mac video c
 - `sitemap.xml` + robots for machiilabs.com host
 - Fast Core Web Vitals; real screenshots with descriptive `alt` (“Mac video library grid…”)
 - JSON-LD `SoftwareApplication` (name Skagway, OS macOS, category); Phase 1 offers as free; Phase 2 update offers to $29.99
-- 301 OFS VideoMaster → `/skagway` (equity + discovery)
+- 301 OFS Skagway → `/skagway` (equity + discovery)
 
 **Directories / listings (off-site)**
 - MacUpdate, AlternativeTo, Softpedia, Product Hunt: title/tagline = category language first
@@ -190,7 +190,7 @@ Almost nobody will search **Skagway** at launch. They search jobs: **Mac video c
 
 ### Product rename note
 
-**Locked: Skagway** (2026-07-11). Repo/bundle may stay VideoMaster until an explicit rename task (display name, About, DMG filename, site, Paddle). Prefer renaming customer-facing strings before public launch; deep bundle-id changes can wait.
+**Locked: Skagway** (2026-07-11). Repo/bundle may stay Skagway until an explicit rename task (display name, About, DMG filename, site, Paddle). Prefer renaming customer-facing strings before public launch; deep bundle-id changes can wait.
 
 ### Landing page structure (one composition, not a dashboard)
 
@@ -379,14 +379,14 @@ flowchart TD
 ### Track A — Organizer supremacy (ship before bragging)
 
 Priority polish that makes “best” believable:
-1. **v1.0 readiness** — formal 10k+ perf pass, feature audit vs ROADMAP, security pass on filesystem/ffmpeg paths ([`ROADMAP.md`](file:///Volumes/SSD/CursorProjects/VideoMaster/ROADMAP.md))
+1. **v1.0 readiness** — formal 10k+ perf pass, feature audit vs ROADMAP, security pass on filesystem/ffmpeg paths ([`ROADMAP.md`](file:///Volumes/SSD/CursorProjects/Skagway/ROADMAP.md))
 2. **Zero papercuts** — import/scan reliability, Missing/Corrupt/Duplicates workflows, selection/playback edge cases, keyboard completeness
 3. **Auto-import from Data Sources** — watch folders stay fresh without manual Scan (Phase 2 gap)
 4. **Notes field** — searchable, filterable, exportable
 5. **Richer search** — beyond filename FTS5: tags, notes, custom fields, path (even before full semantic AI)
 6. **Batch power** — multi-select operations feel inevitable, not bolted on
 7. **Library lock** (Part D) — differentiator Infuse doesn’t own for personal libraries
-8. **Real user guide** — stub [`docs/USER_GUIDE.md`](file:///Volumes/SSD/CursorProjects/VideoMaster/docs/USER_GUIDE.md) → product-grade guide on site
+8. **Real user guide** — stub [`docs/USER_GUIDE.md`](file:///Volumes/SSD/CursorProjects/Skagway/docs/USER_GUIDE.md) → product-grade guide on site
 
 ### Track B — Pretty library look (revised 2026-07-11)
 
@@ -424,7 +424,7 @@ Card chrome on the existing thumbnail (composited in UI or cached “display sti
 
 After A+B MVP are convincing:
 - Near-duplicate / perceptual similarity (beyond SHA-256)
-- Filename/path auto-tag suggestions (local heuristics first; vision AI later per [`AI-IMPROVEMENTS.md`](file:///Volumes/SSD/CursorProjects/VideoMaster/AI-IMPROVEMENTS.md))
+- Filename/path auto-tag suggestions (local heuristics first; vision AI later per [`AI-IMPROVEMENTS.md`](file:///Volumes/SSD/CursorProjects/Skagway/AI-IMPROVEMENTS.md))
 - Natural-language → collection rules (local or hybrid)
 - Semantic search (Phase 3) once notes + richer fields exist to embed
 - Posters/TMDB (B2) if screenshots still feel thin vs Infuse

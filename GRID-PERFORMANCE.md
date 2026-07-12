@@ -36,7 +36,7 @@ Relevant: `LibraryViewModel.applyFilteredVideos`, `recomputeFilteredVideos`.
 - When **`contentID` changes**, the content pane’s `NSHostingView.rootView` is **replaced** (when not frozen). That is a **full** new SwiftUI tree for **toolbar + grid/list + overlays**.
 - This was added to fix **stale toolbar** state; it **corrects UI** but **amplifies** the cost of any `filteredVideosVersion` bump.
 
-File: `VideoMaster/Views/ContentView.swift`, `VideoMaster/Views/Components/ResizableSplitView.swift` (`updateNSView`, `lastContentID`).
+File: `Skagway/Views/ContentView.swift`, `Skagway/Views/Components/ResizableSplitView.swift` (`updateNSView`, `lastContentID`).
 
 ### 2.3 `.id(filteredVideosVersion)` on the grid (and list)
 
@@ -51,7 +51,7 @@ When the version increments, SwiftUI treats the subtree as a **new** identity: *
 
 **Interaction with `contentID`:** For the same version bump, you can get **both** a new hosting `rootView` **and** an `.id` tear-down — redundant churn.
 
-File: `VideoMaster/Views/Library/LibraryGridView.swift` (outer `VStack`).
+File: `Skagway/Views/Library/LibraryGridView.swift` (outer `VStack`).
 
 ---
 
@@ -63,7 +63,7 @@ Loads use `NSCache` + disk reads that **do not** wait on generation.
 
 **P0:** `generateThumbnail` and filmstrip builds are **coalesced per path** (one in-flight `Task`, many awaiters) and limited to **4 concurrent** AV jobs via `ThumbnailGenerationGate`.
 
-File: `VideoMaster/Services/ThumbnailService.swift`.
+File: `Skagway/Services/ThumbnailService.swift`.
 
 ### 3.2 `VideoGridCell` loading strategy
 
@@ -78,7 +78,7 @@ File: `VideoMaster/Services/ThumbnailService.swift`.
 - **Concurrency:** grid `.task`s still **schedule** freely, but **AV generation** is **capped** and **deduped** per path inside `ThumbnailService`.
 - **Cancellation:** scrolling away cancels `.task`; shared in-flight work for a path may still **finish** if another consumer is waiting (by design).
 
-File: `VideoMaster/Views/Library/LibraryGridView.swift` (`VideoGridCell`).
+File: `Skagway/Views/Library/LibraryGridView.swift` (`VideoGridCell`).
 
 ### 3.3 List mode contrast
 
@@ -87,7 +87,7 @@ File: `VideoMaster/Views/Library/LibraryGridView.swift` (`VideoGridCell`).
 - Fewer visible thumbnails at once.
 - `Table` **reuses** row views more aggressively than a grid of large cells.
 
-File: `VideoMaster/Views/Library/ThumbnailView.swift`.
+File: `Skagway/Views/Library/ThumbnailView.swift`.
 
 ---
 
@@ -192,11 +192,11 @@ File: `ResizableSplitView.swift`.
 
 | Concern | Primary files |
 |--------|----------------|
-| Grid layout, scroll, cells | `VideoMaster/Views/Library/LibraryGridView.swift` |
-| Thumbnails, AV gen, cache | `VideoMaster/Services/ThumbnailService.swift` |
-| Filtered list + version | `VideoMaster/ViewModels/LibraryViewModel.swift` |
-| Content host replacement | `VideoMaster/Views/ContentView.swift`, `ResizableSplitView.swift` |
-| List / table path | `VideoMaster/Views/Library/LibraryListView.swift`, `ThumbnailView.swift` |
+| Grid layout, scroll, cells | `Skagway/Views/Library/LibraryGridView.swift` |
+| Thumbnails, AV gen, cache | `Skagway/Services/ThumbnailService.swift` |
+| Filtered list + version | `Skagway/ViewModels/LibraryViewModel.swift` |
+| Content host replacement | `Skagway/Views/ContentView.swift`, `ResizableSplitView.swift` |
+| List / table path | `Skagway/Views/Library/LibraryListView.swift`, `ThumbnailView.swift` |
 
 ---
 

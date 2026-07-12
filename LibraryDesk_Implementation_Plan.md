@@ -301,11 +301,11 @@ Current design system is already very close:
 
 ## 11. Files Likely to Change
 
-- `VideoMaster/Views/Sidebar/LibraryDeskSidebar.swift` (major)
-- `VideoMaster/Views/ContentView.swift` (browse header area, zone labels, main layout structure)
-- `VideoMaster/Views/Library/LibraryGridView.swift` + `VideoGridCell` (inside same file)
-- `VideoMaster/Views/Detail/VideoDetailView.swift` (inspector subsections, player framing)
-- `VideoMaster/Design/DesignSystem.swift` (possible new tokens / modifiers)
+- `Skagway/Views/Sidebar/LibraryDeskSidebar.swift` (major)
+- `Skagway/Views/ContentView.swift` (browse header area, zone labels, main layout structure)
+- `Skagway/Views/Library/LibraryGridView.swift` + `VideoGridCell` (inside same file)
+- `Skagway/Views/Detail/VideoDetailView.swift` (inspector subsections, player framing)
+- `Skagway/Design/DesignSystem.swift` (possible new tokens / modifiers)
 - Possibly new small components:
   - `FilterPill.swift` or similar for the filter chip row
   - Refined `RatingView` usage or a viewer-specific one
@@ -336,7 +336,7 @@ User notes after initial prototype:
 1. The sidebar should show collections and allow new collection to be added.  
    → Implemented: "COLLECTIONS" section in `LibraryDeskSidebar` with live list (counts), tap-to-filter, context menu (edit/delete), and "New Collection" that presents `CollectionEditorView`.
 
-2. The library section needs to show the smart libraries from the main VideoMaster branch (corrupted, duplicates, etc).  
+2. The library section needs to show the smart libraries from the main Skagway branch (corrupted, duplicates, etc).  
    → Implemented: Full LIBRARY list now includes All Videos + Recently Added/Played + Top Rated + Duplicates + Corrupt + Missing + Imports (respecting show* toggles and using the real `SidebarFilter` cases).
 
 3. There appears to be no way to actually filter on tags, rating, duration.  

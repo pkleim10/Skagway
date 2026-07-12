@@ -1,4 +1,4 @@
-# VideoMaster Design System
+# Skagway Design System
 
 This directory contains the design language and tokens that should drive all visual decisions going forward.
 

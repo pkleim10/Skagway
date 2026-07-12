@@ -1,4 +1,4 @@
-# VideoMaster — AI Enhancement Suggestions
+# Skagway — AI Enhancement Suggestions
 
 ## High-Value AI Use Cases
 
