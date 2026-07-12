@@ -62,8 +62,9 @@ private struct LibraryContentView: View {
 
     private var navigationTitle: String {
         let name = DatabaseExportImport.activeLibraryDisplayName
-        if name.isEmpty || name == "VideoMaster" { return "VideoMaster" }
-        return "VideoMaster — \(name)"
+        // Default library file remains VideoMaster.VideoMaster on disk; show product name.
+        if name.isEmpty || name == "VideoMaster" { return "Skagway" }
+        return "Skagway — \(name)"
     }
 
     private var detailID: String {

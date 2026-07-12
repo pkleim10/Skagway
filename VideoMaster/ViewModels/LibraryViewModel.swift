@@ -4119,8 +4119,33 @@ final class LibraryViewModel {
         return nil
     }
 
+    /// Bumps play count / last-played without reloading the library. A naive DB write would fire
+    /// `ValueObservation` → `videos = fetchAll` → O(n) filter/counts cascade and freeze playback
+    /// for several seconds on large libraries (first frame stuck while the main actor is busy).
     func recordPlay(for video: Video) async {
         guard let id = video.databaseId else { return }
+        guard let idx = videoIndexByPath[video.filePath] else {
+            try? await videoRepo.recordPlay(videoId: id)
+            return
+        }
+
+        let now = Date()
+        suppressVideosDidSet = true
+        var updated = videos
+        updated[idx].playCount += 1
+        updated[idx].lastPlayed = now
+        videos = updated
+        videosByPath[video.filePath] = updated[idx]
+        // Keep the filtered row in sync when present (no membership change → no version bump).
+        if let fIdx = filteredIndexByPath[video.filePath], fIdx < filteredVideos.count {
+            var filtered = filteredVideos
+            filtered[fIdx].playCount = updated[idx].playCount
+            filtered[fIdx].lastPlayed = now
+            filteredVideos = filtered
+        }
+        suppressVideosDidSet = false
+
+        discardObservationDeliveries += 1
         try? await videoRepo.recordPlay(videoId: id)
     }
 

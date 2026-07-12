@@ -230,7 +230,7 @@ struct VideoSettingsView: View {
             } header: {
                 Text("Playback")
             } footer: {
-                Text("After resuming inline playback from a remembered position, VideoMaster shows a banner with Start at beginning. When fade is enabled, that banner fades out after the delay; playback keeps going from the resumed time.")
+                Text("After resuming inline playback from a remembered position, Skagway shows a banner with Start at beginning. When fade is enabled, that banner fades out after the delay; playback keeps going from the resumed time.")
             }
 
             Section {
@@ -324,7 +324,7 @@ struct ToolsSettingsView: View {
             } header: {
                 Text("FFmpeg")
             } footer: {
-                Text("FFmpeg is used to repair videos that won\u{2019}t play in VideoMaster\u{2019}s built-in player (\u{201C}Fix for Built-in Player\u{201D} in the video context menu). VideoMaster auto-discovers ffmpeg at standard Homebrew and system paths. Set a custom path if your ffmpeg is installed elsewhere.")
+                Text("FFmpeg is used to repair videos that won\u{2019}t play in Skagway\u{2019}s built-in player (\u{201C}Fix for Built-in Player\u{201D} in the video context menu). Skagway auto-discovers ffmpeg at standard Homebrew and system paths. Set a custom path if your ffmpeg is installed elsewhere.")
             }
         }
         .formStyle(.grouped)

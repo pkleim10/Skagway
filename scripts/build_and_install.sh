@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build VideoMaster and install it to /Applications.
+# Build Skagway (VideoMaster scheme/project) and install it to /Applications.
 #
 # Default: Release build, auto-bumps CURRENT_PROJECT_VERSION in project.yml.
 #
@@ -96,9 +96,14 @@ if [[ $INSTALL -eq 1 ]]; then
   if [[ -d "$DEST" ]]; then
     rm -rf "$DEST"
   fi
+  # Remove legacy install name after customer-facing rename to Skagway.
+  if [[ "${FULL_PRODUCT_NAME}" == "Skagway.app" && -d "/Applications/VideoMaster.app" ]]; then
+    rm -rf "/Applications/VideoMaster.app"
+    echo "Removed legacy: /Applications/VideoMaster.app"
+  fi
   cp -R "$APP_PATH" "$DEST"
   echo "Installed: ${DEST}"
 fi
 
 echo ""
-echo "✓ VideoMaster ${MARKETING} (${NEW_BUILD}) [${CONFIG}]"
+echo "✓ Skagway ${MARKETING} (${NEW_BUILD}) [${CONFIG}]"

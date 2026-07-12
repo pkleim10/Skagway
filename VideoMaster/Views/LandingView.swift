@@ -10,7 +10,7 @@ struct LandingView: View {
 
             // Title + subtitle
             VStack(spacing: AppSpacing.sm) {
-                Text("VideoMaster")
+                Text("Skagway")
                     .font(.largeTitle.weight(.semibold))
                     .foregroundStyle(Color.appTextPrimary)
 

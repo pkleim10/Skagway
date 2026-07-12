@@ -15,7 +15,7 @@ struct DataSourcesSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Folders that VideoMaster will scan when you import.")
+            Text("Folders that Skagway will scan when you import.")
                 .font(.callout)
                 .foregroundStyle(Color.appTextSecondary)
                 .padding(.horizontal, 16)

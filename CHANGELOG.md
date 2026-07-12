@@ -31,6 +31,12 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.50.0 (build 751) - 2026-07-12
+
+- **Customer-facing rename to Skagway** — Dock/Finder app name (`Skagway.app`), display name, About, landing title, window titles, and settings copy. Bundle ID, App Support paths, and `.VideoMaster` library files unchanged (repo rename later).
+- **New app icon** — replaced the skeuomorphic film-reel mark with a modern video-first play-in-viewport icon in a northern-cool palette (midnight slate, ice play glyph, subtle aurora).
+- **Fixed ~6s “first frame frozen” stall when starting playback in large libraries.** Playback no longer waits for sidecar subtitle discovery before calling `play()` (large folders made directory scans delay motion). `recordPlay` no longer triggers a full GRDB library reload + O(n) filter cascade on every play.
+
 ## 0.40.0 (build 747) - 2026-07-10
 
 - **Added Albums** — manual membership collections listed with Smart Collections in Quick Filter (`rectangle.stack` vs `folder`). Context menu: **New Album from Selection…**, **Add to Album**, and **Remove from “Name”** when an album is active. Drawer: New Album / Rename / Delete. Membership is stored explicitly (not path-OR rules).

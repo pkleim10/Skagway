@@ -22,11 +22,13 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.videomaster.VideoMaster
-        MARKETING_VERSION: "0.40.0"
-        CURRENT_PROJECT_VERSION: "747"
+        PRODUCT_NAME: Skagway
+        MARKETING_VERSION: "0.50.0"
+        CURRENT_PROJECT_VERSION: "751"
         GENERATE_INFOPLIST_FILE: "YES"
         INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
-        INFOPLIST_KEY_CFBundleDisplayName: VideoMaster
+        INFOPLIST_KEY_CFBundleDisplayName: Skagway
+        INFOPLIST_KEY_CFBundleName: Skagway
         SWIFT_EMIT_LOC_STRINGS: "YES"
         ENABLE_PREVIEWS: "YES"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

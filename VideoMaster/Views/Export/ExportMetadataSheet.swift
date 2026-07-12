@@ -170,6 +170,6 @@ struct ExportMetadataSheet: View {
     private func defaultFileName() -> String {
         let stamp = ISO8601DateFormatter().string(from: Date())
             .replacingOccurrences(of: ":", with: "-")
-        return "VideoMaster-metadata-\(stamp)"
+        return "Skagway-metadata-\(stamp)"
     }
 }

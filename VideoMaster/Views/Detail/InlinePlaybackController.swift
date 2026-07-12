@@ -56,13 +56,15 @@ final class InlinePlaybackController {
         let videoPath = video.filePath
 
         statusTask = Task { @MainActor in
-            // Sidecar discovery (directory listing + SRT parse) off the main actor, in parallel
-            // with the isPlayable preflight — both can take seconds on cold/NAS files.
-            async let sidecarResult: (url: URL, cues: [SubtitleCue])? = Task.detached(priority: .userInitiated) {
+            // Sidecar discovery (directory listing + SRT parse) off the main actor. Must NOT gate
+            // `play()` — large folders make `contentsOfDirectory` take seconds, which used to leave
+            // the panel stuck on the first decoded frame until the scan finished.
+            let sidecarTask = Task.detached(priority: .userInitiated) {
+                () -> (url: URL, cues: [SubtitleCue])? in
                 guard let srt = SubtitleTrack.findSidecarSRT(for: videoURL) else { return nil }
                 let cues = SRTParser.parseFile(at: srt) ?? []
                 return (srt, cues)
-            }.value
+            }
 
             // Pre-flight: ask AVFoundation whether it can play this file before creating the player,
             // so unsupported formats are rejected immediately rather than showing a blank player.
@@ -70,6 +72,7 @@ final class InlinePlaybackController {
             let playable = (try? await asset.load(.isPlayable)) ?? false
             guard !Task.isCancelled else { return }
             guard playable else {
+                sidecarTask.cancel()
                 if FileManager.default.fileExists(atPath: videoPath) {
                     let ext = videoURL.pathExtension.uppercased()
                     playerError = ext.isEmpty
@@ -84,15 +87,9 @@ final class InlinePlaybackController {
 
             let newPlayer = AVPlayer(url: videoURL)
             player = newPlayer
-
-            if let sidecar = await sidecarResult, !Task.isCancelled {
-                _ = subtitleTrack.applyLoadedCues(sidecar.cues, sourceURL: sidecar.url)
-                Task { await viewModel.setHasSubtitles(videoPath: videoPath, hasSubtitles: true) }
-            } else if !Task.isCancelled {
-                Task { await viewModel.setHasSubtitles(videoPath: videoPath, hasSubtitles: false) }
-            }
             subtitleTrack.attach(to: newPlayer)
 
+            // Start playback immediately — subtitles attach when the sidecar task finishes.
             let resumeSeconds: Double? = {
                 guard seconds == 0, !ignoreResume else { return nil }
                 guard let s = PlaybackPositionStore.loadSeconds(filePath: videoPath) else { return nil }
@@ -123,6 +120,15 @@ final class InlinePlaybackController {
                 newPlayer.play()
             }
             Task { await viewModel.recordPlay(for: video) }
+
+            // Apply cues when ready; playback is already running.
+            if let sidecar = await sidecarTask.value, !Task.isCancelled {
+                guard player === newPlayer else { return }
+                _ = subtitleTrack.applyLoadedCues(sidecar.cues, sourceURL: sidecar.url)
+                Task { await viewModel.setHasSubtitles(videoPath: videoPath, hasSubtitles: true) }
+            } else if !Task.isCancelled {
+                Task { await viewModel.setHasSubtitles(videoPath: videoPath, hasSubtitles: false) }
+            }
 
             // Status monitoring: catch load failures that slip past the isPlayable check
             // (e.g. files that report playable but have an undecodable codec inside).

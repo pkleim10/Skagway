@@ -189,9 +189,10 @@ struct VideoMasterApp: App {
             CommandGroup(replacing: .textFormatting) { }
             CommandGroup(replacing: .printItem) { }
             CommandGroup(replacing: .appInfo) {
-                Button("About VideoMaster") {
+                Button("About Skagway") {
                     let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
                     NSApplication.shared.orderFrontStandardAboutPanel(options: [
+                        .applicationName: "Skagway",
                         .version: "build \(build)"
                     ])
                 }
