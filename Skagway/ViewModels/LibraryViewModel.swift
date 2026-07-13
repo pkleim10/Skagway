@@ -1078,6 +1078,7 @@ final class LibraryViewModel {
     private static let lastAppliedFilmstripRowsKey = "Skagway.lastAppliedFilmstripRows"
     private static let lastAppliedFilmstripColumnsKey = "Skagway.lastAppliedFilmstripColumns"
     private static let surpriseMeAutoPlaysKey = "Skagway.surpriseMeAutoPlays"
+    private static let gridHoverPreviewEnabledKey = "Skagway.gridHoverPreviewEnabled"
     private static let playerFloatingWidthKey = "Skagway.playerFloatingWidth"
     private static let playerFloatingHeightKey = "Skagway.playerFloatingHeight"
     private static let playerFloatingPositionXKey = "Skagway.playerFloatingPositionX"
@@ -1240,6 +1241,13 @@ final class LibraryViewModel {
     var surpriseMeAutoPlays: Bool = true {
         didSet {
             UserDefaults.standard.set(surpriseMeAutoPlays, forKey: Self.surpriseMeAutoPlaysKey)
+        }
+    }
+
+    /// Live muted hover scrub on Grid cards. Off by preference or while the floating player is open.
+    var gridHoverPreviewEnabled: Bool = true {
+        didSet {
+            UserDefaults.standard.set(gridHoverPreviewEnabled, forKey: Self.gridHoverPreviewEnabledKey)
         }
     }
 
@@ -1725,6 +1733,7 @@ final class LibraryViewModel {
         excludeCorrupt = defaults.bool(forKey: Self.excludeCorruptKey)
         confirmDeletions = defaults.object(forKey: Self.confirmDeletionsKey) as? Bool ?? true
         surpriseMeAutoPlays = defaults.object(forKey: Self.surpriseMeAutoPlaysKey) as? Bool ?? true
+        gridHoverPreviewEnabled = defaults.object(forKey: Self.gridHoverPreviewEnabledKey) as? Bool ?? true
         if let w = defaults.object(forKey: Self.playerFloatingWidthKey) as? Double, w > 0,
            let h = defaults.object(forKey: Self.playerFloatingHeightKey) as? Double, h > 0 {
             playerFloatingSize = CGSize(width: w, height: h)

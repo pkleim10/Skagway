@@ -28,6 +28,7 @@ enum PrefsKeys {
     static let excludeCorrupt = "Skagway.excludeCorrupt"
     static let confirmDeletions = "Skagway.confirmDeletions"
     static let showThumbnailInDetail = "Skagway.showThumbnailInDetail"
+    static let gridHoverPreviewEnabled = "Skagway.gridHoverPreviewEnabled"
     static let detailPreviewMaxLongEdge = "Skagway.detailPreviewMaxLongEdge"
     static let autoAdjustVideoPane = "Skagway.autoAdjustVideoPane"
     static let browsingLayout = "Skagway.browsingLayout"
@@ -95,6 +96,7 @@ enum PrefsKeys {
         "lastAppliedFilmstripRows",
         "lastAppliedFilmstripColumns",
         "surpriseMeAutoPlays",
+        "gridHoverPreviewEnabled",
         "playerFloatingWidth",
         "playerFloatingHeight",
         "playerFloatingPositionX",

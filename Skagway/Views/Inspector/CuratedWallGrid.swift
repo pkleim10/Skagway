@@ -80,7 +80,7 @@ struct CuratedWallGrid: View {
                             thumbnailService: thumbnailService,
                             isMoving: isMoving,
                             resumeFraction: resumeFraction(for: video),
-                            hoverPreviewEnabled: !viewModel.isPlayingInline,
+                            hoverPreviewEnabled: viewModel.gridHoverPreviewEnabled && !viewModel.isPlayingInline,
                             renameFocus: $renameFocus,
                             onCommitRename: { commitRename(video) },
                             onCancelRename: cancelRename,

@@ -177,8 +177,9 @@ struct VideoSettingsView: View {
 
             Section {
                 Toggle("Surprise Me! auto-plays selected video", isOn: $viewModel.surpriseMeAutoPlays)
+                Toggle("Hover preview on Grid cards", isOn: $viewModel.gridHoverPreviewEnabled)
             } footer: {
-                Text("Surprise Me updates selection immediately, loads or generates the filmstrip for the detail pane, then starts auto-play if enabled, then scrolls the grid or list to the selection.")
+                Text("Surprise Me updates selection immediately, loads or generates the filmstrip for the detail pane, then starts auto-play if enabled, then scrolls the grid or list to the selection. Hover preview plays a muted cycling scrub when the pointer rests on a Grid card (disabled automatically while the floating player is open).")
             }
 
             Section {

@@ -35,14 +35,11 @@ struct CuratedWallCard: View {
 
     private let thumbHeight: CGFloat = 188
     private let corner: CGFloat = 8
-
-    /// Title on scrim except while renaming or during live hover preview (keep the peek clear).
-    private var showChromeTitleOnThumb: Bool {
-        !isRenaming && previewPlayer == nil
-    }
+    private let titleScrimFade: Animation = .easeInOut(duration: 0.5)
 
     var body: some View {
         let isSelected = selectionState.isSelected
+        let titleVisible = !isRenaming && previewPlayer == nil
         VStack(alignment: .leading, spacing: 6) {
             ZStack(alignment: .bottom) {
                 thumbMedia
@@ -59,9 +56,11 @@ struct CuratedWallCard: View {
                         .allowsHitTesting(false)
                     }
                     .overlay(alignment: .bottom) {
-                        // Title scrim — readable filename on the image itself.
-                        if showChromeTitleOnThumb {
+                        // Keep in hierarchy and fade — sudden remove felt abrupt when preview starts.
+                        if !isRenaming {
                             titleScrim
+                                .opacity(titleVisible ? 1 : 0)
+                                .animation(titleScrimFade, value: titleVisible)
                         }
                     }
                     .overlay(alignment: .topTrailing) {
