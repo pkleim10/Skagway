@@ -32,6 +32,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 ## Unreleased
 
 - **Live hover preview on Grid cards** — muted cycling scrub through the existing file on hover (no new preview assets/DB fields); one preview at a time; disabled while the floating player is open.
+- **Stable Apple Development signing on this branch** — stops ad-hoc rebuilds from re-prompting Removable Volumes / breaking Spotlight (same fix as `feature/macos-15-sequoia`).
 - **GTM plan:** Skagway monetization locked to **free forever** — removed later paywall / founding grandfather / Paddle / LicenseManager for Skagway; direct notarized DMG + machiilabs.com remain the launch path (`docs/SKAGWAY-GTM-PLAN.md`).
 
 ## 0.60.0 (build 755) - 2026-07-12

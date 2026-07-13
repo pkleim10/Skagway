@@ -96,8 +96,15 @@ if [[ $INSTALL -eq 1 ]]; then
   if [[ -d "$DEST" ]]; then
     rm -rf "$DEST"
   fi
-  cp -R "$APP_PATH" "$DEST"
+  # ditto preserves bundle metadata better than cp -R for Launch Services / Spotlight.
+  ditto "$APP_PATH" "$DEST"
   echo "Installed: ${DEST}"
+
+  LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+  if [[ -x "$LSREGISTER" ]]; then
+    "$LSREGISTER" -f "$DEST" >/dev/null 2>&1 || true
+  fi
+  mdimport "$DEST" >/dev/null 2>&1 || true
 fi
 
 echo ""
