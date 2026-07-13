@@ -3,11 +3,7 @@ import AppKit
 import AVFoundation
 
 /// Dedicated elegant gallery card for the Curated Wall.
-/// Designed to match the refined mockups as closely as possible:
-/// - Large, prominent thumbnail area with clean framing
-/// - Minimal metadata underneath: short title + date + tiny stars
-/// - Soft selection treatment (ring + checkmark)
-/// - Generous breathing room, gallery feel
+/// Track B card chrome: vignette, title scrim, coherent on-thumb badges, premium selection/hover.
 struct CuratedWallCard: View {
     let video: Video
     let selectionState: CardSelectionState
@@ -37,97 +33,95 @@ struct CuratedWallCard: View {
     /// its own structured body, not this nested unstructured `Task`.
     @State private var detailUpgradeTask: Task<Void, Never>?
 
-    private let thumbHeight: CGFloat = 188   // taller, more gallery presence per the mock
+    private let thumbHeight: CGFloat = 188
     private let corner: CGFloat = 8
+
+    /// Title on scrim except while renaming or during live hover preview (keep the peek clear).
+    private var showChromeTitleOnThumb: Bool {
+        !isRenaming && previewPlayer == nil
+    }
 
     var body: some View {
         let isSelected = selectionState.isSelected
         VStack(alignment: .leading, spacing: 6) {
-            // Image area - the star of the card
-            ZStack(alignment: .bottomTrailing) {
-                Color.appSurface
+            ZStack(alignment: .bottom) {
+                thumbMedia
                     .frame(height: thumbHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
                     .overlay {
-                        if let thumbnail {
-                            Image(nsImage: thumbnail)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                        } else {
-                            Rectangle()
-                                .fill(Color.appSurface)
-                                .overlay {
-                                    Image(systemName: "film")
-                                        .font(.title2)
-                                        .foregroundStyle(Color.appTextTertiary.opacity(0.5))
-                                }
+                        // Soft vignette — cheap radial falloff (no blur filters on the hot path).
+                        RadialGradient(
+                            colors: [.clear, .black.opacity(isHovering ? 0.32 : 0.22)],
+                            center: .center,
+                            startRadius: 36,
+                            endRadius: 150
+                        )
+                        .allowsHitTesting(false)
+                    }
+                    .overlay(alignment: .bottom) {
+                        // Title scrim — readable filename on the image itself.
+                        if showChromeTitleOnThumb {
+                            titleScrim
                         }
                     }
-                    .overlay {
-                        // Live hover scrub — short peeks through the existing file (no new assets).
-                        if let previewPlayer {
-                            HoverPreviewPlayerView(player: previewPlayer)
-                                .allowsHitTesting(false)
-                                .transition(.opacity)
+                    .overlay(alignment: .topTrailing) {
+                        topBadgeCluster
+                            .padding(6)
+                    }
+                    .overlay(alignment: .topLeading) {
+                        if isSelected {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(.white, Color.appAccent)
+                                .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+                                .padding(6)
                         }
                     }
                     .overlay(alignment: .bottom) {
                         if let resumeFraction, resumeFraction > 0 {
                             GeometryReader { geo in
-                                Rectangle()
-                                    .fill(Color.yellow)
-                                    .frame(width: geo.size.width * resumeFraction, height: 3)
+                                ZStack(alignment: .leading) {
+                                    Rectangle()
+                                        .fill(Color.black.opacity(0.35))
+                                    Rectangle()
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [Color.appAccent, Color.yellow.opacity(0.95)],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                        )
+                                        .frame(width: max(2, geo.size.width * resumeFraction))
+                                }
                             }
                             .frame(height: 3)
+                            .allowsHitTesting(false)
                         }
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
-                    .overlay(
+                    .overlay {
                         RoundedRectangle(cornerRadius: corner, style: .continuous)
-                            .stroke(Color.appDivider.opacity(isHovering ? 0.45 : 0.18), lineWidth: 1)
-                    )
-
-                if let dur = video.formattedDuration {
-                    Text(dur)
-                        .font(.system(size: 10, weight: .medium))
-                        .monospacedDigit()
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.black.opacity(0.55))
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-                        .padding(6)
-                }
-
-                // Frozen-while-moving badge: dims the thumbnail and shows a spinner so it's
-                // obvious the file isn't safe to touch yet, without needing to right-click.
-                if isMoving {
-                    RoundedRectangle(cornerRadius: corner, style: .continuous)
-                        .fill(Color.black.opacity(0.45))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: thumbHeight)
-                    VStack(spacing: 4) {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(.white)
-                        Text("Moving…")
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(.white)
+                            .strokeBorder(
+                                isSelected
+                                    ? Color.appAccent.opacity(0.95)
+                                    : Color.white.opacity(isHovering ? 0.22 : 0.10),
+                                lineWidth: isSelected ? 1.5 : 1
+                            )
                     }
-                    .frame(maxWidth: .infinity, maxHeight: thumbHeight, alignment: .center)
-                }
-            }
-            // Selection checkmark — white check in a blue circle, upper-left corner.
-            .overlay(alignment: .topLeading) {
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, Color.appAccent)
-                        .padding(6)
+                    .shadow(
+                        color: .black.opacity(isHovering ? 0.28 : (isSelected ? 0.20 : 0.12)),
+                        radius: isHovering ? 10 : 6,
+                        y: isHovering ? 4 : 2
+                    )
+                    .scaleEffect(isHovering && !isSelected ? 1.015 : 1.0)
+                    .animation(.easeOut(duration: 0.15), value: isHovering)
+
+                if isMoving {
+                    movingOverlay
                 }
             }
 
-            // Very light metadata row (exactly as described in mocks + plan)
+            // Under-thumb row stays compact (date + stars) so card height is stable with on-scrim titles.
             VStack(alignment: .leading, spacing: 2) {
                 if isRenaming {
                     TextField("", text: $renameText)
@@ -147,33 +141,14 @@ struct CuratedWallCard: View {
                         .onExitCommand { onCancelRename() }
                         .onAppear { onRenameEditingChanged(true) }
                         .onDisappear { onRenameEditingChanged(false) }
-                } else {
-                    Text(video.fileName)
-                        .font(.system(size: 11))
-                        .fontWeight(isSelected ? .semibold : .regular)
-                        .foregroundStyle(Color.appTextPrimary)
-                        .lineLimit(1)
                 }
 
-                HStack {
+                HStack(spacing: 6) {
                     Text(video.dateAdded.formatted(date: .abbreviated, time: .omitted))
                         .font(.system(size: 9))
                         .foregroundStyle(Color.appTextTertiary)
 
-                    if video.hasSubtitles {
-                        // Same badge as the List view's subtitles indicator, scaled to this card's
-                        // smaller metadata row.
-                        Image(systemName: "captions.bubble.fill")
-                            .font(.system(size: 7, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(Color.appAccent, in: RoundedRectangle(cornerRadius: AppRadius.xs, style: .continuous))
-                            .help("Subtitles available")
-                            .accessibilityLabel("Subtitles available")
-                    }
-
-                    Spacer()
+                    Spacer(minLength: 0)
 
                     if video.rating > 0 {
                         HStack(spacing: 1) {
@@ -191,15 +166,17 @@ struct CuratedWallCard: View {
         }
         .padding(8)
         .background(
-            isSelected
-                ? Color(red: 12 / 255, green: 20 / 255, blue: 30 / 255)   // #0C141E
-                : (isHovering ? Color.appSurface.opacity(0.6) : Color.clear)
+            RoundedRectangle(cornerRadius: corner + 2, style: .continuous)
+                .fill(
+                    isSelected
+                        ? Color(red: 12 / 255, green: 20 / 255, blue: 30 / 255)
+                        : (isHovering ? Color.appSurface.opacity(0.55) : Color.clear)
+                )
         )
         .clipShape(RoundedRectangle(cornerRadius: corner + 2, style: .continuous))
-        // Blue selection border around the whole card (not just the thumbnail).
         .overlay(
             RoundedRectangle(cornerRadius: corner + 2, style: .continuous)
-                .stroke(isSelected ? Color.appAccent : Color.clear, lineWidth: 2)
+                .stroke(isSelected ? Color.appAccent.opacity(0.85) : Color.clear, lineWidth: 2)
         )
         .onHover { hovering in
             isHovering = hovering
@@ -218,13 +195,10 @@ struct CuratedWallCard: View {
         .onDisappear {
             stopHoverPreview()
         }
-        // Keyed on `thumbnailPath` (not just `filePath`) so "Regenerate Thumbnail" — which bumps
-        // `thumbnailPath` to a fresh cache-busting value — actually reloads this card.
         .task(id: "\(video.filePath)|\(video.thumbnailPath ?? "")") {
             if let lo = thumbnailService.loadThumbnail(for: video.filePath) {
                 thumbnail = lo
             }
-            // Upgrade to nicer detail preview asynchronously when available (no blocking the card)
             detailUpgradeTask?.cancel()
             detailUpgradeTask = Task {
                 if let hi = await thumbnailService.detailPreviewImage(for: video, longEdge: 720) {
@@ -237,10 +211,106 @@ struct CuratedWallCard: View {
         }
     }
 
+    // MARK: - Chrome pieces (SwiftUI-only; no extra bitmap assets)
+
+    private var thumbMedia: some View {
+        Color.appSurface
+            .overlay {
+                if let thumbnail {
+                    Image(nsImage: thumbnail)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else {
+                    Image(systemName: "film")
+                        .font(.title2)
+                        .foregroundStyle(Color.appTextTertiary.opacity(0.5))
+                }
+            }
+            .overlay {
+                if let previewPlayer {
+                    HoverPreviewPlayerView(player: previewPlayer)
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
+            }
+    }
+
+    private var titleScrim: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.55), .black.opacity(0.78)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 56)
+            .overlay(alignment: .bottomLeading) {
+                Text(video.fileName)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.55), radius: 1, y: 1)
+                    .lineLimit(2)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 7)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var topBadgeCluster: some View {
+        HStack(spacing: 4) {
+            if video.hasSubtitles {
+                chromeBadge {
+                    Image(systemName: "captions.bubble.fill")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+                .help("Subtitles available")
+                .accessibilityLabel("Subtitles available")
+            }
+            if let dur = video.formattedDuration {
+                chromeBadge {
+                    Text(dur)
+                        .font(.system(size: 10, weight: .semibold))
+                        .monospacedDigit()
+                }
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func chromeBadge<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+            )
+    }
+
+    private var movingOverlay: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                .fill(Color.black.opacity(0.45))
+            VStack(spacing: 4) {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(.white)
+                Text("Moving…")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.white)
+            }
+        }
+        .frame(height: thumbHeight)
+        .allowsHitTesting(false)
+    }
+
+    // MARK: - Hover preview
+
     private func startHoverPreviewIfAllowed() {
         guard hoverPreviewEnabled, !isMoving, !isRenaming else { return }
-        // Cancel this card's prior run only — do not bump the global generation here
-        // (that would race with a neighboring card that just claimed on mouse-enter).
         previewTask?.cancel()
         previewTask = nil
         if let previewPlayer {

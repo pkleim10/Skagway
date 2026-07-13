@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Grid card chrome (Track B MVP)** — vignette, bottom title scrim, unified duration/CC badges, accent resume bar, and subtler selection/hover lift on Wall cards (SwiftUI overlays only; no new assets).
+
 ## 0.61.0 (build 759) - 2026-07-12
 
 - **Live hover preview on Grid cards** — muted cycling scrub through the existing file on hover (no new preview assets/DB fields); one preview at a time; disabled while the floating player is open.
