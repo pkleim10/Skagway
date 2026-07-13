@@ -1,55 +1,54 @@
 # Skagway go-to-market plan (Mach II Labs)
 
 **Saved:** 2026-07-11  
+**Updated:** 2026-07-12 — monetization locked to **free forever** (no later paywall)  
 **Status:** Planning / not executed  
-**Canonical Cursor plan:** `~/.cursor/plans/licensing_trial_purchase_5b99b9a9.plan.md`  
+**Canonical Cursor plan:** `~/.cursor/plans/licensing_trial_purchase_5b99b9a9.plan.md` (historical; **superseded** on Skagway pricing by this doc)  
 **This copy:** [`docs/SKAGWAY-GTM-PLAN.md`](SKAGWAY-GTM-PLAN.md) in the Skagway repo — revisit here or in Cursor Plans.
 
-**Overview:** Best Mac local video organizer + premium grid chrome (overlays/vignette); free launch with forever grandfathering; studio credibility first; site on machiilabs.com.
+**Overview:** Best Mac local video organizer + premium grid chrome (overlays/vignette); **free forever**; studio credibility first; site on machiilabs.com.
 
 ## Open todos
 
-- [ ] Phase 2: Paddle one-time ($29.99), keys, checkout; not required for free-launch day one
-- [ ] LicenseManager + Keychain: founding/grandfather entitlement (Phase 1 free); later paid/licensed states; `#if DEBUG` unlock
-- [ ] License window: Phase 1 show Founding / free status; Phase 2 Buy / Enter key / Deactivate for non-grandfathered
-- [ ] Phase 2: checkout + deep link + seat check; personal key for dogfooding
-- [ ] Phase 1: no paywall (all unlocked). Phase 2: gate only non-grandfathered new installs after cutoff
 - [ ] Developer ID/notarization + DMG pipeline; update ROADMAP Phase 4
 - [x] Customer-facing rename to Skagway (locked 2026-07-11); display name, About, DMG, site before public launch
-- [ ] machiilabs.com: `/skagway` landing; honest free-launch + grandfather messaging; later paid CTAs
+- [ ] machiilabs.com: `/skagway` landing; **free forever** messaging (no “pricing coming later”)
 - [ ] machiilabs.com owned (Cloudflare). Add to Vercel; grey-cloud DNS; support@ Email Routing
-- [ ] Screenshots, demo, Cinematica compare; category SEO; free-launch / founding-user story
-- [ ] Free-launch checklist (MacStories, Reddit, PH); clear grandfather promise on site
+- [ ] Screenshots, demo, Cinematica compare; category SEO; free-forever story
+- [ ] Free-launch checklist (MacStories, Reddit, PH); clear free-forever promise on site
 - [ ] Optional library lock: password + Touch ID, Keychain-backed DEK, encrypt GRDB + thumbnails; auto-lock; honest FileVault note
-- [ ] Post-launch Phase 2: iOS companion player (LAN stream + pair auth); Skagway Player
+- [ ] Post-launch: iOS companion player (LAN stream + pair auth); Skagway Player
 - [ ] Part F Track A: v1.0 readiness + organizer supremacy polish (perf, UX, reliability, docs)
 - [ ] Part F Track B: grid chrome MVP; later B2 posters/TMDB; B3 AI Hollywood covers (BYO API key)
 - [ ] Part F Track C: power gaps that win vs Cinematica (notes, richer search, auto-import, near-dupes)
 
+**Cancelled (superseded 2026-07-12):** Paddle / LicenseManager / founding Keychain / paid flip for newcomers / Buy CTAs for Skagway. Paid products (e.g. **Ketchikan**) are a separate Mach II Labs product — not Skagway.
+
 ---
 
-# Skagway go-to-market: license + website + marketing
+# Skagway go-to-market: free forever + website + marketing
 
 ## Recommendation (locked)
 
 
-**Primary job of Skagway:** prove **Mach II Labs** ships serious Mac software — polish, performance, honesty — so future products inherit trust. **Not** predicated on a large market for video organizers. Revenue from Skagway is optional upside (Phase 2 newcomers); goodwill and craft are the win.
+**Primary job of Skagway:** prove **Mach II Labs** ships serious Mac software — polish, performance, honesty — so future products inherit trust. **Not** predicated on a large market for video organizers. **Skagway itself is not a revenue product.** Goodwill and craft are the win.
 
-**Free launch → charge later**, with **forever grandfathering** for ground-floor users. **Professional product site** under **Mach II Labs** on **`machiilabs.com`**, served from [kleimeyer-dot-com](file:///Volumes/SSD/CursorProjects/kleimeyer-dot-com) via DNS. **Paddle** for Phase 2 paid newcomers only — not required on day one.
+**Free forever.** Full-featured, no trial clock, no paywall, no “founding then charge later.” **Professional product site** under **Mach II Labs** on **`machiilabs.com`**. Studio revenue (when it comes) is from other products (e.g. **Ketchikan** — trial + one-time purchase), never from locking Skagway.
 
-**Why this product exists (locked, 2026-07-11)**
+**Why this product exists (locked, 2026-07-11; pricing clarified 2026-07-12)**
 - First full app built with AI-assisted development (developer has decades of shipping experience; AI accelerated the build).
 - Niche: local Mac video catalog/organizer — real users exist; not a mass market. Plan does **not** assume viral scale.
-- Free + serious presentation = best ROI for **studio brand**: downloads, word-of-mouth, SEO footprints, “these people make real software.”
+- Free forever + serious presentation = best ROI for **studio brand**: downloads, word-of-mouth, SEO footprints, “these people make real software.”
 - Future Mach II Labs products sell easier if Skagway felt trustworthy and capable.
-- Success metrics (in order): (1) polished public presence, (2) **best-in-class Mac local video organizer** (+ premium grid look), (3) founding users who’d recommend the studio, (4) category search visibility, (5) optional Phase 2 revenue.
+- Success metrics (in order): (1) polished public presence, (2) **best-in-class Mac local video organizer** (+ premium grid look), (3) users who’d recommend the studio, (4) category search visibility. **No Skagway revenue metric.**
 
-**Monetization (locked, 2026-07-11)**
-- **Phase 1 — Free launch:** Full-featured Skagway, no trial clock, no paywall. Serious-tool presentation (site, notarized DMG, category SEO) — not “freeware junk.”
-- **Phase 2 — Paid for newcomers:** One-time **$29.99**, **2 Macs**, via Paddle (trial optional for new users — decide at flip). New installs after cutoff must buy or trial.
-- **Grandfather forever:** Anyone who got in on the ground floor is **never asked to pay**. Honor permanently in-app (Keychain founding entitlement) and in public copy.
-- **Tip jar:** Optional later nicety only — not the business model.
-- **Honest messaging from day one:** Site states free during launch, that pricing comes later for *new* users, and early adopters stay free for life. No bait-and-switch.
+**Monetization (locked, 2026-07-12)**
+- **Skagway is free forever.** Full-featured, no trial, no paywall, no paid tier, no grandfather/cutoff story.
+- **No subscriptions — ever** (Mach II Labs company rule).
+- **Do not** plan a later paid flip for Skagway newcomers. That model is **retired**.
+- **Tip jar:** Optional later nicety only — not the business model; never a substitute for clarity that the app is free.
+- **Honest messaging from day one:** Site and press say **free forever**. No bait-and-switch language. No “free during launch.”
+- **Studio paid products** (e.g. Ketchikan) are marketed separately; they must not imply Skagway will become paid.
 
 **Brand lock-in**
 - **Studio display name:** Mach II Labs (Roman numeral — “Mach two”)
@@ -58,74 +57,47 @@
 - **Usability bar (locked after Truvo/Fern):** do not suggest names user can’t practically use — exact App Store consumer app with that name, or live major brand owning the word/.com. Soft SEO / place / pronunciation alone don’t kill. Common English words can work (Eagle DAM).
 - **Screening rules (locked):** Only reject for reasons that would also kill Infuse / Peakto / VidHub / IINA / Eagle — (1) in-lane Mac video-library peer, (2) wrong product signal, (3) platform giant’s word. Empty Google / soft SEO / metaphor / pronunciation / descriptiveness do **not** disqualify.
 - **Also considered (not chosen):** VideoHound (prior working lock — retired); Krag, Krall, Sprawny, Dakota (shortlist leftovers); Fern, Moss, Nebula, Symphony, Juniper, Antares, Fargo, and many others cut in chat deep dives.
-- **Skagway** retired for customer-facing use; codebase may keep `Skagway` until rename task.
 - **Product URL:** `https://machiilabs.com/skagway`
-- **Voice:** indie software lab shipping multiple Mac products; Skagway is the first public proof of craft, not the company’s only bet
-- **Studio home (`machiilabs.com/`):** short lab story + Skagway as flagship; room for “coming next” without overselling
+- **Voice:** indie software lab shipping multiple Mac products; Skagway is the first public proof of craft (free forever), not the company’s only bet
+- **Studio home (`machiilabs.com/`):** short lab story + Skagway as free flagship; room for “coming next” (e.g. Ketchikan) without overselling
 - **Do not** style the public studio brand as “Machii” (one word) — always **Mach II**
 - **Before ship:** light USPTO / handle pass on Skagway
 
-Why not Mac App Store first: app is unsandboxed ([`Skagway.entitlements`](file:///Volumes/SSD/CursorProjects/Skagway/Skagway/Skagway.entitlements)); MAS needs a separate sandboxing project ([`ROADMAP.md`](file:///Volumes/SSD/CursorProjects/Skagway/ROADMAP.md) Phase 4).
+**Distribution (locked):** Direct download via **Developer ID + notarized DMG** — not Mac App Store first. App is unsandboxed ([`Skagway.entitlements`](../Skagway/Skagway.entitlements)) so it can browse arbitrary folders and optionally use ffmpeg. MAS would require a separate sandboxing project ([`ROADMAP.md`](../ROADMAP.md) Phase 4) and would lower power-user appeal; **do not** pursue MAS for the free-forever launch. Keep ffmpeg as the re-encode engine (no AVFoundation-only replacement as the sole path).
 
 Defaults:
 - **Studio domain:** `machiilabs.com` (Cloudflare DNS/nameservers) — sole public web presence
-- **Phase 1:** free forever for installs that earn founding status
-- **Phase 2 price:** **$29.99** one-time, **2 Macs** (newcomers)
-- **Cutoff:** calendar date and/or build number — pick before flip; announce ahead of time
-- Debug builds unlocked; Wire DNS when site ships
+- **Skagway price:** free forever
+- Wire DNS when site ships
 
 ---
 
-## Part A — Licensing: free launch → paid newcomers
+## Part A — Licensing: free forever (no gate)
 
-### Architecture
+**No LicenseManager, no Paddle, no Keychain founding stamp, no Buy / Enter key UI for Skagway.**
 
 ```mermaid
 flowchart TD
-  launch[App launch] --> lic[LicenseManager]
-  lic --> state{Entitlement}
-  state -->|founding grandfather| full[Full app forever free]
-  state -->|developer| full
-  state -->|phase1 free period| stamp[Stamp founding in Keychain]
-  stamp --> full
-  state -->|phase2 licensed| full
-  state -->|phase2 unpaid new install| gate[Buy or trial]
-  gate --> paddle[Paddle Checkout]
-  gate --> activate[Paste license key]
-  paddle --> key[Key email / deep link]
-  activate --> verify[Verify + seat bind]
-  verify --> full
-  site[Product website] --> dmg[DMG download]
-  site -->|phase2| paddle
+  launch[App launch] --> full[Full app unlocked]
+  site[Product website] --> dmg[Notarized DMG download]
+  dmg --> launch
 ```
 
-### Grandfather mechanics (required)
+### Public promise (required)
 
-1. **On first launch during Phase 1** (or any build before cutoff): write a durable **founding** flag to Keychain (machine-local). That Mac stays unlocked for life on Skagway.
-2. **At Phase 2 flip:** builds require founding **or** paid license (or trial). No founding → gate.
-3. **Public promise:** FAQ + License UI: “Founding user — free for life.” Never nag Buy for grandfathered installs.
-4. **Second Mac:** founding is per-Mac Keychain (honest users). Optional later: free founding license keys emailed to early supporters for multi-Mac — not required for v1.
-5. **Cutoff announcement:** site banner weeks before flip; email list if you have one; changelog.
-
-### Core pieces
-
-1. **`LicenseManager`** — status: `.founding` / `.licensed` / `.trial` / `.expired` / `.developer` / `.unlockedFreePeriod`
-2. **Phase 1** — no gate; always stamp founding on first run
-3. **Phase 2** — gate non-founding; Buy → Paddle; `skagway://license?key=…` (or keep skagway:// until rename)
-4. **License UI** — show status; Buy/Enter only when not founding/licensed
-5. **Gate** — session-start only; never on playback/filter hot path
-
-### Threat model (short)
-
-Keychain wipe loses founding (same as any local entitlement). Crackers ignore gates. Design for honest users. Don’t put a global “master free key” in the binary.
+1. Site, FAQ, About, and press kit: **“Skagway is free forever.”**
+2. Never show a paywall, trial countdown, or “Buy” for Skagway.
+3. Optional later: quiet “Support Mach II Labs” / tip link — never framed as unlocking features.
+4. Do not imply early users are “founding” in a way that suggests later users will pay for Skagway.
 
 ### Distro
 
-Developer ID sign + notarize DMG; host under `/downloads/` (Skagway.dmg after rename). Phase 1 CTA = Download free. Phase 2 = Download trial / Buy.
+Developer ID sign + notarize DMG; host under `/downloads/Skagway.dmg` (or equivalent). CTA = **Download free**.
 
 ### Tip jar
 
-Out of scope as revenue. Optional “Support Mach II Labs” link later; never instead of Phase 2 pricing.
+Out of scope as revenue. Optional “Support Mach II Labs” link later only.
+
 ---
 
 ## Part B — Professional website
@@ -146,9 +118,8 @@ That is **not** a product site yet (buried under “other fun stuff,” personal
 3. **App routes** — on the Mach II Labs host: `/` = studio home, `/skagway` = product, `/skagway/guide` = docs (middleware when `Host` is `machiilabs.com`).  
 4. **Redirects** — `/other-fun-stuff/Skagway*` on kleimeyer.com → `https://machiilabs.com/skagway` (301).  
 5. **Standalone product chrome** — no personal-site / OFS nav; wordmark **Mach II Labs** + **Skagway**.  
-6. **CTAs (Phase 1):** primary **Download free**; secondary **User guide**; quiet note that founding users stay free when paid pricing arrives.  
-7. **CTAs (Phase 2):** primary **Download trial** / **Buy — $29.99**; founding status explained in FAQ.  
-8. **Paddle / legal** — seller **Mach II Labs**; product **Skagway**; `support@machiilabs.com` (Email Routing). Paddle live by Phase 2 flip.
+6. **CTAs:** primary **Download free**; secondary **User guide**. Pricing section = **Free forever** (one line, unambiguous).  
+7. **Legal / support** — `support@machiilabs.com` (Email Routing). No Paddle for Skagway.
 
 Env: `NEXT_PUBLIC_PRODUCT_SITE_URL=https://machiilabs.com/skagway`
 
@@ -165,14 +136,14 @@ Almost nobody will search **Skagway** at launch. They search jobs: **Mac video c
 - OG / social same as brand; search snippets optimized for category.
 
 **On-page (machiilabs.com/skagway)**
-- `<title>` + meta description: category phrase + outcome (fast / large libraries / files stay put) + Skagway
+- `<title>` + meta description: category phrase + outcome (fast / large libraries / files stay put) + Skagway + free
 - H1: category-led; logo/wordmark still Skagway
 - Body: natural use of catalog / organizer / library / Mac; avoid stuffing
-- FAQ answers real queries (sandbox/MAS, seats, trial, vs Infuse/Plex/Cinematica)
+- FAQ answers real queries (free forever, why not Mac App Store / sandbox, ffmpeg optional, vs Infuse/Plex/Cinematica)
 - Internal links: studio home ↔ product ↔ guide ↔ compare
 
 **Supporting URLs (same host)**
-- `/skagway` — primary commercial landing  
+- `/skagway` — primary product landing  
 - `/skagway/guide` — docs + long-tail how-tos  
 - `/skagway/vs-cinematica` (and optional `/skagway/vs-infuse`) — alternative intent  
 - Optional blog later: “Best Mac video organizers” style posts only if honest and maintained
@@ -181,16 +152,12 @@ Almost nobody will search **Skagway** at launch. They search jobs: **Mac video c
 - Canonical `https://machiilabs.com/skagway` (and per-page canonicals)
 - `sitemap.xml` + robots for machiilabs.com host
 - Fast Core Web Vitals; real screenshots with descriptive `alt` (“Mac video library grid…”)
-- JSON-LD `SoftwareApplication` (name Skagway, OS macOS, category); Phase 1 offers as free; Phase 2 update offers to $29.99
+- JSON-LD `SoftwareApplication` (name Skagway, OS macOS, category); **offers as free** permanently
 - 301 OFS Skagway → `/skagway` (equity + discovery)
 
 **Directories / listings (off-site)**
-- MacUpdate, AlternativeTo, Softpedia, Product Hunt: title/tagline = category language first
-- Press tips: subject lines like “Mac video organizer for large libraries” not only “Introducing Skagway”
-
-### Product rename note
-
-**Locked: Skagway** (2026-07-11). Repo/bundle may stay Skagway until an explicit rename task (display name, About, DMG filename, site, Paddle). Prefer renaming customer-facing strings before public launch; deep bundle-id changes can wait.
+- MacUpdate, AlternativeTo, Softpedia, Product Hunt: title/tagline = category language first; price = Free
+- Press tips: subject lines like “Free Mac video organizer for large libraries” not only “Introducing Skagway”
 
 ### Landing page structure (one composition, not a dashboard)
 
@@ -198,22 +165,21 @@ Hero (first viewport only):
 - Brand: **Skagway** (Mach II Labs) — visible wordmark
 - **Headline = SEO/job language** (organizer / catalog / library for Mac), not a cryptic brand slogan alone
 - One supporting sentence (large libraries, files stay put)
-- CTA group: Download trial · Buy
+- CTA group: **Download free** · User guide
 - One dominant product screenshot / short loop (full-bleed or edge-to-edge visual — not a card collage)
 
 Below the fold (one job per section):
 - **Why it’s different** — fast with thousands of videos (confirmed vs Cinematica)
-- **What you get** — wall, tags, smart collections, albums, player, metadata I/O, optional library lock (tight bullets)
+- **What you get** — grid, tags, smart collections, albums, player, metadata I/O, optional library lock (tight bullets)
 - **How it works** — indexes folders; files stay put
-- **Pricing** — Phase 1: free (founding users free for life). Phase 2: $29.99 one-time, 2 Macs for new users; FAQ states grandfather promise plainly
+- **Pricing** — **Free forever.** Full app, no trial, no paid tier. (Optional: Mach II Labs may sell other products later; Skagway stays free.)
 - **Compare** — short honest table vs Cinematica (performance + modern UX) and vs Infuse (organization depth)
-- **FAQ** — free launch / who pays later, sandbox/MAS, system requirements, license seats, refunds (Paddle), library lock vs FileVault
+- **FAQ** — free forever, why not App Store, system requirements (macOS 26+), ffmpeg for re-encode, library lock vs FileVault
 - **Footer** — support email, guide, GitHub releases optional
 
 ### Technical
 
 - Next.js routes under product path (`/skagway`)
-- Phase 2: Wire Paddle buy URL from env (`NEXT_PUBLIC_PADDLE_CHECKOUT_URL`)
 - Keep guide content; restyle shell to match product brand
 - Screenshots: export from Release build (Curated Wall + player + filters) — dark cinematic look is the brand
 
@@ -227,7 +193,7 @@ Below the fold (one job per section):
 
 **Search / SEO phrasing (titles, directories, ads — not instead of brand):** Mac video organizer · Mac video catalog · Mac video library manager.
 
-**Free-launch line:** Serious Mac video organizer — free while we launch; ground-floor users stay free for life.
+**Free-forever line:** Serious Mac video organizer — free forever from Mach II Labs.
 
 Wedge vs Cinematica: **same job, dramatically better at scale.**  
 Not competing as Infuse/Plex clone.
@@ -242,46 +208,43 @@ Not competing as Infuse/Plex clone.
 
 ### Launch channels (lightweight, sequential)
 
-1. Product site live + notarized DMG (SEO title/meta/JSON-LD day one); founding/grandfather copy live  
+1. Product site live + notarized DMG (SEO title/meta/JSON-LD day one); **free forever** copy live  
 2. Short post: personal network / X / LinkedIn  
-3. Mac-focused: MacStories tip inbox, Softpedia/MacUpdate — **category taglines** + free launch  
+3. Mac-focused: MacStories tip inbox, Softpedia/MacUpdate — **category taglines** + free forever  
 4. Communities: r/MacApps sparingly (value-first)  
 5. Product Hunt once site + DMG are stable  
 6. Comparison pages on machiilabs.com  
-7. **Later:** announce paid flip with advance notice; Paddle live; founding users untouched  
 
 ### In-app ↔ site consistency
 
-- Phase 1: no Buy nag; License UI shows founding/free  
-- Phase 2: price/seats match site; Buy only for non-founding  
-- About / License links to `/skagway` and guide
+- No Buy nag; no license gate  
+- About links to `/skagway` and guide; may state free forever  
+- Optional tip / support link only — never feature-gated  
 
 ---
 
 ## Implementation sequence
 
 0. **Part F Track A + B** — organizer polish + grid card chrome MVP (overlays/vignette); posters/TMDB optional later  
-1. Rename customer-facing strings → Skagway + founding Keychain stamp (no paywall)  
+1. Confirm customer-facing Skagway naming + About “free forever” copy  
 2. Notarized DMG → public downloads  
-3. Domain → Vercel → `/skagway` + OFS redirects + free-launch/grandfather copy + SEO  
+3. Domain → Vercel → `/skagway` + OFS redirects + **free forever** copy + SEO  
 4. Screenshots / demo / OG / FAQ (show jazzed grid cards)  
 5. Soft free launch → press / PH  
 6. Optional library lock (Part D)  
 7. Track C power/AI as post-launch differentiators  
-8. When ready: Paddle + gate for non-founding + announce cutoff  
-9. Update ROADMAP + companion Phase 2 note
+8. Update ROADMAP  
 
 ## Effort ballpark
 
 | Workstream | Calendar |
 |------------|----------|
-| Licensing in-app | ~1 week |
 | Notarized DMG pipeline | ~1–3 days |
 | Professional site + assets | ~1–2 weeks |
 | Library privacy lock (Part D) | ~3–7 days |
 | Launch marketing push | ~2–5 days around ship |
-| **Total to credible public sell** | **~3–6 weeks** |
-| iOS companion player (Phase 2) | separate project after Mac GTM |
+| **Total to credible public launch** | **~2–5 weeks** (no licensing workstream) |
+| iOS companion player | separate project after Mac GTM |
 
 ## Part D — Library privacy lock (optional, real security)
 
@@ -318,7 +281,7 @@ flowchart TD
 
 - **Opt-in** in Settings → Privacy / Security (off by default)
 - Set password → confirm → enable Touch ID unlock via `LocalAuthentication`
-- **Unlock gate** before any library UI, search, or thumbnail decode (after license gate if both apply)
+- **Unlock gate** before any library UI, search, or thumbnail decode
 - **Auto-lock:** on Mac sleep, app deactivate (configurable), and after idle timeout
 - **Change / disable password** requires current password (or recovery — see below)
 - **Export / backup** of DB only when unlocked; exported copies remain user’s responsibility
@@ -328,14 +291,13 @@ flowchart TD
 1. Generate random **DEK** (data encryption key); wrap with key derived from password (CryptoKit); store wrapped DEK + salt + verifier in **Keychain**
 2. Open GRDB with encryption (SQLCipher / passphrase configuration) using DEK after unlock; never persist DEK in UserDefaults
 3. Encrypt or gate thumbnail cache the same way (or wipe memory cache on lock)
-4. Biometric unlock: Keychain item accessible after `LocalAuthentication` success (same pattern as password managers — see SafeHaven `BiometricGate` as reference, different repo)
+4. Biometric unlock: Keychain item accessible after `LocalAuthentication` success (same pattern as password managers — see SafeHaven/Ketchikan `BiometricGate` as reference, different repo)
 5. **Recovery:** if password forgotten, library metadata cannot be recovered without a recovery key shown once at enable-time (user must save it). Do not offer a backdoor.
 
 ### Threat model (short)
 
 - Stops family / roommate / casual snoop on an unlocked session and hides catalog when locked
 - Does **not** claim NSA-grade protection of media files
-- Separate from **license** Keychain items (different service names)
 
 ### Marketing
 
@@ -344,7 +306,7 @@ flowchart TD
 
 ### Sequencing vs GTM
 
-- **Can ship after** core licensing + site if needed, but strong trust feature for paid launch
+- **Can ship after** site + DMG if needed; strong trust feature for public launch
 - Prefer implement before Product Hunt if schedule allows (~several days to a week for solid v1)
 - **Full video-file vault** and **iOS companion player** stay out of this GTM pass
 
@@ -379,14 +341,14 @@ flowchart TD
 ### Track A — Organizer supremacy (ship before bragging)
 
 Priority polish that makes “best” believable:
-1. **v1.0 readiness** — formal 10k+ perf pass, feature audit vs ROADMAP, security pass on filesystem/ffmpeg paths ([`ROADMAP.md`](file:///Volumes/SSD/CursorProjects/Skagway/ROADMAP.md))
+1. **v1.0 readiness** — formal 10k+ perf pass, feature audit vs ROADMAP, security pass on filesystem/ffmpeg paths ([`ROADMAP.md`](../ROADMAP.md))
 2. **Zero papercuts** — import/scan reliability, Missing/Corrupt/Duplicates workflows, selection/playback edge cases, keyboard completeness
-3. **Auto-import from Data Sources** — watch folders stay fresh without manual Scan (Phase 2 gap)
+3. **Auto-import from Data Sources** — watch folders stay fresh without manual Scan (roadmap gap)
 4. **Notes field** — searchable, filterable, exportable
 5. **Richer search** — beyond filename FTS5: tags, notes, custom fields, path (even before full semantic AI)
 6. **Batch power** — multi-select operations feel inevitable, not bolted on
 7. **Library lock** (Part D) — differentiator Infuse doesn’t own for personal libraries
-8. **Real user guide** — stub [`docs/USER_GUIDE.md`](file:///Volumes/SSD/CursorProjects/Skagway/docs/USER_GUIDE.md) → product-grade guide on site
+8. **Real user guide** — stub [`docs/USER_GUIDE.md`](USER_GUIDE.md) → product-grade guide on site
 
 ### Track B — Pretty library look (revised 2026-07-11)
 
@@ -424,7 +386,7 @@ Card chrome on the existing thumbnail (composited in UI or cached “display sti
 
 After A+B MVP are convincing:
 - Near-duplicate / perceptual similarity (beyond SHA-256)
-- Filename/path auto-tag suggestions (local heuristics first; vision AI later per [`AI-IMPROVEMENTS.md`](file:///Volumes/SSD/CursorProjects/Skagway/AI-IMPROVEMENTS.md))
+- Filename/path auto-tag suggestions (local heuristics first; vision AI later per [`AI-IMPROVEMENTS.md`](../AI-IMPROVEMENTS.md))
 - Natural-language → collection rules (local or hybrid)
 - Semantic search (Phase 3) once notes + richer fields exist to embed
 - Posters/TMDB (B2) if screenshots still feel thin vs Infuse
@@ -435,7 +397,7 @@ After A+B MVP are convincing:
 flowchart LR
   polishA[Track A polish]
   chromeB[Track B card chrome MVP]
-  launch[Free public launch]
+  launch[Free forever public launch]
   postersB2[Optional posters TMDB]
   trackC[Track C power AI]
   polishA --> launch
@@ -452,18 +414,22 @@ flowchart LR
 
 ### Marketing claim language (use carefully)
 
-- Yes: “The fastest, most powerful Mac app for organizing the videos already on your drives — with a library that looks as good as it works.”
+- Yes: “The fastest, most powerful Mac app for organizing the videos already on your drives — with a library that looks as good as it works. Free forever.”
 - No: “Infuse killer” / “best media player on Apple platforms.”
+- No: “Free during launch” / “founding users stay free when we start charging.”
 
 ---
 
 ## Out of scope for this GTM pass
 
 - Mac App Store / StoreKit  
-- Heavy DRM / anti-piracy theater beyond honest licensing  
-- Subscriptions  
+- Sandboxing Skagway for MAS (keeps ffmpeg + multi-drive power)  
+- **Any paid flip, Paddle, LicenseManager, or founding Keychain for Skagway**  
+- Heavy DRM / anti-piracy theater  
+- Subscriptions (Mach II Labs never)  
 - Full multi-language marketing site  
 - Paid ads (evaluate after organic signal)  
 - Encrypting video files at rest (full vault)  
-- iOS companion player implementation (Phase 2 only)  
-- Primary pivot to Infuse/VidHub-style scrape-first streaming product (pretty metadata is additive, not a rewrite)
+- iOS companion player implementation (post-launch only)  
+- Primary pivot to Infuse/VidHub-style scrape-first streaming product (pretty metadata is additive, not a rewrite)  
+- Replacing ffmpeg with AVFoundation-only re-encode as the sole path (would drop WMV / many AVI fixes)

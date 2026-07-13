@@ -2,7 +2,7 @@
 
 This document captures the high-level vision and major phases for Skagway. Detailed feature and improvement ideas are captured here (under the relevant Phase) or in `AI-IMPROVEMENTS.md`. (Older separate files `IMPROVEMENTS.md` and `DEVELOPMENT_SUMMARY.md` have been retired into this roadmap.)
 
-**Public GTM / Skagway launch plan (2026-07-11):** see [`docs/SKAGWAY-GTM-PLAN.md`](docs/SKAGWAY-GTM-PLAN.md) (free launch, branding, site, competitive tracks A–C). Planning only until executed. Product display name locked: **Skagway**.
+**Public GTM / Skagway launch plan:** see [`docs/SKAGWAY-GTM-PLAN.md`](docs/SKAGWAY-GTM-PLAN.md) (**free forever**, branding, site, competitive tracks A–C). Planning only until executed. Product display name locked: **Skagway**.
 
 ## Vision
 

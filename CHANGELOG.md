@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **GTM plan:** Skagway monetization locked to **free forever** — removed later paywall / founding grandfather / Paddle / LicenseManager for Skagway; direct notarized DMG + machiilabs.com remain the launch path (`docs/SKAGWAY-GTM-PLAN.md`).
+
 ## 0.60.0 (build 755) - 2026-07-12
 
 - **Full internal rename to Skagway (0% former product name in steady-state runtime)** — source folder `Skagway/`, XcodeGen target/scheme `Skagway`, bundle ID `com.machiilabs.skagway`, UserDefaults keys `Skagway.*`, Save Copy defaults to `Skagway-<timestamp>.machii`. One-shot `LegacyRenameMigrator` copies prefs/library/thumbnails from the old identity on first launch (non-destructive). Open/save panels are `.machii` only.
