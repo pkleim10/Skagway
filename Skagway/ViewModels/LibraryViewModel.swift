@@ -112,8 +112,9 @@ final class LibraryViewModel {
                 if wasRandomOrder { recomputeFilteredVideos() }
             }
 
-            // Ignore programmatic updates from selectCustomSort (which sets a sentinel to show the caret).
-            guard !_settingCustomSortOrder else { return }
+            // Ignore programmatic updates from selectCustomSort (which sets a sentinel to show the caret)
+            // and from loadPreferences (which must restore descending as saved).
+            guard !_settingCustomSortOrder, !_loadingSortPreferences else { return }
 
             let ascending = tableSortOrder.first?.order == .forward
 
@@ -152,6 +153,10 @@ final class LibraryViewModel {
 
     /// Suppresses `tableSortOrder.didSet` side-effects while `selectCustomSort` updates the sentinel.
     @ObservationIgnored private var _settingCustomSortOrder = false
+    /// Suppresses `tableSortOrder.didSet` while restoring prefs. Without this, loading a saved
+    /// descending sort on a column other than the default triggers the Table-header heuristic
+    /// that forces ascending when the sort *field* changes — so direction never survived relaunch.
+    @ObservationIgnored private var _loadingSortPreferences = false
 
     /// UUID of the custom metadata field currently used for sorting; nil = built-in sort via `tableSortOrder`.
     private(set) var customSortFieldId: UUID? {
@@ -1698,15 +1703,23 @@ final class LibraryViewModel {
     private func loadPreferences() {
         let defaults = UserDefaults.standard
         if let sortRaw = defaults.string(forKey: Self.sortColumnKey) {
-            let ascending = defaults.bool(forKey: Self.sortAscendingKey)
+            // `bool(forKey:)` is false when missing — only trust it if the key was written.
+            let ascending: Bool
+            if defaults.object(forKey: Self.sortAscendingKey) != nil {
+                ascending = defaults.bool(forKey: Self.sortAscendingKey)
+            } else {
+                ascending = true
+            }
             if sortRaw.hasPrefix("custom:"),
                let uuid = UUID(uuidString: String(sortRaw.dropFirst("custom:".count)))
             {
-                // Validate at recompute time (resolvedCustomSortField will be nil if field was deleted).
-                customSortFieldId = uuid
+                // Direction first so customSortFieldId.didSet recomputes with the saved order.
                 customSortAscending = ascending
+                customSortFieldId = uuid
             } else if let sort = VideoSort(rawValue: sortRaw) {
+                _loadingSortPreferences = true
                 tableSortOrder = sort.comparators(ascending: ascending)
+                _loadingSortPreferences = false
             }
         }
         excludeCorrupt = defaults.bool(forKey: Self.excludeCorruptKey)

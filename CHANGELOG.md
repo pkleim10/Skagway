@@ -32,6 +32,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 ## Unreleased
 
 - **Grid card chrome (Track B MVP)** — vignette, bottom title scrim, unified duration/CC badges, accent resume bar, and subtler selection/hover lift on Wall cards (SwiftUI overlays only; no new assets).
+- **Fixed sort direction not restoring on launch** — saved descending sorts were forced back to ascending by the column-change heuristic in `tableSortOrder.didSet` during preference load.
 
 ## 0.61.0 (build 759) - 2026-07-12
 
