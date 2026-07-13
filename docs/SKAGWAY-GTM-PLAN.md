@@ -1,7 +1,7 @@
 # Skagway go-to-market plan (Mach II Labs)
 
 **Saved:** 2026-07-11  
-**Updated:** 2026-07-12 — monetization locked to **free forever** (no later paywall)  
+**Updated:** 2026-07-13 — added check-for-updates + bug/support communication to GTM backlog  
 **Status:** Planning / not executed  
 **Canonical Cursor plan:** `~/.cursor/plans/licensing_trial_purchase_5b99b9a9.plan.md` (historical; **superseded** on Skagway pricing by this doc)  
 **This copy:** [`docs/SKAGWAY-GTM-PLAN.md`](SKAGWAY-GTM-PLAN.md) in the Skagway repo — revisit here or in Cursor Plans.
@@ -21,6 +21,8 @@
 - [ ] Part F Track A: v1.0 readiness + organizer supremacy polish (perf, UX, reliability, docs)
 - [ ] Part F Track B: grid chrome MVP; later B2 posters/TMDB; B3 AI Hollywood covers (BYO API key)
 - [ ] Part F Track C: power gaps that win vs Cinematica (notes, richer search, auto-import, near-dupes)
+- [ ] **Check for updates** — in-app + site path for discovering new builds (Sparkle or equivalent for notarized DMG; About / menu item; appcast on machiilabs.com)
+- [ ] **Bug reporting / ticketing / communication** — clear user → studio channel (e.g. support@, GitHub Issues, and/or light in-app “Report a Problem…”); triage workflow Mach II Labs can actually keep up with
 
 **Cancelled (superseded 2026-07-12):** Paddle / LicenseManager / founding Keychain / paid flip for newcomers / Buy CTAs for Skagway. Paid products (e.g. **Ketchikan**) are a separate Mach II Labs product — not Skagway.
 
@@ -220,6 +222,36 @@ Not competing as Infuse/Plex clone.
 - No Buy nag; no license gate  
 - About links to `/skagway` and guide; may state free forever  
 - Optional tip / support link only — never feature-gated  
+- **Check for Updates** and **Report a Problem / Contact** land on the same honest support story as the site (not a dead mailto void)
+
+---
+
+## Part G — Updates + user communication (added 2026-07-13)
+
+Public free software still needs a **trustworthy update path** and a **reachable human channel**. Neither is monetization.
+
+### Check for updates
+
+**Goal:** Users on notarized DMG installs can learn about and install newer Skagway builds without hunting GitHub manually.
+
+**Direction (decide at implement time):**
+- Prefer **Sparkle** (or similar) with an appcast hosted under `machiilabs.com` (e.g. `/skagway/appcast.xml`) alongside DMG downloads
+- In-app: **Skagway → Check for Updates…** (and optional quiet periodic check)
+- About / site show current version; release notes link to changelog or short release page
+- Signing: update packages must match the public **Developer ID** story (not ad-hoc)
+
+**Not required for day-one soft launch** if downloads are infrequent and you announce on the site — but should land **before** wide press / PH so early adopters aren’t stranded on build 1.
+
+### Bug reporting / ticketing / communication
+
+**Goal:** Users can report bugs and ask questions; Mach II Labs can triage without drowning.
+
+**Direction (pick one primary + optional secondary):**
+- **Email:** `support@machiilabs.com` (already in studio plan) — simplest; in-app “Contact Support…” / “Report a Problem…”
+- **Public tracker:** GitHub Issues on the Skagway repo (or a dedicated support repo) — good for transparency; needs labels/templates so noise stays manageable
+- **Light in-app reporter (optional later):** prefill app version, macOS version, and a short description; send via email or open a prefilled issue URL — **no telemetry by default** (aligns with honesty / free-forever trust)
+
+**Process:** short triage SLA for yourself (even “best effort”); FAQ on site for common issues (sandbox/MAS, ffmpeg, removable volumes). Reuse the same channel for Ketchikan later where possible.
 
 ---
 
@@ -231,9 +263,10 @@ Not competing as Infuse/Plex clone.
 3. Domain → Vercel → `/skagway` + OFS redirects + **free forever** copy + SEO  
 4. Screenshots / demo / OG / FAQ (show jazzed grid cards)  
 5. Soft free launch → press / PH  
-6. Optional library lock (Part D)  
-7. Track C power/AI as post-launch differentiators  
-8. Update ROADMAP  
+6. **Check for updates** (Sparkle/appcast) + **support / bug channel** live on site and in-app  
+7. Optional library lock (Part D)  
+8. Track C power/AI as post-launch differentiators  
+9. Update ROADMAP  
 
 ## Effort ballpark
 
@@ -241,6 +274,8 @@ Not competing as Infuse/Plex clone.
 |------------|----------|
 | Notarized DMG pipeline | ~1–3 days |
 | Professional site + assets | ~1–2 weeks |
+| Check for updates (Sparkle + appcast) | ~2–5 days |
+| Bug/support channel (email + optional Issues/in-app) | ~1–3 days |
 | Library privacy lock (Part D) | ~3–7 days |
 | Launch marketing push | ~2–5 days around ship |
 | **Total to credible public launch** | **~2–5 weeks** (no licensing workstream) |
