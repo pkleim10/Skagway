@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import AVFoundation
 
 /// Dedicated elegant gallery card for the Curated Wall.
 /// Designed to match the refined mockups as closely as possible:
@@ -19,6 +20,8 @@ struct CuratedWallCard: View {
     /// Fraction (0...1) watched, from the saved resume position — draws a thin progress bar along
     /// the bottom of the thumbnail, Netflix/Hulu "continue watching" style. `nil`/0 hides it.
     var resumeFraction: Double? = nil
+    /// When false (e.g. main floating player is open), skip live hover scrub to avoid fighting AVFoundation.
+    var hoverPreviewEnabled: Bool = true
     var renameFocus: FocusState<Bool>.Binding
     var onCommitRename: () -> Void
     var onCancelRename: () -> Void
@@ -26,6 +29,8 @@ struct CuratedWallCard: View {
 
     @State private var thumbnail: NSImage?
     @State private var isHovering = false
+    @State private var previewPlayer: AVPlayer?
+    @State private var previewTask: Task<Void, Never>?
     /// Cancelled + replaced every time the task below (re)starts, so a slow detail-preview fetch from
     /// a *previous* thumbnailPath (e.g. right before a "Regenerate Thumbnail") can't land after a
     /// newer one and overwrite it with a stale image — `.task(id:)`'s auto-cancellation only covers
@@ -55,6 +60,14 @@ struct CuratedWallCard: View {
                                         .font(.title2)
                                         .foregroundStyle(Color.appTextTertiary.opacity(0.5))
                                 }
+                        }
+                    }
+                    .overlay {
+                        // Live hover scrub — short peeks through the existing file (no new assets).
+                        if let previewPlayer {
+                            HoverPreviewPlayerView(player: previewPlayer)
+                                .allowsHitTesting(false)
+                                .transition(.opacity)
                         }
                     }
                     .overlay(alignment: .bottom) {
@@ -190,6 +203,20 @@ struct CuratedWallCard: View {
         )
         .onHover { hovering in
             isHovering = hovering
+            if hovering {
+                startHoverPreviewIfAllowed()
+            } else {
+                stopHoverPreview()
+            }
+        }
+        .onChange(of: hoverPreviewEnabled) { _, enabled in
+            if !enabled { stopHoverPreview() }
+        }
+        .onChange(of: isMoving) { _, moving in
+            if moving { stopHoverPreview() }
+        }
+        .onDisappear {
+            stopHoverPreview()
         }
         // Keyed on `thumbnailPath` (not just `filePath`) so "Regenerate Thumbnail" — which bumps
         // `thumbnailPath` to a fresh cache-busting value — actually reloads this card.
@@ -208,5 +235,42 @@ struct CuratedWallCard: View {
                 }
             }
         }
+    }
+
+    private func startHoverPreviewIfAllowed() {
+        guard hoverPreviewEnabled, !isMoving, !isRenaming else { return }
+        // Cancel this card's prior run only — do not bump the global generation here
+        // (that would race with a neighboring card that just claimed on mouse-enter).
+        previewTask?.cancel()
+        previewTask = nil
+        if let previewPlayer {
+            previewPlayer.pause()
+            previewPlayer.replaceCurrentItem(with: nil)
+        }
+        previewPlayer = nil
+
+        let token = HoverPreviewExclusive.claim()
+        let url = video.url
+        let duration = video.duration
+        previewTask = Task { @MainActor in
+            await HoverPreviewPlayback.run(
+                url: url,
+                knownDuration: duration,
+                token: token,
+                assignPlayer: { player in
+                    self.previewPlayer = player
+                }
+            )
+        }
+    }
+
+    private func stopHoverPreview() {
+        previewTask?.cancel()
+        previewTask = nil
+        if let previewPlayer {
+            previewPlayer.pause()
+            previewPlayer.replaceCurrentItem(with: nil)
+        }
+        previewPlayer = nil
     }
 }
