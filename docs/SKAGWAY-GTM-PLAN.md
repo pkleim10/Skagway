@@ -52,6 +52,12 @@
 - **Honest messaging from day one:** Site and press say **free forever**. No bait-and-switch language. No “free during launch.”
 - **Studio paid products** (e.g. Ketchikan) are marketed separately; they must not imply Skagway will become paid.
 
+**Privacy (locked, 2026-07-13)**
+- **No app telemetry by default.** Skagway must not phone home with usage analytics, automatic diagnostics, library paths, play history, or similar without an explicit, informed user action.
+- **Bug reports are user-initiated only.** Prefill may include app/OS version and the user’s own text; never silent upload of library content or browsing behavior.
+- Studio **support-process** metrics (e.g. issue counts, time-to-close) are fine and are **not** app telemetry.
+- Aligns with free-forever trust: local library software that respects the user’s files and privacy.
+
 **Brand lock-in**
 - **Studio display name:** Mach II Labs (Roman numeral — “Mach two”)
 - **Only domain:** `machiilabs.com` — no other product domains, vanity `get*`, or `*.app` purchases. Everything ships under this host.
@@ -249,7 +255,7 @@ Public free software still needs a **trustworthy update path** and a **reachable
 **Direction (pick one primary + optional secondary):**
 - **Email:** `support@machiilabs.com` (already in studio plan) — simplest; in-app “Contact Support…” / “Report a Problem…”
 - **Public tracker:** GitHub Issues on the Skagway repo (or a dedicated support repo) — good for transparency; needs labels/templates so noise stays manageable
-- **Light in-app reporter (optional later):** prefill app version, macOS version, and a short description; send via email or open a prefilled issue URL — **no telemetry by default** (aligns with honesty / free-forever trust)
+- **Light in-app reporter (optional later):** prefill app version, macOS version, and a short description; send via email or open a prefilled issue URL — **user-initiated only; no app telemetry by default** (locked privacy principle above)
 
 **Process:** short triage SLA for yourself (even “best effort”); FAQ on site for common issues (sandbox/MAS, ffmpeg, removable volumes). Reuse the same channel for Ketchikan later where possible.
 

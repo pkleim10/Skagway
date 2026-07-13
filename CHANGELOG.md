@@ -35,6 +35,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 - **Fixed sort direction not restoring on launch** — saved descending sorts were forced back to ascending by the column-change heuristic in `tableSortOrder.didSet` during preference load.
 - **Hover preview preference** — Settings toggle “Hover preview on Grid cards” (default on); title scrim fades out/in over 0.5s when live preview starts/stops.
 - **GTM plan:** backlog items for **Check for updates** (Sparkle/appcast) and **bug reporting / support communication** (`docs/SKAGWAY-GTM-PLAN.md` Part G).
+- **Privacy (locked):** no app telemetry by default — user-initiated bug reports only; support-process metrics are not app telemetry.
 
 ## 0.61.0 (build 759) - 2026-07-12
 
