@@ -8,7 +8,10 @@
 #         --apple-id "…" --team-id "99DA5P7M35" --password "app-specific-password"
 #
 # Default: bumps CURRENT_PROJECT_VERSION, archives Release, signs with hardened runtime,
-# creates dist/Skagway-<version>-<build>.dmg + dist/Skagway.dmg, notarizes, staples.
+# builds a styled drag-to-Applications DMG (create-dmg + packaging/dmg-background.png),
+# notarizes, staples to dist/Skagway-<version>-<build>.dmg + dist/Skagway.dmg.
+#
+# Requires: brew install create-dmg
 #
 # Flags:
 #   --no-bump          Skip the build-number bump
@@ -178,17 +181,33 @@ echo "Verifying app signature…"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 spctl --assess --type execute --verbose=4 "$APP_PATH" 2>&1 || true
 
-ln -sf /Applications "${STAGE_DIR}/Applications"
+DMG_BACKGROUND="packaging/dmg-background.png"
+if [[ ! -f "$DMG_BACKGROUND" ]]; then
+  echo "Missing DMG background: ${DMG_BACKGROUND}" >&2
+  exit 1
+fi
+if ! command -v create-dmg >/dev/null 2>&1; then
+  echo "create-dmg not found on PATH (brew install create-dmg)" >&2
+  exit 1
+fi
 
-echo "Creating DMG…"
+echo "Creating styled DMG (drag-to-Applications)…"
 rm -f "$VERSIONED_DMG" "$STABLE_DMG"
-# Stage under /tmp-friendly path already (repo dist/). Prefer UDZO compressed image.
-hdiutil create \
-  -volname "Skagway" \
-  -srcfolder "$STAGE_DIR" \
-  -ov \
-  -format UDZO \
-  "$VERSIONED_DMG"
+# Stage contains only the .app; create-dmg adds the Applications drop link + Finder layout.
+# Window/icons sized for packaging/dmg-background.png (moonlit mountain + bear).
+create-dmg \
+  --volname "Skagway" \
+  --background "$DMG_BACKGROUND" \
+  --window-pos 200 120 \
+  --window-size 660 440 \
+  --icon-size 128 \
+  --icon "Skagway.app" 160 200 \
+  --hide-extension "Skagway.app" \
+  --app-drop-link 500 200 \
+  --no-internet-enable \
+  --overwrite \
+  "$VERSIONED_DMG" \
+  "$STAGE_DIR"
 
 echo "Signing DMG…"
 codesign --force --timestamp --sign "$IDENTITY" "$VERSIONED_DMG"
