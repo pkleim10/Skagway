@@ -31,6 +31,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Escape stops playback on first press after play-from-search** — starting inline playback clears search/text-field focus so Escape no longer only unfocuses the search box.
 - **Grid card chrome (Track B MVP)** — vignette, bottom title scrim, unified duration/CC badges, accent resume bar, and subtler selection/hover lift on Wall cards (SwiftUI overlays only; no new assets).
 - **Fixed sort direction not restoring on launch** — saved descending sorts were forced back to ascending by the column-change heuristic in `tableSortOrder.didSet` during preference load.
 - **Hover preview preference** — Settings toggle “Hover preview on Grid cards” (default on); title scrim fades out/in over 0.5s when live preview starts/stops.

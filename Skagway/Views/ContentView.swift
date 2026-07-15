@@ -666,6 +666,10 @@ private struct LibraryContentView: View {
             .onChange(of: vm.isPlayingInline) { _, isOn in
                 if isOn {
                     guard let v = selectedVideo else { vm.isPlayingInline = false; return }
+                    // Search (and other text fields) often still hold focus after a click/double-click
+                    // to play. Escape then only resigns the field; a second Escape is needed to stop
+                    // playback. Clear focus as playback starts so the next Escape stops the player.
+                    resignTextInputFocusForPlayback()
                     let seek = vm.pendingFilmstripSeekSeconds ?? 0
                     vm.pendingFilmstripSeekSeconds = nil
                     let ignoreResume = vm.pendingIgnoreResumeOnNextStart
@@ -813,6 +817,22 @@ private struct LibraryContentView: View {
             if let m = keyDownMonitor {
                 NSEvent.removeMonitor(m)
                 keyDownMonitor = nil
+            }
+        }
+    }
+
+    /// Clears search / text-field focus when inline playback starts so Escape stops the player
+    /// instead of only resigning the focused field.
+    private func resignTextInputFocusForPlayback() {
+        isSearchFocused = false
+        guard let window = NSApp.keyWindow else { return }
+        if let first = window.firstResponder, first is NSText {
+            window.makeFirstResponder(nil)
+            // Same list-selection highlight fix as the Escape defocus path.
+            if vm.viewMode == .list,
+               let content = window.contentView,
+               let tableView = TableScrollHelper.findTableView(in: content) {
+                window.makeFirstResponder(tableView)
             }
         }
     }
