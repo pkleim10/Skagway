@@ -182,8 +182,17 @@ codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 spctl --assess --type execute --verbose=4 "$APP_PATH" 2>&1 || true
 
 DMG_BACKGROUND="packaging/dmg-background.png"
+DMG_WINDOW_W=640
+DMG_WINDOW_H=480
 if [[ ! -f "$DMG_BACKGROUND" ]]; then
   echo "Missing DMG background: ${DMG_BACKGROUND}" >&2
+  exit 1
+fi
+BG_W=$(sips -g pixelWidth "$DMG_BACKGROUND" 2>/dev/null | awk '/pixelWidth/ { print $2 }')
+BG_H=$(sips -g pixelHeight "$DMG_BACKGROUND" 2>/dev/null | awk '/pixelHeight/ { print $2 }')
+if [[ "$BG_W" != "$DMG_WINDOW_W" || "$BG_H" != "$DMG_WINDOW_H" ]]; then
+  echo "DMG background must be exactly ${DMG_WINDOW_W}×${DMG_WINDOW_H} px (got ${BG_W}×${BG_H})." >&2
+  echo "Finder maps background pixels 1:1 to the window; a larger image only shows the top-left." >&2
   exit 1
 fi
 if ! command -v create-dmg >/dev/null 2>&1; then
@@ -194,14 +203,12 @@ fi
 echo "Creating styled DMG (drag-to-Applications)…"
 rm -f "$VERSIONED_DMG" "$STABLE_DMG"
 # Stage contains only the .app; create-dmg adds the Applications drop link + Finder layout.
-# Window/icons sized for packaging/dmg-background.png (moonlit mountain + bear).
-# Background is 1280×960 (@2x for a 640×480 Finder window) with baked-in
-# “Drag Skagway to Applications” arrow/text so the layout reads at default size.
+# Background is exactly window-size in pixels with baked-in drag instruction art.
 create-dmg \
   --volname "Skagway" \
   --background "$DMG_BACKGROUND" \
   --window-pos 200 120 \
-  --window-size 640 480 \
+  --window-size "$DMG_WINDOW_W" "$DMG_WINDOW_H" \
   --icon-size 128 \
   --icon "Skagway.app" 140 300 \
   --hide-extension "Skagway.app" \
