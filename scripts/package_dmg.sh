@@ -210,9 +210,9 @@ create-dmg \
   --window-pos 200 120 \
   --window-size "$DMG_WINDOW_W" "$DMG_WINDOW_H" \
   --icon-size 128 \
-  --icon "Skagway.app" 140 300 \
+  --icon "Skagway.app" 165 255 \
   --hide-extension "Skagway.app" \
-  --app-drop-link 500 300 \
+  --app-drop-link 475 275 \
   --no-internet-enable \
   --overwrite \
   "$VERSIONED_DMG" \

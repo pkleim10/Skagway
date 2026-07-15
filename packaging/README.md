@@ -16,4 +16,7 @@ Image generators may not offer a 3:2 / 640×480 preset (e.g. Cursor’s tool all
 sips -z 480 640 path/to/source.png --out packaging/dmg-background.png
 ```
 
-Bake the “Drag Skagway to Applications” arrow/text into the image; leave clear lower-left / lower-right zones for the app and Applications icons.
+Bake only a curved arrow + “Drag Skagway to Applications” into the image.  
+**Do not** draw fake icon frames or “Skagway” / “Applications” labels — Finder supplies the real icons; placeholders always misalign.
+
+Leave clear lower-left / lower-right zones. Icon positions are set in `scripts/package_dmg.sh` (`--icon` / `--app-drop-link`); nudge those coordinates if alignment drifts.
