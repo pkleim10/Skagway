@@ -31,6 +31,9 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Public DMG packaging pipeline** — `scripts/package_dmg.sh` archives with Developer ID + hardened runtime, builds a drag-to-Applications DMG, notarizes (`SkagwayNotary`), and staples to `dist/Skagway.dmg`.
+- **About / version polish for distribution** — About shows marketing version, build, “Free forever,” Mach II Labs; Info.plist versions now track `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`.
+
 ## 0.62.0 (build 764) - 2026-07-14
 
 - **Grid card chrome (Track B MVP)** — vignette, bottom title scrim, unified duration/CC badges, accent resume bar, and subtler selection/hover lift on Wall cards (SwiftUI overlays only; no new assets).

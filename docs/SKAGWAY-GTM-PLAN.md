@@ -1,7 +1,7 @@
 # Skagway go-to-market plan (Mach II Labs)
 
 **Saved:** 2026-07-11  
-**Updated:** 2026-07-13 — added check-for-updates + bug/support communication to GTM backlog  
+**Updated:** 2026-07-14 — Developer ID + notarized DMG pipeline (`scripts/package_dmg.sh`)  
 **Status:** Planning / not executed  
 **Canonical Cursor plan:** `~/.cursor/plans/licensing_trial_purchase_5b99b9a9.plan.md` (historical; **superseded** on Skagway pricing by this doc)  
 **This copy:** [`docs/SKAGWAY-GTM-PLAN.md`](SKAGWAY-GTM-PLAN.md) in the Skagway repo — revisit here or in Cursor Plans.
@@ -10,7 +10,7 @@
 
 ## Open todos
 
-- [ ] Developer ID/notarization + DMG pipeline; update ROADMAP Phase 4
+- [x] Developer ID/notarization + DMG pipeline (`scripts/package_dmg.sh`); ROADMAP Phase 4 aligned
 - [x] Customer-facing rename to Skagway (locked 2026-07-11); display name, About, DMG, site before public launch
 - [ ] machiilabs.com: `/skagway` landing; **free forever** messaging (no “pricing coming later”)
 - [ ] machiilabs.com owned (Cloudflare). Add to Vercel; grey-cloud DNS; support@ Email Routing

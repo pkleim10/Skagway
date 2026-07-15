@@ -69,8 +69,8 @@ Only after this pass should sandboxing/distribution (Phase 4 below) be seriously
 - Potential areas: semantic search, smart tagging, content-aware suggestions, duplicate detection
 
 ### Phase 4 — Distribution & Longevity
-- Proper app sandboxing (if/when feasible) — currently unsandboxed
-- Distribution story (TestFlight / direct / Mac App Store?)
+- **Locked launch path:** direct download via **Developer ID + notarized DMG** (`scripts/package_dmg.sh` → `dist/Skagway.dmg`). Not Mac App Store first; stay unsandboxed so arbitrary folders + optional ffmpeg work.
+- Host DMG on machiilabs.com (product page workstream); Sparkle/appcast later for check-for-updates.
 - Long-term maintainability and documentation
 - Full user + developer documentation (web-based) when closer to public release
 

@@ -17,6 +17,10 @@ Package.resolved
 # Claude (local settings)
 .claude/
 
+# Public packaging output (DMGs / archives are not committed)
+dist/
+*.dmg
+
 # Misc
 *.swp
 *~

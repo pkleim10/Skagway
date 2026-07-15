@@ -190,10 +190,24 @@ struct SkagwayApp: App {
             CommandGroup(replacing: .printItem) { }
             CommandGroup(replacing: .appInfo) {
                 Button("About Skagway") {
+                    let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
                     let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+                    let year = Calendar.current.component(.year, from: Date())
+                    let paragraph = NSMutableParagraphStyle()
+                    paragraph.alignment = .center
+                    let credits = NSAttributedString(
+                        string: "Free forever.\n\n© \(year) Mach II Labs\nmachiilabs.com",
+                        attributes: [
+                            .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+                            .foregroundColor: NSColor.secondaryLabelColor,
+                            .paragraphStyle: paragraph
+                        ]
+                    )
                     NSApplication.shared.orderFrontStandardAboutPanel(options: [
                         .applicationName: "Skagway",
-                        .version: "build \(build)"
+                        .applicationVersion: short,
+                        .version: "build \(build)",
+                        .credits: credits
                     ])
                 }
             }
