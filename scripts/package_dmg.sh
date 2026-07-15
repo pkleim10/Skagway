@@ -195,15 +195,17 @@ echo "Creating styled DMG (drag-to-Applications)…"
 rm -f "$VERSIONED_DMG" "$STABLE_DMG"
 # Stage contains only the .app; create-dmg adds the Applications drop link + Finder layout.
 # Window/icons sized for packaging/dmg-background.png (moonlit mountain + bear).
+# Background is 1280×960 (@2x for a 640×480 Finder window) with baked-in
+# “Drag Skagway to Applications” arrow/text so the layout reads at default size.
 create-dmg \
   --volname "Skagway" \
   --background "$DMG_BACKGROUND" \
   --window-pos 200 120 \
-  --window-size 660 440 \
+  --window-size 640 480 \
   --icon-size 128 \
-  --icon "Skagway.app" 160 200 \
+  --icon "Skagway.app" 140 300 \
   --hide-extension "Skagway.app" \
-  --app-drop-link 500 200 \
+  --app-drop-link 500 300 \
   --no-internet-enable \
   --overwrite \
   "$VERSIONED_DMG" \
