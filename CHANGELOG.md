@@ -31,10 +31,12 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
-- **Escape stops playback on first press after play-from-search** — starting inline playback clears search/text-field focus so Escape no longer only unfocuses the search box.
+## 0.62.0 (build 764) - 2026-07-14
+
 - **Grid card chrome (Track B MVP)** — vignette, bottom title scrim, unified duration/CC badges, accent resume bar, and subtler selection/hover lift on Wall cards (SwiftUI overlays only; no new assets).
-- **Fixed sort direction not restoring on launch** — saved descending sorts were forced back to ascending by the column-change heuristic in `tableSortOrder.didSet` during preference load.
 - **Hover preview preference** — Settings toggle “Hover preview on Grid cards” (default on); title scrim fades out/in over 0.5s when live preview starts/stops.
+- **Escape stops playback on first press after play-from-search** — starting inline playback clears search/text-field focus so Escape no longer only unfocuses the search box.
+- **Fixed sort direction not restoring on launch** — saved descending sorts were forced back to ascending by the column-change heuristic in `tableSortOrder.didSet` during preference load.
 - **GTM plan:** backlog items for **Check for updates** (Sparkle/appcast) and **bug reporting / support communication** (`docs/SKAGWAY-GTM-PLAN.md` Part G).
 - **Privacy (locked):** no app telemetry by default — user-initiated bug reports only; support-process metrics are not app telemetry.
 
