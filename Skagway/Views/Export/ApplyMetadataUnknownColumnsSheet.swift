@@ -10,6 +10,10 @@ struct ApplyMetadataUnknownColumnsSheet: View {
 
     @Environment(\.dismiss) private var dismiss
 
+    private let rowDark = Color.appBackground
+    private let rowLight = Color.appSurface
+    private let headerBg = Color.appSurface.opacity(0.95)
+
     init(viewModel: LibraryViewModel, prompt: LibraryViewModel.MetadataApplyUnknownColumnsPrompt) {
         self.viewModel = viewModel
         self.prompt = prompt
@@ -17,6 +21,10 @@ struct ApplyMetadataUnknownColumnsSheet: View {
         _typesByKey = State(initialValue: Dictionary(
             uniqueKeysWithValues: prompt.columns.map { ($0.key, $0.suggestedType) }
         ))
+    }
+
+    private var allSelected: Bool {
+        !prompt.columns.isEmpty && selectedKeys.count == prompt.columns.count
     }
 
     var body: some View {
@@ -32,40 +40,22 @@ struct ApplyMetadataUnknownColumnsSheet: View {
                 .foregroundStyle(Color.appTextSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            List {
-                ForEach(prompt.columns) { column in
-                    HStack(alignment: .center, spacing: 12) {
-                        Toggle(isOn: bindingSelected(column.key)) {
-                            EmptyView()
+            VStack(spacing: 0) {
+                tableHeader
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(prompt.columns.enumerated()), id: \.element.id) { index, column in
+                            tableRow(column: column, index: index)
                         }
-                        .toggleStyle(.checkbox)
-                        .labelsHidden()
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(column.key)
-                                .font(.body.weight(.medium))
-                            if !column.samplePreview.isEmpty {
-                                Text(column.samplePreview)
-                                    .font(.caption)
-                                    .foregroundStyle(Color.appTextTertiary)
-                                    .lineLimit(1)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        Picker("Type", selection: bindingType(column.key)) {
-                            ForEach(CustomMetadataValueType.allCases) { t in
-                                Text(t.displayName).tag(t)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(width: 140)
-                        .disabled(!selectedKeys.contains(column.key))
                     }
-                    .padding(.vertical, 2)
                 }
+                .frame(minHeight: 180, maxHeight: 320)
             }
-            .frame(minHeight: 180, maxHeight: 320)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.appDivider.opacity(0.5), lineWidth: 1)
+            )
 
             HStack {
                 Button("Cancel") {
@@ -95,7 +85,87 @@ struct ApplyMetadataUnknownColumnsSheet: View {
             }
         }
         .padding(24)
-        .frame(minWidth: 560, minHeight: 360)
+        .frame(minWidth: 640, minHeight: 400)
+    }
+
+    private var tableHeader: some View {
+        HStack(spacing: 0) {
+            Toggle(isOn: Binding(
+                get: { allSelected },
+                set: { on in
+                    if on {
+                        selectedKeys = Set(prompt.columns.map(\.key))
+                    } else {
+                        selectedKeys = []
+                    }
+                }
+            )) {
+                EmptyView()
+            }
+            .toggleStyle(.checkbox)
+            .labelsHidden()
+            .help(allSelected ? "Deselect all" : "Select all")
+            .frame(width: 36, alignment: .center)
+
+            headerLabel("Column", alignment: .leading)
+                .frame(minWidth: 140, maxWidth: .infinity, alignment: .leading)
+
+            headerLabel("Sample", alignment: .leading)
+                .frame(minWidth: 120, maxWidth: .infinity, alignment: .leading)
+
+            headerLabel("Type", alignment: .leading)
+                .frame(width: 140, alignment: .leading)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(headerBg)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color.appDivider.opacity(0.45))
+                .frame(height: 1)
+        }
+    }
+
+    private func tableRow(column: UnknownImportColumn, index: Int) -> some View {
+        let isOn = selectedKeys.contains(column.key)
+        return HStack(spacing: 0) {
+            Toggle(isOn: bindingSelected(column.key)) {
+                EmptyView()
+            }
+            .toggleStyle(.checkbox)
+            .labelsHidden()
+            .frame(width: 36, alignment: .center)
+
+            Text(column.key)
+                .font(.body.weight(.medium))
+                .lineLimit(1)
+                .frame(minWidth: 140, maxWidth: .infinity, alignment: .leading)
+
+            Text(column.samplePreview.isEmpty ? "—" : column.samplePreview)
+                .font(.caption)
+                .foregroundStyle(Color.appTextTertiary)
+                .lineLimit(1)
+                .frame(minWidth: 120, maxWidth: .infinity, alignment: .leading)
+
+            Picker("Type", selection: bindingType(column.key)) {
+                ForEach(CustomMetadataValueType.allCases) { t in
+                    Text(t.displayName).tag(t)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 140, alignment: .leading)
+            .disabled(!isOn)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(index.isMultiple(of: 2) ? rowDark : rowLight)
+    }
+
+    private func headerLabel(_ title: String, alignment: Alignment) -> some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Color.appTextSecondary)
+            .frame(maxWidth: .infinity, alignment: alignment)
     }
 
     private func bindingSelected(_ key: String) -> Binding<Bool> {

@@ -31,9 +31,11 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.64.0 (build 777) - 2026-07-17
+
 - **Boolean custom metadata** — New field type (Settings + Inspector toggle); filters (equals/not equals), sort, list display (Yes/No), export, and Import Metadata validation/normalization (`true`/`false`/`yes`/`no`/`1`/`0` → stored `true`/`false`).
-- **Import Metadata: unknown columns dialog** — When a CSV/JSONL has columns that aren’t built-ins or existing custom fields, pause before writing and let you choose which to add as custom metadata (with inferred types). Selected fields are created, the file is re-parsed, then import continues.
-- **Install script handles TCC-locked app bundles** — After a DMG/browser install, macOS may stamp `com.apple.macl` so in-place `rsync` fails with “Operation not permitted.” `build_and_install.sh` now detects that, renames the old app aside, installs a fresh copy at the same path, and refuses if Skagway is still running.
+- **Import Metadata: unknown columns dialog** — When a CSV/JSONL has columns that aren’t built-ins or existing custom fields, pause before writing and let you choose which to add as custom metadata (with inferred types). Selected fields are created, the file is re-parsed, then import continues. Dialog is a table with alternating rows, checkbox column, and Select all.
+- **Install script handles TCC-locked app bundles** — After a DMG/browser install, macOS may stamp `com.apple.macl` so in-place `rsync` fails with “Operation not permitted.” `build_and_install.sh` tries in-place update first (including while Skagway is running, as before); only if that fails does it fall back to rename-aside + ditto, which requires quitting the app.
 
 ## 0.63.0 (build 772) - 2026-07-17
 

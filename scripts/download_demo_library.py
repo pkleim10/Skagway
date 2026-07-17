@@ -243,7 +243,31 @@ def main() -> None:
         action="store_true",
         help="Search and print what would download; do not write files",
     )
+    parser.add_argument(
+        "--query",
+        help="Custom Pixabay search instead of the built-in categories "
+        '(e.g. --query "timelapse city clouds")',
+    )
+    parser.add_argument(
+        "--folder",
+        help="Subfolder name for --query results (default: derived from the query)",
+    )
+    parser.add_argument(
+        "--count",
+        type=int,
+        help="Clips to download for --query (default: --per-category)",
+    )
     args = parser.parse_args()
+
+    if args.query:
+        folder = args.folder or slugify(args.query).replace("-", " ").title()
+        categories: dict[str, tuple[str, str | None]] = {folder: (args.query, None)}
+        per_category = args.count or args.per_category
+    else:
+        if args.folder or args.count:
+            die("--folder and --count require --query")
+        categories = CATEGORIES
+        per_category = args.per_category
 
     api_key = os.environ.get("PIXABAY_API_KEY", "").strip() or _DEFAULT_API_KEY
     if not api_key:
@@ -273,15 +297,15 @@ def main() -> None:
     total_fail = 0
 
     print(f"Output: {out}")
-    print(f"Target: {args.per_category} clips × {len(CATEGORIES)} categories\n")
+    print(f"Target: {per_category} clips × {len(categories)} categories\n")
 
-    for folder, (query, category) in CATEGORIES.items():
+    for folder, (query, category) in categories.items():
         cat_dir = out / folder
         if not args.dry_run:
             cat_dir.mkdir(parents=True, exist_ok=True)
 
         already = list(cat_dir.glob("*.mp4")) if cat_dir.exists() else []
-        need = max(0, args.per_category - len(already))
+        need = max(0, per_category - len(already))
         cat_note = f", category={category}" if category else ""
         print(f"=== {folder} (have {len(already)}, need {need}) q={query!r}{cat_note}")
 
