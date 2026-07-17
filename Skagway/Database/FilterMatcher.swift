@@ -175,6 +175,19 @@ struct FilterMatcher {
                 guard let date = parsed else { return false }
                 return matchDay(date, cmp, lo, hi)
             }
+        case .boolean:
+            let want = CustomMetadataValueType.normalizeBooleanStorage(value)
+            return { _, _, cvals in
+                guard let want,
+                      let raw = cvals[fieldId],
+                      let have = CustomMetadataValueType.normalizeBooleanStorage(raw)
+                else { return false }
+                switch cmp {
+                case .equals: return have == want
+                case .notEquals: return have != want
+                default: return false
+                }
+            }
         }
     }
 

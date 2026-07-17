@@ -145,16 +145,27 @@ enum MetadataApplier {
                 let trimmed = raw // preserve intentional whitespace only after empty check
                 if trimmed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { continue }
                 let current = index.customByVideoId[dbId]?[fieldUUID] ?? ""
-                if current == trimmed { continue }
-                // Optional light type validation for numbers
-                if let def = index.customFields[fieldUUID], def.valueType == .number {
-                    let t = trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if Double(t) == nil {
-                        rowErrors.append("Line \(row.lineNumber): invalid number for custom field")
-                        continue
+                var storeValue = trimmed
+                if let def = index.customFields[fieldUUID] {
+                    switch def.valueType {
+                    case .number:
+                        let t = trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if Double(t) == nil {
+                            rowErrors.append("Line \(row.lineNumber): invalid number for custom field")
+                            continue
+                        }
+                    case .boolean:
+                        guard let normalized = CustomMetadataValueType.normalizeBooleanStorage(trimmed) else {
+                            rowErrors.append("Line \(row.lineNumber): invalid boolean for custom field")
+                            continue
+                        }
+                        storeValue = normalized
+                    case .string, .text, .date, .dateTime:
+                        break
                     }
                 }
-                customUpdates[fieldUUID, default: [:]][dbId] = trimmed
+                if current == storeValue { continue }
+                customUpdates[fieldUUID, default: [:]][dbId] = storeValue
                 didUpdate = true
             }
 

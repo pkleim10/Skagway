@@ -570,6 +570,32 @@ struct CuratedWallInspector: View {
                 .padding(.vertical, 4)
                 .background(insetFieldBackground(cornerRadius: 6))
                 .focused($focusedCustomFieldId, equals: field.id)
+        case .boolean:
+            let boolBinding = Binding<Bool>(
+                get: {
+                    CustomMetadataValueType.normalizeBooleanStorage(customFieldValues[field.id] ?? "") == "true"
+                },
+                set: { on in
+                    let s = on ? "true" : "false"
+                    customFieldValues[field.id] = s
+                    customFieldMixed.remove(field.id)
+                    Task {
+                        await viewModel.persistCustomMetadata(
+                            fieldId: field.id,
+                            value: s,
+                            forVideoPaths: selectedIds
+                        )
+                    }
+                }
+            )
+            Toggle(isOn: boolBinding) {
+                Text(isMixed ? "Multiple values" : "")
+                    .font(.caption2)
+                    .foregroundStyle(Color.appTextTertiary)
+            }
+            .toggleStyle(.switch)
+            .labelsHidden()
+            .disabled(selectedIds.isEmpty)
         case .text:
             TabbableTextEditor(text: binding) {
                 // Advance to next custom field, or clear focus if last.

@@ -93,6 +93,12 @@ enum ListCustomMetadataCellFormatter {
         switch valueType {
         case .string, .text, .number:
             return t.replacingOccurrences(of: "\n", with: " ")
+        case .boolean:
+            switch CustomMetadataValueType.normalizeBooleanStorage(t) {
+            case "true": return "Yes"
+            case "false": return "No"
+            default: return t
+            }
         case .date:
             if let d = isoDateOnly.date(from: t) {
                 return dateOnly.string(from: d)

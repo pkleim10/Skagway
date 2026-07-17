@@ -49,12 +49,12 @@ enum MetadataApplyParser {
     }
 
     /// Parse the whole file into rows with keys already mapped to internal column ids.
-    /// Unknown columns are skipped (counted in `skippedColumnKeys`).
+    /// Unknown columns are omitted from row values but returned with sample cells for the import dialog.
     static func parse(
         data: Data,
         format: MetadataApplyFormat,
         customFields: [CustomMetadataFieldDefinition]
-    ) throws -> (rows: [MetadataApplyRow], skippedColumnKeys: [String], resolvedColumnIDs: Set<String>) {
+    ) throws -> (rows: [MetadataApplyRow], unknownColumns: [UnknownImportColumn], resolvedColumnIDs: Set<String>) {
         switch format {
         case .csv:
             return try parseCSV(data: data, customFields: customFields)
@@ -68,7 +68,7 @@ enum MetadataApplyParser {
     private static func parseCSV(
         data: Data,
         customFields: [CustomMetadataFieldDefinition]
-    ) throws -> (rows: [MetadataApplyRow], skippedColumnKeys: [String], resolvedColumnIDs: Set<String>) {
+    ) throws -> (rows: [MetadataApplyRow], unknownColumns: [UnknownImportColumn], resolvedColumnIDs: Set<String>) {
         var text = String(data: data, encoding: .utf8)
             ?? String(data: data, encoding: .isoLatin1)
             ?? ""
@@ -79,8 +79,10 @@ enum MetadataApplyParser {
             throw MetadataApplyDetectError.emptyFile
         }
 
-        var skipped: [String] = []
-        var seenSkip = Set<String>()
+        var unknownOrder: [String] = []
+        var seenUnknown = Set<String>()
+        var unknownIndexKeys: [Int: String] = [:] // column index → header key
+        var unknownSamples: [String: [String]] = [:]
         var columnMap: [Int: String] = [:] // index → machine id
         var resolved = Set<String>()
         for (idx, header) in headerRecord.enumerated() {
@@ -89,9 +91,13 @@ enum MetadataApplyParser {
                 resolved.insert(id)
             } else {
                 let key = header.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !key.isEmpty, !seenSkip.contains(key) {
-                    seenSkip.insert(key)
-                    skipped.append(key)
+                if !key.isEmpty {
+                    unknownIndexKeys[idx] = key
+                    if !seenUnknown.contains(key) {
+                        seenUnknown.insert(key)
+                        unknownOrder.append(key)
+                        unknownSamples[key] = []
+                    }
                 }
             }
         }
@@ -104,12 +110,15 @@ enum MetadataApplyParser {
             }
             var values: [String: String] = [:]
             for (idx, cell) in record.enumerated() {
-                guard let id = columnMap[idx] else { continue }
-                values[id] = cell
+                if let id = columnMap[idx] {
+                    values[id] = cell
+                } else if let key = unknownIndexKeys[idx] {
+                    appendSample(cell, to: &unknownSamples, key: key)
+                }
             }
             rows.append(MetadataApplyRow(lineNumber: lineNumber, values: values))
         }
-        return (rows, skipped, resolved)
+        return (rows, makeUnknownColumns(order: unknownOrder, samples: unknownSamples), resolved)
     }
 
     // MARK: - JSONL
@@ -117,14 +126,15 @@ enum MetadataApplyParser {
     private static func parseJSONL(
         data: Data,
         customFields: [CustomMetadataFieldDefinition]
-    ) throws -> (rows: [MetadataApplyRow], skippedColumnKeys: [String], resolvedColumnIDs: Set<String>) {
+    ) throws -> (rows: [MetadataApplyRow], unknownColumns: [UnknownImportColumn], resolvedColumnIDs: Set<String>) {
         var text = String(data: data, encoding: .utf8)
             ?? String(data: data, encoding: .isoLatin1)
             ?? ""
         if text.hasPrefix("\u{FEFF}") { text.removeFirst() }
 
-        var skipped: [String] = []
-        var seenSkip = Set<String>()
+        var unknownOrder: [String] = []
+        var seenUnknown = Set<String>()
+        var unknownSamples: [String: [String]] = [:]
         var resolved = Set<String>()
         var rows: [MetadataApplyRow] = []
 
@@ -161,9 +171,13 @@ enum MetadataApplyParser {
                 guard let key = keyAny as? String else { continue }
                 if raw is NSNull { continue }
                 guard let id = MetadataExportColumnRegistry.resolveIncomingColumnKey(key, customFields: customFields) else {
-                    if !seenSkip.contains(key) {
-                        seenSkip.insert(key)
-                        skipped.append(key)
+                    if !seenUnknown.contains(key) {
+                        seenUnknown.insert(key)
+                        unknownOrder.append(key)
+                        unknownSamples[key] = []
+                    }
+                    if let s = Self.jsonValueToApplyString(raw, columnId: "") {
+                        appendSample(s, to: &unknownSamples, key: key)
                     }
                     continue
                 }
@@ -175,7 +189,30 @@ enum MetadataApplyParser {
             rows.append(MetadataApplyRow(lineNumber: lineNumber, values: values))
         }
         guard !rows.isEmpty else { throw MetadataApplyDetectError.emptyFile }
-        return (rows, skipped, resolved)
+        return (rows, makeUnknownColumns(order: unknownOrder, samples: unknownSamples), resolved)
+    }
+
+    private static func appendSample(_ cell: String, to samples: inout [String: [String]], key: String) {
+        let t = cell.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return }
+        var list = samples[key] ?? []
+        guard list.count < MetadataImportTypeInference.maxSamplesPerColumn else { return }
+        list.append(cell)
+        samples[key] = list
+    }
+
+    private static func makeUnknownColumns(
+        order: [String],
+        samples: [String: [String]]
+    ) -> [UnknownImportColumn] {
+        order.map { key in
+            let vals = samples[key] ?? []
+            return UnknownImportColumn(
+                key: key,
+                sampleValues: vals,
+                suggestedType: MetadataImportTypeInference.suggestType(samples: vals)
+            )
+        }
     }
 
     /// Convert a JSON value into the same string representation Apply diffs against.

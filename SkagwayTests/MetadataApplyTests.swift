@@ -50,12 +50,12 @@ final class MetadataApplyTests: XCTestCase {
     func testParseCSV_andMatchPath() throws {
         let csv = "Path,Rating,Featuring\n/Movies/a.mp4,5,Alice\n/Movies/missing.mp4,1,Bob\n"
         let data = Data(csv.utf8)
-        let (rows, skipped, resolved) = try MetadataApplyParser.parse(
+        let (rows, unknown, resolved) = try MetadataApplyParser.parse(
             data: data,
             format: .csv,
             customFields: [customFeaturing]
         )
-        XCTAssertTrue(skipped.isEmpty)
+        XCTAssertTrue(unknown.isEmpty)
         XCTAssertTrue(resolved.contains("filePath"))
         XCTAssertEqual(rows.count, 2)
 
@@ -85,7 +85,7 @@ final class MetadataApplyTests: XCTestCase {
         let result = try MetadataApplier.pass1(
             rows: rows,
             resolvedColumnIDs: resolved,
-            skippedUnknownColumns: skipped,
+            skippedUnknownColumns: unknown.map(\.key),
             index: index
         )
         XCTAssertEqual(result.matchedCount, 1)
@@ -166,12 +166,12 @@ final class MetadataApplyTests: XCTestCase {
             ]
         )
         let data = Data(line.utf8)
-        let (rows, skipped, resolved) = try MetadataApplyParser.parse(
+        let (rows, unknown, resolved) = try MetadataApplyParser.parse(
             data: data,
             format: .jsonl,
             customFields: [customFeaturing]
         )
-        XCTAssertTrue(skipped.isEmpty)
+        XCTAssertTrue(unknown.isEmpty)
         XCTAssertEqual(rows.count, 1)
         XCTAssertEqual(rows[0].values["filePath"], "/Movies/a.mp4")
         XCTAssertEqual(rows[0].values["rating"], "5")
@@ -189,6 +189,96 @@ final class MetadataApplyTests: XCTestCase {
             XCTAssertTrue(message.contains("line 2"), message)
             XCTAssertFalse(message.contains("isn't in the correct format") && !message.contains("line"))
         }
+    }
+
+    func testParseCSV_unknownColumnsCollectSamplesAndSuggestBoolean() throws {
+        let csv = "Path,Favorite,Notes\n/a.mp4,yes,hello\n/b.mp4,no,world\n"
+        let data = Data(csv.utf8)
+        let (rows, unknown, _) = try MetadataApplyParser.parse(
+            data: data,
+            format: .csv,
+            customFields: []
+        )
+        XCTAssertEqual(rows.count, 2)
+        XCTAssertEqual(unknown.map(\.key), ["Favorite", "Notes"])
+        XCTAssertEqual(unknown[0].suggestedType, .boolean)
+        XCTAssertEqual(unknown[0].sampleValues.count, 2)
+        XCTAssertEqual(unknown[1].suggestedType, .string)
+    }
+
+    func testInference_booleanBeforeNumber() {
+        XCTAssertEqual(
+            MetadataImportTypeInference.suggestType(samples: ["1", "0", "1"]),
+            .boolean
+        )
+        XCTAssertEqual(
+            MetadataImportTypeInference.suggestType(samples: ["2", "3.5"]),
+            .number
+        )
+        XCTAssertEqual(
+            MetadataImportTypeInference.suggestType(samples: ["yes", "NO"]),
+            .boolean
+        )
+    }
+
+    func testBooleanNormalize() {
+        XCTAssertEqual(CustomMetadataValueType.normalizeBooleanStorage("Yes"), "true")
+        XCTAssertEqual(CustomMetadataValueType.normalizeBooleanStorage("0"), "false")
+        XCTAssertNil(CustomMetadataValueType.normalizeBooleanStorage("maybe"))
+    }
+
+    func testPass1_booleanCustomFieldNormalizesAndRejectsGarbage() throws {
+        let boolID = UUID()
+        let boolField = CustomMetadataFieldDefinition(id: boolID, name: "Favorite", valueType: .boolean)
+        let video = sampleVideo(id: 1, path: "/a.mp4", fp: nil, rating: 0)
+        let index = MetadataApplier.buildIndex(
+            videos: [video],
+            tagsByVideoId: [:],
+            customByVideoId: [:],
+            customFieldDefinitions: [boolField]
+        )
+        let columnId = MetadataExportColumn.customFieldId(boolID)
+        let rows = [
+            MetadataApplyRow(lineNumber: 2, values: [
+                "filePath": "/a.mp4",
+                columnId: "yes",
+            ]),
+            MetadataApplyRow(lineNumber: 3, values: [
+                "filePath": "/a.mp4",
+                columnId: "maybe",
+            ]),
+        ]
+        let result = try MetadataApplier.pass1(
+            rows: rows,
+            resolvedColumnIDs: ["filePath", columnId],
+            skippedUnknownColumns: [],
+            index: index
+        )
+        XCTAssertEqual(result.customUpdates[boolID]?[1], "true")
+        XCTAssertTrue(result.rowErrors.contains(where: { $0.contains("invalid boolean") }))
+    }
+
+    func testParse_reResolveAfterCreatingUnknownField() throws {
+        let csv = "Path,Director\n/a.mp4,Nolan\n"
+        let data = Data(csv.utf8)
+        let (rows1, unknown, _) = try MetadataApplyParser.parse(
+            data: data,
+            format: .csv,
+            customFields: []
+        )
+        XCTAssertEqual(unknown.map(\.key), ["Director"])
+        XCTAssertTrue(rows1[0].values.keys.filter { $0.hasPrefix("custom:") }.isEmpty)
+
+        let directorID = UUID()
+        let director = CustomMetadataFieldDefinition(id: directorID, name: "Director", valueType: .string)
+        let (rows2, unknown2, resolved) = try MetadataApplyParser.parse(
+            data: data,
+            format: .csv,
+            customFields: [director]
+        )
+        XCTAssertTrue(unknown2.isEmpty)
+        XCTAssertEqual(rows2[0].values[MetadataExportColumn.customFieldId(directorID)], "Nolan")
+        XCTAssertTrue(resolved.contains(MetadataExportColumn.customFieldId(directorID)))
     }
 
     func testPass2_collectsUnmatchedOnly() {

@@ -718,20 +718,32 @@ final class LibraryViewModel {
         let rowErrors: [String]
     }
 
+    /// Presented when Import Metadata finds columns that are not built-ins or existing custom fields.
+    struct MetadataApplyUnknownColumnsPrompt: Identifiable, Equatable {
+        let id = UUID()
+        let sourceURL: URL
+        let format: MetadataApplyFormat
+        let columns: [UnknownImportColumn]
+    }
+
     var metadataApplySummary: MetadataApplySummary? = nil
+    var metadataApplyUnknownColumnsPrompt: MetadataApplyUnknownColumnsPrompt? = nil
     var metadataApplyProgress: (current: Int, total: Int)? = nil
     var metadataApplyErrorMessage: String? = nil
     var metadataApplyUnmatchedRows: [MetadataApplyUnmatchedRow]? = nil
-    /// Bytes of the file chosen for Apply (kept so Pass 2 does not re-open the URL).
+    /// Bytes of the file chosen for Apply (kept so Pass 2 / unknown-column resume does not re-open the URL).
     private var metadataApplySourceData: Data? = nil
+    private var metadataApplyPendingURL: URL? = nil
     private var metadataApplyTask: Task<Void, Never>?
 
     func presentApplyMetadata(from url: URL, data: Data) {
         metadataApplyErrorMessage = nil
         metadataApplyUnmatchedRows = nil
         metadataApplyProgress = nil
+        metadataApplyUnknownColumnsPrompt = nil
         metadataApplySourceData = data
-        runMetadataApply(from: url, data: data)
+        metadataApplyPendingURL = url
+        runMetadataApply(from: url, data: data, offerUnknownColumns: true)
     }
 
     func presentApplyMetadataReadError(_ message: String) {
@@ -754,9 +766,39 @@ final class LibraryViewModel {
         metadataApplyErrorMessage = nil
         metadataApplyProgress = nil
         metadataApplySourceData = nil
+        metadataApplyPendingURL = nil
+        metadataApplyUnknownColumnsPrompt = nil
     }
 
-    func runMetadataApply(from url: URL, data: Data) {
+    /// Create selected unknown columns as custom metadata fields, then continue the import.
+    func confirmImportUnknownColumns(_ selections: [(key: String, valueType: CustomMetadataValueType)]) {
+        for sel in selections {
+            addCustomMetadataField(name: sel.key, valueType: sel.valueType)
+        }
+        metadataApplyUnknownColumnsPrompt = nil
+        guard let url = metadataApplyPendingURL, let data = metadataApplySourceData else { return }
+        runMetadataApply(from: url, data: data, offerUnknownColumns: false)
+    }
+
+    /// Continue import without creating custom fields for unknown columns.
+    func skipImportUnknownColumns() {
+        metadataApplyUnknownColumnsPrompt = nil
+        guard let url = metadataApplyPendingURL, let data = metadataApplySourceData else { return }
+        runMetadataApply(from: url, data: data, offerUnknownColumns: false)
+    }
+
+    /// Abort import after the unknown-columns prompt.
+    func cancelImportUnknownColumns() {
+        metadataApplyTask?.cancel()
+        metadataApplyUnknownColumnsPrompt = nil
+        metadataApplyProgress = nil
+        metadataApplySourceData = nil
+        metadataApplyPendingURL = nil
+    }
+
+    /// - Parameter offerUnknownColumns: When true (first pass), pause for a dialog if unknowns exist.
+    ///   After the user confirms or skips, call again with `false` so remaining unknowns only appear in the summary.
+    func runMetadataApply(from url: URL, data: Data, offerUnknownColumns: Bool = true) {
         metadataApplyTask?.cancel()
         let videosSnapshot = videos
         let tagsSnapshot = tagsByVideoId
@@ -769,11 +811,27 @@ final class LibraryViewModel {
         metadataApplyTask = Task { [weak self] in
             do {
                 let format = try MetadataApplyParser.detectFormat(url: url, data: data)
-                let (rows, skipped, resolved) = try MetadataApplyParser.parse(
+                let (rows, unknownColumns, resolved) = try MetadataApplyParser.parse(
                     data: data,
                     format: format,
                     customFields: customDefs
                 )
+
+                if offerUnknownColumns, !unknownColumns.isEmpty {
+                    await MainActor.run {
+                        guard let self else { return }
+                        self.metadataApplyProgress = nil
+                        self.metadataApplyPendingURL = url
+                        self.metadataApplyUnknownColumnsPrompt = MetadataApplyUnknownColumnsPrompt(
+                            sourceURL: url,
+                            format: format,
+                            columns: unknownColumns
+                        )
+                    }
+                    return
+                }
+
+                let skippedKeys = unknownColumns.map(\.key)
                 let index = MetadataApplier.buildIndex(
                     videos: videosSnapshot,
                     tagsByVideoId: tagsSnapshot,
@@ -783,7 +841,7 @@ final class LibraryViewModel {
                 let pass1 = try MetadataApplier.pass1(
                     rows: rows,
                     resolvedColumnIDs: resolved,
-                    skippedUnknownColumns: skipped,
+                    skippedUnknownColumns: skippedKeys,
                     index: index
                 )
 
@@ -1532,9 +1590,23 @@ final class LibraryViewModel {
 
     func addCustomMetadataField() {
         let n = customMetadataFieldDefinitions.count + 1
-        customMetadataFieldDefinitions.append(
-            CustomMetadataFieldDefinition(name: "Field \(n)", valueType: .string)
-        )
+        addCustomMetadataField(name: "Field \(n)", valueType: .string)
+    }
+
+    /// Add a custom metadata field with an explicit name and type (Import Metadata unknown columns).
+    /// Skips if a field with the same name already exists (case-insensitive).
+    @discardableResult
+    func addCustomMetadataField(name: String, valueType: CustomMetadataValueType) -> UUID? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if let existing = customMetadataFieldDefinitions.first(where: {
+            $0.name.caseInsensitiveCompare(trimmed) == .orderedSame
+        }) {
+            return existing.id
+        }
+        let field = CustomMetadataFieldDefinition(name: trimmed, valueType: valueType)
+        customMetadataFieldDefinitions.append(field)
+        return field.id
     }
 
     func removeCustomMetadataFields(ids: Set<UUID>) {
@@ -2263,6 +2335,17 @@ final class LibraryViewModel {
             return values
         }
 
+        static func booleanValues(_ videos: [Video], fieldId: UUID, metadata: [Int64: [UUID: String]]) -> [Int64: Bool] {
+            var values: [Int64: Bool] = [:]
+            for video in videos {
+                guard let vid = video.databaseId, let raw = metadata[vid]?[fieldId] else { continue }
+                if let canon = CustomMetadataValueType.normalizeBooleanStorage(raw) {
+                    values[vid] = canon == "true"
+                }
+            }
+            return values
+        }
+
         private static let isoDate: DateFormatter = {
             let f = DateFormatter()
             f.calendar = Calendar(identifier: .gregorian)
@@ -2332,6 +2415,19 @@ final class LibraryViewModel {
                 case (nil, _):   return !ascending
                 case (_, nil):   return ascending
                 case let (l?, r?): return ascending ? l < r : l > r
+                }
+            }
+
+        case .boolean:
+            let values = CustomFieldValueParser.booleanValues(videos, fieldId: field.id, metadata: metadata)
+            return videos.sorted { a, b in
+                let va = a.databaseId.flatMap { values[$0] }
+                let vb = b.databaseId.flatMap { values[$0] }
+                switch (va, vb) {
+                case (nil, nil): return false
+                case (nil, _):   return !ascending
+                case (_, nil):   return ascending
+                case let (l?, r?): return ascending ? (!l && r) : (l && !r)
                 }
             }
 

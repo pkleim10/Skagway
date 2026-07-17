@@ -12,6 +12,8 @@ enum CustomMetadataValueType: CaseIterable, Identifiable, Sendable {
     case date
     /// Date and time of day.
     case dateTime
+    /// True/false; stored canonically as `"true"` / `"false"`.
+    case boolean
 
     var id: String { rawValue }
 
@@ -23,6 +25,7 @@ enum CustomMetadataValueType: CaseIterable, Identifiable, Sendable {
         case .number: return "number"
         case .date: return "date"
         case .dateTime: return "dateTime"
+        case .boolean: return "boolean"
         }
     }
 
@@ -33,11 +36,27 @@ enum CustomMetadataValueType: CaseIterable, Identifiable, Sendable {
         case .number: return "Number"
         case .date: return "Date"
         case .dateTime: return "Date & Time"
+        case .boolean: return "Boolean"
         }
     }
 
     static var allCases: [CustomMetadataValueType] {
-        [.string, .text, .number, .date, .dateTime]
+        [.string, .text, .number, .date, .dateTime, .boolean]
+    }
+
+    /// Normalize a cell/edit string to canonical `"true"` / `"false"`.
+    /// Accepts true/false, yes/no, y/n, 1/0 (case-insensitive). Other values → nil.
+    static func normalizeBooleanStorage(_ raw: String) -> String? {
+        switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "true", "yes", "y", "1": return "true"
+        case "false", "no", "n", "0": return "false"
+        default: return nil
+        }
+    }
+
+    /// Whether `raw` is a recognized boolean token (for import type inference).
+    static func isBooleanToken(_ raw: String) -> Bool {
+        normalizeBooleanStorage(raw) != nil
     }
 }
 
@@ -52,6 +71,7 @@ extension CustomMetadataValueType: Codable {
         case "integer", "fp": self = .number // legacy split types → unified Number
         case "date": self = .date
         case "dateTime": self = .dateTime
+        case "boolean": self = .boolean
         default:
             throw DecodingError.dataCorruptedError(
                 in: c,

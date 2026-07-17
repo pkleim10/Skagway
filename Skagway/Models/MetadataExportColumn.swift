@@ -405,6 +405,11 @@ enum MetadataExportRowBuilder {
         case .number:
             if let d = Double(trimmed) { return .double(d) }
             return .string(raw)
+        case .boolean:
+            if let canon = CustomMetadataValueType.normalizeBooleanStorage(trimmed) {
+                return .bool(canon == "true")
+            }
+            return .string(raw)
         case .date, .dateTime:
             // Preserve stored canonical strings (yyyy-MM-dd / ISO8601).
             return .string(trimmed)

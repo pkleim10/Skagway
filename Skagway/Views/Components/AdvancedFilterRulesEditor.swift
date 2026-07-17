@@ -282,6 +282,21 @@ struct AdvancedFilterRulesEditor: View {
             }
         case .quality:
             qualityChips(rule.value)
+        case .boolean:
+            Picker("", selection: rule.value) {
+                Text("True").tag("true")
+                Text("False").tag("false")
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: 160)
+            .onAppear {
+                if CustomMetadataValueType.normalizeBooleanStorage(rule.wrappedValue.value) == nil {
+                    rule.wrappedValue.value = "true"
+                } else if let canon = CustomMetadataValueType.normalizeBooleanStorage(rule.wrappedValue.value) {
+                    rule.wrappedValue.value = canon
+                }
+            }
         case .number:
             HStack(spacing: 6) {
                 TextField(rule.wrappedValue.field.valuePlaceholder(customFields: fields), text: rule.value)
@@ -351,6 +366,7 @@ struct AdvancedFilterRulesEditor: View {
         switch kind {
         case .date: value.wrappedValue = RuleDateFormat.string(from: Date())
         case .rating: value.wrappedValue = "0"
+        case .boolean: value.wrappedValue = "true"
         default: break
         }
     }

@@ -9,6 +9,7 @@ enum FilterFieldKind {
     case rating
     case tag
     case quality
+    case boolean
 }
 
 extension FilterField {
@@ -27,6 +28,7 @@ extension FilterField {
             switch customFields[id]?.valueType {
             case .number: return .number
             case .date, .dateTime: return .date
+            case .boolean: return .boolean
             case .string, .text, .none: return .string
             }
         }
@@ -51,7 +53,7 @@ extension FilterField {
                 return [.equals, .notEquals, .lessThan, .greaterThan, .lessThanOrEqual, .greaterThanOrEqual, .between]
             case .date:
                 return [.equals, .lessThan, .greaterThan, .between]
-            case .quality:
+            case .quality, .boolean:
                 return [.equals, .notEquals]
             }
         }
@@ -64,6 +66,7 @@ extension FilterField {
             switch customFields[id]?.valueType {
             case .number: return "Number"
             case .date, .dateTime: return "YYYY-MM-DD"
+            case .boolean: return "true / false"
             default: return "Value"
             }
         }

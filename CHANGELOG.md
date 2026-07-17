@@ -31,6 +31,9 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Boolean custom metadata** — New field type (Settings + Inspector toggle); filters (equals/not equals), sort, list display (Yes/No), export, and Import Metadata validation/normalization (`true`/`false`/`yes`/`no`/`1`/`0` → stored `true`/`false`).
+- **Import Metadata: unknown columns dialog** — When a CSV/JSONL has columns that aren’t built-ins or existing custom fields, pause before writing and let you choose which to add as custom metadata (with inferred types). Selected fields are created, the file is re-parsed, then import continues.
+
 ## 0.63.0 (build 772) - 2026-07-17
 
 - **Page Up / Page Down in grid and list** — Scroll the browser by about one viewport via the existing scroll-command path (selection unchanged). Same local key monitor as Home/End so SwiftUI ScrollView and Table don’t swallow the keys.

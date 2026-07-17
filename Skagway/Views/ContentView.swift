@@ -782,6 +782,9 @@ private struct LibraryContentView: View {
                 videoCount: presentation.videoCount
             )
         }
+        .sheet(item: $vm.metadataApplyUnknownColumnsPrompt) { prompt in
+            ApplyMetadataUnknownColumnsSheet(viewModel: vm, prompt: prompt)
+        }
         .sheet(item: $vm.metadataApplySummary) { summary in
             ApplyMetadataSummarySheet(viewModel: vm, summary: summary)
         }
