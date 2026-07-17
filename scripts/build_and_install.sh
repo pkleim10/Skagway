@@ -93,13 +93,43 @@ echo "Built: ${APP_PATH}"
 
 if [[ $INSTALL -eq 1 ]]; then
   DEST="/Applications/${FULL_PRODUCT_NAME}"
-  # Update in place — do NOT rm -rf the existing bundle first. Deleting
-  # /Applications/Skagway.app drops macOS TCC grants (Removable Volumes,
-  # Files and Folders, etc.), so every rebuild re-prompts when the library
-  # lives on a USB /Volumes path. rsync --delete refreshes contents while
-  # keeping the same app path / code-signing identity macOS already trusted.
-  mkdir -p "$DEST"
-  rsync -a --delete "${APP_PATH}/" "${DEST}/"
+  # Prefer updating the same /Applications/Skagway.app path so TCC grants
+  # (Removable Volumes, etc.) stay attached to that location + signing identity.
+  #
+  # After a browser/DMG install, macOS often stamps com.apple.macl on the bundle.
+  # That label blocks *in-place* writes (rsync mkstemp → "Operation not permitted")
+  # even when the app is quit — but renaming the bundle aside still works.
+  # So: try in-place rsync; on EPERM, move the old app aside, copy fresh, remove aside.
+
+  if pgrep -qx "Skagway" 2>/dev/null || pgrep -f "Skagway.app/Contents/MacOS/Skagway" >/dev/null 2>&1; then
+    echo "Skagway is still running — quit it, then re-run:" >&2
+    echo "  bash scripts/build_and_install.sh --no-bump" >&2
+    exit 1
+  fi
+
+  install_ok=0
+  if [[ -d "$DEST" ]]; then
+    if touch "${DEST}/Contents/.skagway_install_probe" 2>/dev/null; then
+      rm -f "${DEST}/Contents/.skagway_install_probe"
+      if rsync -a --delete "${APP_PATH}/" "${DEST}/"; then
+        install_ok=1
+      fi
+    fi
+  fi
+
+  if [[ $install_ok -eq 0 ]]; then
+    ASIDE="${DEST}.pre-update.$$"
+    rm -rf "$ASIDE"
+    if [[ -d "$DEST" ]]; then
+      echo "In-place update blocked (likely TCC macl on the existing app) — replacing via rename…"
+      mv "$DEST" "$ASIDE"
+    fi
+    # Fresh bundle at the same path (keeps Launch Services / TCC path stable).
+    ditto "$APP_PATH" "$DEST"
+    rm -rf "$ASIDE"
+    install_ok=1
+  fi
+
   echo "Installed: ${DEST}"
 
   LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
