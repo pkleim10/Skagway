@@ -31,7 +31,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
-- **Adaptive Curated Wall grid columns** — Column count scales from 5 down as the browser pane narrows so cards stay at least as wide as they are tall. Width is measured on the ScrollView background (equality-guarded); the grid is not remounted, so thumbnail reload cost is avoided.
+- **Adaptive Curated Wall grid columns** — Column count scales from 5 down as the browser pane narrows so cards stay at least as wide as they are tall. Pane width comes from ContentView’s existing GeometryReader (ScrollView background measure was unreliable and collapsed to 1 column); the grid is not remounted.
 - **Create tag from Inspector** — Tags section has a New Tag field that creates the tag and assigns it to the current selection (the natural place to invent tags while inspecting). Return/Enter submits the field; the + New Tag button still works. (Enter no longer steals focus for inline rename while a text field is active.)
 - **Install no longer resets Removable Volume permission** — `build_and_install.sh` updates `/Applications/Skagway.app` in place (rsync) instead of deleting it first, so macOS keeps the existing TCC grant across rebuilds.
 - **Demo library downloader** — `scripts/download_demo_library.py` pulls ~100 Pixabay stock clips (Landscape / Architecture / Arts & Crafts / Automotive) into `~/Movies/Skagway-Demo-Library/` for marketing screenshots.

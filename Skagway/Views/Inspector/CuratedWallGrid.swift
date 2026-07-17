@@ -47,14 +47,14 @@ private enum OpenWithAppCache {
 struct CuratedWallGrid: View {
     @Bindable var viewModel: LibraryViewModel
     let thumbnailService: ThumbnailService
+    /// Browser pane width from ContentView's GeometryReader (not ScrollView background —
+    /// that measure was unreliable and collapsed the grid to 1 column).
+    let containerWidth: CGFloat
 
     @State private var lastClickedId: String?
     @FocusState private var renameFocus: Bool
     @State private var selectionStore = CardSelectionStore()
     @State private var filmstripVideo: Video?
-    /// Live column count for `LazyVGrid`. Updated only when width crosses a threshold that
-    /// changes the integer count — continuous resize within a band is free.
-    @State private var columnCount = CuratedWallGrid.maxColumns
 
     // Max from the full-window mock; live `columns` is the source of truth for ↑/↓ row steps
     // in ContentView and for scroll-to-row math below.
@@ -69,20 +69,26 @@ struct CuratedWallGrid: View {
     private var outerPadding: CGFloat { Self.outerPadding }
 
     /// Largest `1...maxColumns` such that flexible cells are at least `minCellWidth` wide.
+    /// Invalid/zero widths keep `maxColumns` so a transient layout pass can't pin the grid at 1.
     static func columnCount(forContainerWidth width: CGFloat) -> Int {
+        guard width > 1 else { return maxColumns }
         let inner = max(0, width - outerPadding * 2)
         let n = Int((inner + spacing) / (minCellWidth + spacing))
         return min(maxColumns, max(1, n))
     }
 
+    private var columnCount: Int {
+        Self.columnCount(forContainerWidth: containerWidth)
+    }
+
     var body: some View {
-        // Flexible equal columns fill the width. Width is measured on the ScrollView via a
-        // *background* GeometryReader (preference) — not wrapping the LazyVGrid content — so the
-        // native scroller stays reliable (legacy space-reserving style included). Column count
-        // only updates when the integer changes; we never remount the grid with `.id(...)`.
+        // Flexible equal columns fill the width. Column count comes from the parent pane width
+        // (equality of the *integer* count is what matters — we never remount with `.id(...)`).
+        // No GeometryReader around LazyVGrid content — preserves native scroller behaviour.
+        let cols = columnCount
         ScrollView(.vertical) {
             LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: columnCount),
+                    columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: cols),
                     spacing: spacing
                 ) {
                     ForEach(viewModel.filteredVideos) { video in
@@ -294,16 +300,8 @@ struct CuratedWallGrid: View {
                     viewModel.issueScrollCommand(.toRow(index: rowIndex, total: totalRows))
                 }
             }
-            .background {
-                GeometryReader { geo in
-                    Color.clear.preference(key: WallGridWidthKey.self, value: geo.size.width)
-                }
-            }
-            .onPreferenceChange(WallGridWidthKey.self) { width in
-                let n = Self.columnCount(forContainerWidth: width)
-                guard n != columnCount else { return }
-                columnCount = n
-                Self.columns = n
+            .onChange(of: cols, initial: true) { _, n in
+                if Self.columns != n { Self.columns = n }
             }
         .sheet(item: $filmstripVideo) { video in
             FilmstripConfigView(
@@ -414,16 +412,5 @@ struct CuratedWallGrid: View {
         let urls = NSWorkspace.shared.urlsForApplications(toOpen: video.url)
         OpenWithAppCache.byExtension[ext] = urls
         return urls
-    }
-}
-
-// MARK: - Width preference (background measure only)
-
-/// Container width for adaptive column count. Reported from a background GeometryReader on the
-/// ScrollView so LazyVGrid content is not wrapped (preserves native scroller behaviour).
-private struct WallGridWidthKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
     }
 }

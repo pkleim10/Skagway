@@ -476,7 +476,10 @@ private struct LibraryContentView: View {
             // GeometryReader reports whatever's left after the header above — the space the
             // drawer, its resize handle, the pills, and the grid/list all have to share.
             GeometryReader { geo in
-                wallDrawerAndContent(availableHeight: geo.size.height)
+                wallDrawerAndContent(
+                    availableWidth: geo.size.width,
+                    availableHeight: geo.size.height
+                )
             }
         }
         // Animate the pane layout (grid/list position) in response to the reveal factor.
@@ -500,7 +503,7 @@ private struct LibraryContentView: View {
     private static let filtersDrawerHandleHeight: CGFloat = 12
 
     @ViewBuilder
-    private func wallDrawerAndContent(availableHeight: CGFloat) -> some View {
+    private func wallDrawerAndContent(availableWidth: CGFloat, availableHeight: CGFloat) -> some View {
         VStack(spacing: 0) {
             // Drawer well — the expanding slot directly under the thin header.
             // Goal: a clean, "wow" slide where the filter panel drops down from under the header
@@ -552,7 +555,11 @@ private struct LibraryContentView: View {
             }
 
             if vm.viewMode == .grid {
-                CuratedWallGrid(viewModel: vm, thumbnailService: thumbService)
+                CuratedWallGrid(
+                    viewModel: vm,
+                    thumbnailService: thumbService,
+                    containerWidth: availableWidth
+                )
             } else {
                 LibraryListView(
                     viewModel: vm,
@@ -839,8 +846,15 @@ private struct LibraryContentView: View {
 
     /// Returns `nil` to consume the key event (do not deliver to the app).
     private static func processLibraryKeyDown(_ event: NSEvent, lvm: LibraryViewModel) -> NSEvent? {
-        // Enter key (without modifiers) — start inline rename in list or grid mode
+        // Enter key (without modifiers) — start inline rename in list or grid mode.
+        // A focused text field (Inspector New Tag, search, notes, filter create-tag, etc.)
+        // must keep Return for its own submit — same first-responder carve-out as Space.
         if event.keyCode == 36, event.modifierFlags.intersection(.deviceIndependentFlagsMask) == [], !lvm.isEditingText {
+            if let first = NSApp.keyWindow?.firstResponder,
+               first is NSTextView || first is NSTextField || first is NSText
+            {
+                return event
+            }
             if (lvm.viewMode == .list || lvm.viewMode == .grid),
                lvm.selectedVideoIds.count == 1,
                let videoId = lvm.selectedVideoIds.first,
