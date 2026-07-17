@@ -1026,6 +1026,22 @@ private struct LibraryContentView: View {
             return nil
         }
 
+        // Page Up / Page Down — scroll the visible browser by ~one viewport (grid and list).
+        // Same local-monitor path as Home/End so SwiftUI ScrollView / Table don't swallow the keys
+        // before we can drive `ScrollCommandHandler`. Selection is left alone (unlike Home/End).
+        // keyCodes: 116 Page Up, 121 Page Down.
+        if event.keyCode == 116 || event.keyCode == 121,
+           event.modifierFlags.intersection(commandModifiers).isEmpty,
+           !lvm.isEditingText {
+            if let first = NSApp.keyWindow?.firstResponder, first is NSTextView || first is NSTextField {
+                return event
+            }
+            DispatchQueue.main.async {
+                lvm.issueScrollCommand(event.keyCode == 116 ? .pageUp : .pageDown)
+            }
+            return nil
+        }
+
         // No ⌘A handling here — deliberately. Select All lives in the Edit menu, whose action
         // routes through the responder chain first (a focused text field selects its own text,
         // List's table selects its rows) and falls back to `selectAllVideos()` only when nothing
