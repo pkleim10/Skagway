@@ -93,11 +93,13 @@ echo "Built: ${APP_PATH}"
 
 if [[ $INSTALL -eq 1 ]]; then
   DEST="/Applications/${FULL_PRODUCT_NAME}"
-  if [[ -d "$DEST" ]]; then
-    rm -rf "$DEST"
-  fi
-  # ditto preserves bundle metadata better than cp -R for Launch Services / Spotlight.
-  ditto "$APP_PATH" "$DEST"
+  # Update in place — do NOT rm -rf the existing bundle first. Deleting
+  # /Applications/Skagway.app drops macOS TCC grants (Removable Volumes,
+  # Files and Folders, etc.), so every rebuild re-prompts when the library
+  # lives on a USB /Volumes path. rsync --delete refreshes contents while
+  # keeping the same app path / code-signing identity macOS already trusted.
+  mkdir -p "$DEST"
+  rsync -a --delete "${APP_PATH}/" "${DEST}/"
   echo "Installed: ${DEST}"
 
   LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"

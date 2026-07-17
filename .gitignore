@@ -20,6 +20,10 @@ Package.resolved
 # Public packaging output (DMGs / archives are not committed)
 dist/
 *.dmg
+packaging/.venv/
+
+# Local demo library downloads (use ~/Movies/Skagway-Demo-Library by default)
+demo-library/
 
 # Misc
 *.swp

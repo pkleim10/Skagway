@@ -26,7 +26,8 @@ struct CuratedWallInspector: View {
     @State private var customFieldsLoadedForIds: Set<String> = []
     @State private var customFieldOriginalValues: [UUID: String] = [:]
     @FocusState private var focusedCustomFieldId: UUID?
-
+    @State private var showUnassigned = false
+    @State private var newTagText = ""
 
     var body: some View {
         GeometryReader { _ in
@@ -620,7 +621,7 @@ struct CuratedWallInspector: View {
 
             // List 1 — tags on this video; tap a chip to unassign it. Packed flow (not a grid).
             if assigned.isEmpty {
-                Text("Select a tag from the list below to assign it to this video")
+                Text("Create a tag below, or pick one from Add tags")
                     .font(.caption2)
                     .foregroundStyle(Color.appTextTertiary)
             } else {
@@ -632,6 +633,29 @@ struct CuratedWallInspector: View {
                     }
                 }
             }
+
+            // Create + assign in one step — the natural moment to invent a new tag.
+            HStack(spacing: 6) {
+                TextField("New tag", text: $newTagText)
+                    .textFieldStyle(.plain)
+                    .font(.caption)
+                    .foregroundStyle(Color.appTextPrimary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(insetFieldBackground(cornerRadius: 6))
+                    .onSubmit { createAndAssignTag() }
+
+                Button { createAndAssignTag() } label: {
+                    Label("New Tag", systemImage: "plus")
+                        .font(.caption)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.appAccent)
+                .disabled(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                          || selectedIds.isEmpty)
+            }
+            .padding(.top, 4)
 
             // The "blind" that reveals the unassigned list.
             Button {
@@ -652,9 +676,9 @@ struct CuratedWallInspector: View {
             if showUnassigned {
                 // List 2 — every tag, stable alphabetical order; tap an unapplied one to assign
                 // it. Already-applied tags stay in place, greyed out, rather than disappearing.
-                // Tag creation and rename/delete now live in the filters drawer's Tags card.
+                // Rename/delete stay in the filters drawer's Tags card.
                 if all.isEmpty {
-                    Text("No tags yet — create one from the Tags filter.")
+                    Text("No tags yet — type a name above to create one.")
                         .font(.caption2)
                         .foregroundStyle(Color.appTextTertiary)
                 } else {
@@ -662,6 +686,13 @@ struct CuratedWallInspector: View {
                 }
             }
         }
+    }
+
+    private func createAndAssignTag() {
+        let name = newTagText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, !selectedIds.isEmpty else { return }
+        newTagText = ""
+        Task { await viewModel.addTag(name, toVideos: selectedIds) }
     }
 
     /// A flexible grid of every tag in stable (alphabetical) order for the "Add tags" list.
@@ -678,8 +709,6 @@ struct CuratedWallInspector: View {
             }
         }
     }
-
-    @State private var showUnassigned = false
 
     // MARK: - Footer
 

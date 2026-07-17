@@ -9,7 +9,7 @@
 #
 # Default: bumps CURRENT_PROJECT_VERSION, archives Release, signs with hardened runtime,
 # builds a styled drag-to-Applications DMG (create-dmg + packaging/dmg-background.png),
-# notarizes, staples to dist/Skagway-<version>-<build>.dmg + dist/Skagway.dmg.
+# notarizes, staples.
 #
 # Requires: brew install create-dmg
 #
@@ -200,19 +200,21 @@ if ! command -v create-dmg >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "Creating styled DMG (drag-to-Applications)…"
+echo "Creating styled DMG (create-dmg)…"
 rm -f "$VERSIONED_DMG" "$STABLE_DMG"
-# Stage contains only the .app; create-dmg adds the Applications drop link + Finder layout.
-# Background is exactly window-size in pixels with baked-in drag instruction art.
+# Keep this path simple: create-dmg owns Finder background + icon layout.
+# Do not rewrite .DS_Store afterward — volume-relative background aliases break
+# and Finder falls back to a blank gray window.
 create-dmg \
   --volname "Skagway" \
   --background "$DMG_BACKGROUND" \
   --window-pos 200 120 \
   --window-size "$DMG_WINDOW_W" "$DMG_WINDOW_H" \
   --icon-size 128 \
-  --icon "Skagway.app" 165 255 \
+  --text-size 12 \
+  --icon "Skagway.app" 165 285 \
   --hide-extension "Skagway.app" \
-  --app-drop-link 475 275 \
+  --app-drop-link 475 285 \
   --no-internet-enable \
   --overwrite \
   "$VERSIONED_DMG" \

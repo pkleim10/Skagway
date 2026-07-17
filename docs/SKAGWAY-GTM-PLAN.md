@@ -208,6 +208,7 @@ Not competing as Infuse/Plex clone.
 
 ### Asset checklist
 
+- **Demo library (not personal media):** `python3 scripts/download_demo_library.py` → `~/Movies/Skagway-Demo-Library/` (~25 clips each: Landscape, Architecture, Arts & Crafts, Automotive). Add that folder as a Skagway data source for screenshots / manuals. Credit Pixabay on public marketing that uses the clips.
 - 4–6 stills (wall, inspector, filters, player, collections) with descriptive alts for SEO
 - 30–60s silent or lightly captioned demo (download → browse → filter → play)
 - App icon + social OG image (1200×630)

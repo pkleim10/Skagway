@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.63.0 (build 772) - 2026-07-17
+
 - **Page Up / Page Down in grid and list** — Scroll the browser by about one viewport via the existing scroll-command path (selection unchanged). Same local key monitor as Home/End so SwiftUI ScrollView and Table don’t swallow the keys.
 - **Adaptive Curated Wall grid columns** — Column count scales from 5 down as the browser pane narrows so cards stay at least as wide as they are tall. Pane width comes from ContentView’s existing GeometryReader (ScrollView background measure was unreliable and collapsed to 1 column); the grid is not remounted.
 - **Create tag from Inspector** — Tags section has a New Tag field that creates the tag and assigns it to the current selection (the natural place to invent tags while inspecting). Return/Enter submits the field; the + New Tag button still works. (Enter no longer steals focus for inline rename while a text field is active.)
