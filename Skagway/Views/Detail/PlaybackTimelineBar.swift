@@ -7,15 +7,14 @@ struct PlaybackTimelineBar: View {
     /// When false, the bar is faded (panel hover chrome / full-screen idle).
     var controlsVisible: Bool = true
 
-    /// Row with play / times / scrubber (full player width, normal padding only).
-    static let transportRowHeight: CGFloat = 44
-    /// Tall hit target for the scrubber (visual track stays a thin capsule centered inside).
-    static let scrubHitHeight: CGFloat = 40
-    /// Top strip where bookmark diamonds live — double-click bookmarks at the pointer (not playhead).
-    static let diamondLaneHeight: CGFloat = 18
-    /// Extra height *below* the scrubber line so bottom-corner chrome doesn’t sit on the track.
-    static let belowTrackClearance: CGFloat = 20
-    static let barHeight: CGFloat = transportRowHeight + belowTrackClearance
+    /// Tall hit target for the scrubber. Track sits near the *bottom* of this so chrome below stays close.
+    static let scrubHitHeight: CGFloat = 28
+    /// Row under the scrubber: play / skip / speed (does not steal scrubber width).
+    static let transportControlsHeight: CGFloat = 24
+    /// Total bar height = full-width scrubber + controls underneath.
+    static let barHeight: CGFloat = scrubHitHeight + transportControlsHeight
+    /// Vertical center of the thin scrubber line within `scrubHitHeight` (near the bottom).
+    static let trackCenterYFromBottom: CGFloat = 6
 
     private static let previewWidth: CGFloat = 160
     private static let previewHeight: CGFloat = 90
@@ -23,6 +22,10 @@ struct PlaybackTimelineBar: View {
     @State private var isDragging = false
     @State private var dragSeconds: Double = 0
     @State private var wasPlayingBeforeDrag = false
+    /// Playhead when a scrub click/drag began — restored if the click turns into a double-click bookmark.
+    @State private var playheadBeforeScrub: Double?
+    /// Set by double-click-to-bookmark so the scrub gesture doesn’t commit a seek to the pointer.
+    @State private var suppressSeekCommit = false
 
     /// Scrub-hover preview (frame at pointer time), not bookmark popovers.
     @State private var hoverFraction: CGFloat?
@@ -44,19 +47,8 @@ struct PlaybackTimelineBar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Full-width transport — no horizontal chrome reserves.
+            // Full-width scrubber — only elapsed/duration flank the track (no skip/speed here).
             HStack(spacing: 10) {
-                Button {
-                    playback.togglePlayPause()
-                } label: {
-                    Image(systemName: playback.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 14, weight: .semibold))
-                        .frame(width: 24, height: 24)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.appTextPrimary)
-                .help(playback.isPlaying ? "Pause" : "Play")
-
                 Text(displaySeconds.formattedDuration)
                     .font(.system(size: 11, weight: .medium).monospacedDigit())
                     .foregroundStyle(Color.appTextSecondary)
@@ -72,12 +64,42 @@ struct PlaybackTimelineBar: View {
                     .frame(minWidth: 40, alignment: .leading)
             }
             .padding(.horizontal, 12)
-            .frame(height: Self.transportRowHeight)
+            .frame(height: Self.scrubHitHeight)
 
-            // Taller zone under the blue scrubber line; panel chrome stays in the corners here.
-            Color.clear
-                .frame(height: Self.belowTrackClearance)
-                .allowsHitTesting(false)
+            // Play / skip / speed sit *below* the track so they never compress it horizontally.
+            // Trailing spacer keeps room for FloatingPlayerPanel’s bottom-trailing chrome.
+            HStack(spacing: 8) {
+                transportIconButton(
+                    "gobackward.15",
+                    help: "Skip back \(Int(InlinePlaybackController.skipSeconds))s (⌥←)"
+                ) {
+                    playback.skipBy(-InlinePlaybackController.skipSeconds)
+                }
+
+                Button {
+                    playback.togglePlayPause()
+                } label: {
+                    Image(systemName: playback.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.appTextPrimary)
+                .help(playback.isPlaying ? "Pause" : "Play")
+
+                transportIconButton(
+                    "goforward.15",
+                    help: "Skip forward \(Int(InlinePlaybackController.skipSeconds))s (⌥→)"
+                ) {
+                    playback.skipBy(InlinePlaybackController.skipSeconds)
+                }
+
+                playbackSpeedMenu
+
+                Spacer(minLength: 72)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: Self.transportControlsHeight)
         }
         // Fixed height — without this, ZStack proposes the full player size and the bar expands.
         .frame(maxWidth: .infinity)
@@ -101,6 +123,46 @@ struct PlaybackTimelineBar: View {
         .animation(.easeOut(duration: 0.2), value: controlsVisible)
     }
 
+    private var playbackSpeedMenu: some View {
+        Menu {
+            ForEach(InlinePlaybackController.playbackRateChoices, id: \.self) { rate in
+                Button {
+                    playback.setPlaybackRate(rate)
+                } label: {
+                    if abs(playback.playbackRate - rate) < 0.001 {
+                        Label(
+                            InlinePlaybackController.formatPlaybackRate(rate),
+                            systemImage: "checkmark"
+                        )
+                    } else {
+                        Text(InlinePlaybackController.formatPlaybackRate(rate))
+                    }
+                }
+            }
+        } label: {
+            Text(InlinePlaybackController.formatPlaybackRate(playback.playbackRate))
+                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                .foregroundStyle(Color.appTextPrimary)
+                .frame(minWidth: 28)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .help("Playback speed")
+    }
+
+    private func transportIconButton(_ systemName: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.appTextPrimary)
+        .help(help)
+    }
+
     @ViewBuilder
     private var scrubPreviewOverlay: some View {
         if let hoverFraction, let hoverSeconds, trackFrame.width > 1 {
@@ -120,6 +182,8 @@ struct PlaybackTimelineBar: View {
             let width = max(geo.size.width, 1)
             let progress = duration > 0 ? min(max(displaySeconds / duration, 0), 1) : 0
             let playheadX = progress * width
+            // Keep the thin track near the bottom of the hit area so transport/chrome sit close under it.
+            let trackY = geo.size.height - Self.trackCenterYFromBottom
 
             ZStack(alignment: .leading) {
                 Rectangle()
@@ -128,46 +192,37 @@ struct PlaybackTimelineBar: View {
                 Capsule()
                     .fill(Color.white.opacity(0.22))
                     .frame(height: 4)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, Self.trackCenterYFromBottom - 2)
 
                 Capsule()
                     .fill(Color.appAccent)
                     .frame(width: max(playheadX, 0), height: 4)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                    .padding(.bottom, Self.trackCenterYFromBottom - 2)
 
                 Circle()
                     .fill(Color.white)
                     .frame(width: 12, height: 12)
                     .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
-                    .position(x: playheadX, y: geo.size.height / 2)
-
-                // Hit targets under the diamond buttons: top = bookmark-at-pointer,
-                // bottom = scrub (so double-click doesn’t also seek).
-                VStack(spacing: 0) {
-                    Color.clear
-                        .frame(height: Self.diamondLaneHeight)
-                        .frame(maxWidth: .infinity)
-                        .contentShape(Rectangle())
-                        .help("Double-click to bookmark at pointer")
-                        .highPriorityGesture(
-                            SpatialTapGesture(count: 2, coordinateSpace: .local)
-                                .onEnded { value in
-                                    addBookmarkAtTrackX(value.location.x, trackWidth: width)
-                                }
-                        )
-
-                    Color.clear
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .contentShape(Rectangle())
-                        .gesture(scrubGesture(trackWidth: width))
-                }
+                    .position(x: playheadX, y: trackY)
 
                 // Existing bookmarks stay on top so a single click still jumps.
                 ForEach(viewModel.bookmarksForPlayback) { bookmark in
-                    bookmarkTick(bookmark, trackWidth: width, trackHeight: geo.size.height)
+                    bookmarkTick(bookmark, trackWidth: width, trackY: trackY)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .help("Click to seek · Double-click to bookmark at pointer")
+            // Single-click/drag seeks; double-click bookmarks at the same pointer (playhead restored).
+            .gesture(scrubGesture(trackWidth: width))
+            .simultaneousGesture(
+                SpatialTapGesture(count: 2, coordinateSpace: .local)
+                    .onEnded { value in
+                        bookmarkFromDoubleClick(x: value.location.x, trackWidth: width)
+                    }
+            )
             // DragGesture(minimumDistance: 0) often blocks SwiftUI’s onContinuousHover on macOS;
             // AppKit tracking still receives mouse-moved while gestures handle click/drag seek.
             .background {
@@ -187,6 +242,16 @@ struct PlaybackTimelineBar: View {
                 )
             }
         }
+    }
+
+    /// Double-click where a single click would seek → bookmark at pointer, leave playhead where it was.
+    private func bookmarkFromDoubleClick(x: CGFloat, trackWidth: CGFloat) {
+        suppressSeekCommit = true
+        let restore = playheadBeforeScrub ?? playback.currentTimeSeconds
+        let resume = wasPlayingBeforeDrag
+        isDragging = false
+        addBookmarkAtTrackX(x, trackWidth: trackWidth)
+        playback.seek(toSeconds: restore, resumePlayback: resume)
     }
 
     /// Bookmark at the scrub-preview / pointer time — does not seek or pause playback.
@@ -277,28 +342,35 @@ struct PlaybackTimelineBar: View {
                 guard duration > 0 else { return }
                 if !isDragging {
                     isDragging = true
+                    suppressSeekCommit = false
                     wasPlayingBeforeDrag = playback.isPlaying
+                    playheadBeforeScrub = playback.currentTimeSeconds
                 }
+                guard !suppressSeekCommit else { return }
                 let fraction = min(max(value.location.x / trackWidth, 0), 1)
                 dragSeconds = fraction * duration
                 playback.seek(toSeconds: dragSeconds, resumePlayback: false)
                 updateScrubHover(x: value.location.x, trackWidth: trackWidth)
             }
             .onEnded { value in
-                guard duration > 0 else {
+                defer {
                     isDragging = false
+                    playheadBeforeScrub = nil
+                }
+                guard duration > 0 else { return }
+                if suppressSeekCommit {
+                    suppressSeekCommit = false
                     return
                 }
                 let fraction = min(max(value.location.x / trackWidth, 0), 1)
                 let seconds = fraction * duration
                 let resume = wasPlayingBeforeDrag
-                isDragging = false
                 playback.seek(toSeconds: seconds, resumePlayback: resume)
             }
     }
 
     @ViewBuilder
-    private func bookmarkTick(_ bookmark: VideoBookmark, trackWidth: CGFloat, trackHeight: CGFloat) -> some View {
+    private func bookmarkTick(_ bookmark: VideoBookmark, trackWidth: CGFloat, trackY: CGFloat) -> some View {
         let fraction = duration > 0 ? min(max(bookmark.seconds / duration, 0), 1) : 0
         let x = fraction * trackWidth
 
@@ -312,7 +384,7 @@ struct PlaybackTimelineBar: View {
         }
         .buttonStyle(.plain)
         .help("\(bookmark.title) — \(bookmark.formattedTimecode)")
-        .position(x: x, y: max(8, trackHeight / 2 - 10))
+        .position(x: x, y: max(6, trackY - 10))
     }
 }
 

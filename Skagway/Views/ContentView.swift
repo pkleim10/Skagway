@@ -987,10 +987,32 @@ private struct LibraryContentView: View {
             return nil
         }
 
+        // While playing: ←/→ nudge 5s, ⌥←/⌥→ skip 15s. Takes priority over grid navigation.
+        if lvm.isPlayingInline,
+           [123, 124].contains(event.keyCode),
+           !lvm.isEditingText {
+            if let first = NSApp.keyWindow?.firstResponder, first is NSTextView || first is NSTextField {
+                return event
+            }
+            let mods = event.modifierFlags.intersection(commandModifiers)
+            let isLeft = event.keyCode == 123
+            if mods.isEmpty {
+                let delta = InlinePlaybackController.nudgeSeconds * (isLeft ? -1 : 1)
+                DispatchQueue.main.async { lvm.playback.nudgeBy(delta) }
+                return nil
+            }
+            if mods == .option {
+                let delta = InlinePlaybackController.skipSeconds * (isLeft ? -1 : 1)
+                DispatchQueue.main.async { lvm.playback.skipBy(delta) }
+                return nil
+            }
+        }
+
         // Arrow keys — grid navigation. Handled here (same local monitor as Space/Enter/Escape) because
         // SwiftUI `.onKeyPress` on the grid's `ScrollView` doesn't reliably receive keys inside the
         // NSHostingView+NSSplitView the Curated Wall is hosted in. ←/→ step one video; ↑/↓ step one row.
         // keyCodes: 123 ←, 124 →, 125 ↓, 126 ↑.
+        // While playing, ←/→ are consumed above for nudge/skip; ↑/↓ still navigate the grid.
         if [123, 124, 125, 126].contains(event.keyCode),
            event.modifierFlags.intersection(commandModifiers).isEmpty,
            lvm.viewMode == .grid,

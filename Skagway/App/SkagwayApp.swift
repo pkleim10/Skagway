@@ -95,6 +95,27 @@ struct SkagwayApp: App {
                 }
                 .disabled(appState.libraryViewModel?.isPlayingInline != true)
 
+                Button("Skip Back 15 Seconds") {
+                    appState.libraryViewModel?.playback.skipBy(-InlinePlaybackController.skipSeconds)
+                }
+                .keyboardShortcut(.leftArrow, modifiers: .option)
+                .disabled(appState.libraryViewModel?.isPlayingInline != true)
+
+                Button("Skip Forward 15 Seconds") {
+                    appState.libraryViewModel?.playback.skipBy(InlinePlaybackController.skipSeconds)
+                }
+                .keyboardShortcut(.rightArrow, modifiers: .option)
+                .disabled(appState.libraryViewModel?.isPlayingInline != true)
+
+                Menu("Playback Speed") {
+                    ForEach(InlinePlaybackController.playbackRateChoices, id: \.self) { rate in
+                        Button(InlinePlaybackController.formatPlaybackRate(rate)) {
+                            appState.libraryViewModel?.playback.setPlaybackRate(rate)
+                        }
+                    }
+                }
+                .disabled(appState.libraryViewModel?.isPlayingInline != true)
+
                 Button("Make Thumbnail from Current Frame") {
                     appState.libraryViewModel?.playback.makeThumbnailFromCurrentFrame()
                 }

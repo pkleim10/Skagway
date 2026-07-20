@@ -36,6 +36,14 @@ final class InlinePlaybackController {
     /// Duration used by the timeline; prefers item duration, falls back to `Video.duration`.
     private(set) var durationSeconds: Double = 0
     private(set) var isPlaying: Bool = false
+    /// Desired playback rate (persists across pause/seek within the session). Applied on play.
+    private(set) var playbackRate: Float = 1.0
+
+    /// Skip buttons / ⌥←⌥→ while playing.
+    static let skipSeconds: Double = 15
+    /// ←/→ nudge while playing (smaller than skip).
+    static let nudgeSeconds: Double = 5
+    static let playbackRateChoices: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
 
     @ObservationIgnored private var statusTask: Task<Void, Never>?
     @ObservationIgnored private var resumeBannerFadeTask: Task<Void, Never>?
@@ -113,7 +121,9 @@ final class InlinePlaybackController {
                 resumeBannerOpacity = 1
                 didAutoResume = true
                 resumedFromSeconds = resumeSeconds
-                newPlayer.seek(to: CMTime(seconds: resumeSeconds, preferredTimescale: 600)) { _ in newPlayer.play() }
+                newPlayer.seek(to: CMTime(seconds: resumeSeconds, preferredTimescale: 600)) { [weak self] _ in
+                    self?.playAtConfiguredRate(newPlayer)
+                }
                 scheduleResumeBannerFadeIfNeeded()
             } else if seconds > 0 {
                 cancelResumeBannerFadeTask()
@@ -123,13 +133,15 @@ final class InlinePlaybackController {
                 // Precise seek (zero tolerance) so a filmstrip click lands on the clicked frame
                 // instead of snapping to the nearest keyframe.
                 newPlayer.seek(to: CMTime(seconds: seconds, preferredTimescale: 600),
-                               toleranceBefore: .zero, toleranceAfter: .zero) { _ in newPlayer.play() }
+                               toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                    self?.playAtConfiguredRate(newPlayer)
+                }
             } else {
                 cancelResumeBannerFadeTask()
                 resumeBannerOpacity = 1
                 didAutoResume = false
                 resumedFromSeconds = nil
-                newPlayer.play()
+                playAtConfiguredRate(newPlayer)
             }
             Task { await viewModel.recordPlay(for: video) }
 
@@ -202,8 +214,7 @@ final class InlinePlaybackController {
             player.pause()
             isPlaying = false
         } else {
-            player.play()
-            isPlaying = true
+            playAtConfiguredRate(player)
         }
     }
 
@@ -218,8 +229,9 @@ final class InlinePlaybackController {
             viewModel.notifyResumePositionsChanged()
         }
         player.pause()
-        player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero) { [weak player] _ in
-            player?.play()
+        player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self, weak player] _ in
+            guard let self, let player else { return }
+            self.playAtConfiguredRate(player)
         }
     }
 
@@ -232,7 +244,36 @@ final class InlinePlaybackController {
         resumedFromSeconds = nil
         PlaybackPositionStore.clear(filePath: video.filePath)
         viewModel.notifyResumePositionsChanged()
-        player.seek(to: .zero) { _ in player.play() }
+        player.seek(to: .zero) { [weak self, weak player] _ in
+            guard let self, let player else { return }
+            self.playAtConfiguredRate(player)
+        }
+    }
+
+    /// Skip backward/forward by `skipSeconds` (timeline buttons / menu / ⌥←⌥→).
+    func skipBy(_ delta: Double) {
+        let resume = isPlaying
+        seek(toSeconds: currentTimeSeconds + delta, resumePlayback: resume)
+    }
+
+    /// Smaller seek for ←/→ while playing.
+    func nudgeBy(_ delta: Double) {
+        let resume = isPlaying
+        seek(toSeconds: currentTimeSeconds + delta, resumePlayback: resume)
+    }
+
+    func setPlaybackRate(_ rate: Float) {
+        let allowed = Self.playbackRateChoices
+        let chosen = allowed.min(by: { abs($0 - rate) < abs($1 - rate) }) ?? 1.0
+        playbackRate = chosen
+        guard let player, isPlaying || player.timeControlStatus == .playing else { return }
+        player.rate = chosen
+    }
+
+    static func formatPlaybackRate(_ rate: Float) -> String {
+        if abs(rate - 1) < 0.001 { return "1×" }
+        if abs(rate - rate.rounded()) < 0.001 { return "\(Int(rate.rounded()))×" }
+        return String(format: "%g×", rate)
     }
 
     /// "Make Thumbnail from Current Frame" (pro feature): capture the exact frame on screen right now
@@ -277,12 +318,17 @@ final class InlinePlaybackController {
             toleranceBefore: .zero,
             toleranceAfter: .zero
         ) { [weak self, weak player] _ in
-            guard let self else { return }
+            guard let self, let player else { return }
             if resumePlayback {
-                player?.play()
-                self.isPlaying = true
+                self.playAtConfiguredRate(player)
             }
         }
+    }
+
+    /// Play (or resume) at the user’s chosen rate — `play()` alone would reset to 1×.
+    private func playAtConfiguredRate(_ player: AVPlayer) {
+        player.playImmediately(atRate: max(playbackRate, 0.05))
+        isPlaying = true
     }
 
     func dismissError() {

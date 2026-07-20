@@ -39,7 +39,7 @@ struct OverlayInlinePlayerView: View {
                 .padding(.horizontal, 10)
                 .padding(.top, 34)   // leave room for the (25%-larger) header, always — it
                                      // occupies this space whether visible or faded out
-                .padding(.bottom, 10)
+                .padding(.bottom, 4) // keep panel chrome close under the timeline transport row
 
                 SubtitleOverlayContainer(track: playback.subtitleTrack)
 

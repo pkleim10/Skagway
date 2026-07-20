@@ -232,7 +232,9 @@ struct FloatingPlayerPanel: View {
                 viewModel.isPlayingInline = false
             }
         }
-        .padding(8)
+        .padding(.horizontal, 8)
+        .padding(.bottom, 4)
+        .padding(.top, 2)
     }
 
     private func iconButton(_ systemName: String, help: String, action: @escaping () -> Void) -> some View {
