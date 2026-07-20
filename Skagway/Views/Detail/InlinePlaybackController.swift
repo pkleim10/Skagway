@@ -40,6 +40,10 @@ final class InlinePlaybackController {
     private(set) var playbackRate: Float = 1.0
     /// Session-only “return here” after jumping to a bookmark (not a bookmark; cleared on stop).
     private(set) var returnPointSeconds: Double?
+    /// Player volume 0…1 (persisted). Applied whenever an `AVPlayer` is created.
+    private(set) var volume: Float
+    /// When true, audio is muted; `volume` is preserved for unmute.
+    private(set) var isMuted: Bool
 
     /// Skip buttons / ⌥←⌥→ while playing.
     static let skipSeconds: Double = 15
@@ -48,14 +52,28 @@ final class InlinePlaybackController {
     static let playbackRateChoices: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
     /// Ignore bookmark jumps that barely move the playhead.
     private static let returnPointMinDeltaSeconds: Double = 1.0
+    private static let volumeDefaultsKey = "inlinePlayback.volume"
+    private static let mutedDefaultsKey = "inlinePlayback.isMuted"
 
     @ObservationIgnored private var statusTask: Task<Void, Never>?
     @ObservationIgnored private var resumeBannerFadeTask: Task<Void, Never>?
     @ObservationIgnored private var timeObserverToken: Any?
     @ObservationIgnored private var timeControlObservation: NSKeyValueObservation?
+    /// Last non-zero volume; used when unmuting after the slider hit zero.
+    @ObservationIgnored private var lastAudibleVolume: Float = 1.0
 
     init(viewModel: LibraryViewModel) {
         self.viewModel = viewModel
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: Self.volumeDefaultsKey) != nil {
+            volume = Self.clampedVolume(defaults.float(forKey: Self.volumeDefaultsKey))
+        } else {
+            volume = 1.0
+        }
+        isMuted = defaults.bool(forKey: Self.mutedDefaultsKey)
+        if volume > 0.001 {
+            lastAudibleVolume = volume
+        }
     }
 
     // MARK: - Lifecycle
@@ -111,6 +129,7 @@ final class InlinePlaybackController {
             detachTimelineObservers()
             player?.pause()
             player = newPlayer
+            applyVolumeToPlayer(newPlayer)
             subtitleTrack.attach(to: newPlayer)
             attachTimelineObservers(to: newPlayer, fallbackDuration: video.duration)
             Task { await self.viewModel.reloadBookmarksForPlayback(video: video) }
@@ -275,6 +294,56 @@ final class InlinePlaybackController {
         playbackRate = chosen
         guard let player, isPlaying || player.timeControlStatus == .playing else { return }
         player.rate = chosen
+    }
+
+    func setVolume(_ value: Float) {
+        let clamped = Self.clampedVolume(value)
+        volume = clamped
+        if clamped > 0.001 {
+            lastAudibleVolume = clamped
+            isMuted = false
+        } else {
+            isMuted = true
+        }
+        persistVolume()
+        applyVolumeToPlayer(player)
+    }
+
+    func toggleMute() {
+        if isMuted {
+            isMuted = false
+            if volume < 0.001 {
+                volume = lastAudibleVolume
+            }
+        } else {
+            isMuted = true
+        }
+        persistVolume()
+        applyVolumeToPlayer(player)
+    }
+
+    /// SF Symbol for the current mute/level state.
+    var volumeSymbolName: String {
+        if isMuted || volume < 0.001 { return "speaker.slash.fill" }
+        if volume < 0.33 { return "speaker.wave.1.fill" }
+        if volume < 0.66 { return "speaker.wave.2.fill" }
+        return "speaker.wave.3.fill"
+    }
+
+    private static func clampedVolume(_ value: Float) -> Float {
+        min(max(value, 0), 1)
+    }
+
+    private func persistVolume() {
+        let defaults = UserDefaults.standard
+        defaults.set(volume, forKey: Self.volumeDefaultsKey)
+        defaults.set(isMuted, forKey: Self.mutedDefaultsKey)
+    }
+
+    private func applyVolumeToPlayer(_ player: AVPlayer?) {
+        guard let player else { return }
+        player.volume = volume
+        player.isMuted = isMuted || volume < 0.001
     }
 
     static func formatPlaybackRate(_ rate: Float) -> String {

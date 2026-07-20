@@ -31,6 +31,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Transport volume** — Mute toggle + compact volume slider on the custom transport row (below the scrubber), in the leading control cluster so floating size/close chrome doesn’t cover it. Leading controls keep layout priority so Compact no longer crushes speed/volume; very narrow widths fall back to mute-only. Level and mute persist across launches; applied to each new player. Hover previews stay independently muted.
 - **Session return chip** — Jumping to a bookmark while playing stashes the playhead you left; a transport chip (`↩` + time) seeks back and dismisses. Session-only — also cleared when the player closes (not a bookmark, not resume).
 - **Library choice survives rebuilds** — Active library and Recents are remembered by file path (not only security-scoped bookmarks). Bookmark resolve failures after re-signing no longer wipe the active library or prune Recents.
 - **Custom playback timeline** — Skagway-owned transport bar is the sole scrubber (AVPlayerView floating controls removed): play/pause, click/drag seek, times, and bookmark ticks. Full-width scrubber; hover shows a pointer-aligned preview of the frame at that time (not bookmark stills). Extra height below the track so corner size/close chrome doesn’t sit on the line. Resume stays a separate automatic store.

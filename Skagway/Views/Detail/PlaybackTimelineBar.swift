@@ -68,61 +68,68 @@ struct PlaybackTimelineBar: View {
             .padding(.horizontal, 12)
             .frame(height: Self.scrubHitHeight)
 
-            // Play / skip / speed sit *below* the track so they never compress it horizontally.
-            // Trailing spacer keeps room for FloatingPlayerPanel’s bottom-trailing chrome.
+            // Play / skip / speed / volume sit *below* the track so they never compress it horizontally.
+            // Leading cluster is priority; trailing flexible space clears FloatingPlayerPanel size/close
+            // chrome (do not use a large minLength — that was crushing speed/volume in Compact).
             HStack(spacing: 8) {
-                transportIconButton(
-                    "gobackward.15",
-                    help: "Skip back \(Int(InlinePlaybackController.skipSeconds))s (⌥←)"
-                ) {
-                    playback.skipBy(-InlinePlaybackController.skipSeconds)
-                }
+                HStack(spacing: 8) {
+                    transportIconButton(
+                        "gobackward.15",
+                        help: "Skip back \(Int(InlinePlaybackController.skipSeconds))s (⌥←)"
+                    ) {
+                        playback.skipBy(-InlinePlaybackController.skipSeconds)
+                    }
 
-                Button {
-                    playback.togglePlayPause()
-                } label: {
-                    Image(systemName: playback.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 14, weight: .semibold))
-                        .frame(width: 24, height: 24)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.appTextPrimary)
-                .help(playback.isPlaying ? "Pause" : "Play")
-
-                transportIconButton(
-                    "goforward.15",
-                    help: "Skip forward \(Int(InlinePlaybackController.skipSeconds))s (⌥→)"
-                ) {
-                    playback.skipBy(InlinePlaybackController.skipSeconds)
-                }
-
-                playbackSpeedMenu
-
-                if let returnSeconds = playback.returnPointSeconds {
                     Button {
-                        playback.returnToSavedPoint()
+                        playback.togglePlayPause()
                     } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.uturn.backward")
-                                .font(.system(size: 10, weight: .semibold))
-                            Text(returnSeconds.formattedDuration)
-                                .font(.system(size: 11, weight: .medium).monospacedDigit())
-                        }
-                        .foregroundStyle(Color.appTextPrimary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(Color.white.opacity(0.14))
-                        )
-                        .contentShape(Capsule())
+                        Image(systemName: playback.isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .frame(width: 24, height: 24)
                     }
                     .buttonStyle(.plain)
-                    .help("Return to \(returnSeconds.formattedDuration)")
-                    .accessibilityLabel("Return to \(returnSeconds.formattedDuration)")
-                }
+                    .foregroundStyle(Color.appTextPrimary)
+                    .help(playback.isPlaying ? "Pause" : "Play")
 
-                Spacer(minLength: 72)
+                    transportIconButton(
+                        "goforward.15",
+                        help: "Skip forward \(Int(InlinePlaybackController.skipSeconds))s (⌥→)"
+                    ) {
+                        playback.skipBy(InlinePlaybackController.skipSeconds)
+                    }
+
+                    playbackSpeedMenu
+
+                    volumeControl
+
+                    if let returnSeconds = playback.returnPointSeconds {
+                        Button {
+                            playback.returnToSavedPoint()
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.uturn.backward")
+                                    .font(.system(size: 10, weight: .semibold))
+                                Text(returnSeconds.formattedDuration)
+                                    .font(.system(size: 11, weight: .medium).monospacedDigit())
+                            }
+                            .foregroundStyle(Color.appTextPrimary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Color.white.opacity(0.14))
+                            )
+                            .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Return to \(returnSeconds.formattedDuration)")
+                        .accessibilityLabel("Return to \(returnSeconds.formattedDuration)")
+                    }
+                }
+                .layoutPriority(1)
+                .fixedSize(horizontal: true, vertical: false)
+
+                Spacer(minLength: 8)
             }
             .padding(.horizontal, 12)
             .frame(height: Self.transportControlsHeight)
@@ -175,6 +182,45 @@ struct PlaybackTimelineBar: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .help("Playback speed")
+    }
+
+    private var volumeControl: some View {
+        // Prefer mute + slider; fall back to mute-only when the compact panel is too narrow.
+        ViewThatFits(in: .horizontal) {
+            volumeMuteAndSlider
+            volumeMuteButton
+        }
+    }
+
+    private var volumeMuteAndSlider: some View {
+        HStack(spacing: 4) {
+            volumeMuteButton
+            Slider(
+                value: Binding(
+                    get: { Double(playback.isMuted ? 0 : playback.volume) },
+                    set: { playback.setVolume(Float($0)) }
+                ),
+                in: 0...1
+            )
+            .controlSize(.mini)
+            .tint(Color.white.opacity(0.85))
+            .frame(width: 64)
+            .accessibilityLabel("Volume")
+        }
+    }
+
+    private var volumeMuteButton: some View {
+        Button {
+            playback.toggleMute()
+        } label: {
+            Image(systemName: playback.volumeSymbolName)
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 22, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.appTextPrimary)
+        .help(playback.isMuted || playback.volume < 0.001 ? "Unmute" : "Mute")
     }
 
     private func transportIconButton(_ systemName: String, help: String, action: @escaping () -> Void) -> some View {

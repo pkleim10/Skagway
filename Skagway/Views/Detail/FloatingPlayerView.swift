@@ -42,6 +42,8 @@ struct FloatingPlayerView: NSViewRepresentable {
 
     func updateNSView(_ nsView: KeyAwarePlayerView, context: Context) {
         if nsView.player !== player { nsView.player = player }
+        // Re-assert: AppKit can restore floating controls when the player item changes.
+        nsView.controlsStyle = .none
         nsView.showsFullScreenToggleButton = showsFullscreenButton
         nsView.onRestartFromBeginning = onRestartFromBeginning
     }
