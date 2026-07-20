@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.66.0 (build 828) - 2026-07-20
+
 - **Floating player edge resize** — Drag any edge or corner to resize in Windowed mode (no handle); resize cursors on hover. Opposite side stays anchored. Compact keeps inspector-locked sizing (no edge hits). Size/close chrome still wins over the bottom-trailing corner.
 
 ## 0.65.0 (build 825) - 2026-07-20
