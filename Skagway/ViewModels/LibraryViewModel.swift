@@ -488,6 +488,17 @@ final class LibraryViewModel {
         resumePositionsRevision &+= 1
     }
 
+    /// Bookmarks for the currently inspected single selection (empty when multi/none).
+    private(set) var bookmarksForSelection: [VideoBookmark] = []
+    /// Bumped when bookmark rows change so Inspector rows refresh reliably.
+    private(set) var bookmarksRevision: Int = 0
+    private func notifyBookmarksChanged() {
+        bookmarksRevision &+= 1
+    }
+
+    /// After create, Inspector focuses this bookmark’s title field so it’s obvious you can rename.
+    var pendingBookmarkTitleFocusId: Int64?
+
     /// True while a video is playing in the resizable player. The player never reshapes the wall, so
     /// this no longer needs a didSet (the full-screen-exit grid repaint lives in ContentView).
     var isPlayingInline: Bool = false
@@ -1099,6 +1110,7 @@ final class LibraryViewModel {
     let dbPool: DatabasePool
     let videoRepo: VideoRepository
     let tagRepo: TagRepository
+    let bookmarkRepo: VideoBookmarkRepository
     let collectionRepo: CollectionRepository
     let dataSourceRepo: DataSourceRepository
     let thumbnailService: ThumbnailService
@@ -1109,6 +1121,7 @@ final class LibraryViewModel {
         self.dbPool = dbPool
         self.videoRepo = VideoRepository(dbPool: dbPool)
         self.tagRepo = TagRepository(dbPool: dbPool)
+        self.bookmarkRepo = VideoBookmarkRepository(dbPool: dbPool)
         self.collectionRepo = CollectionRepository(dbPool: dbPool)
         self.dataSourceRepo = DataSourceRepository(dbPool: dbPool)
         self.thumbnailService = thumbnailService
@@ -4235,6 +4248,112 @@ final class LibraryViewModel {
             return before
         }
         return nil
+    }
+
+    // MARK: - Video bookmarks
+
+    /// Reload bookmarks for the single selected video (clears list when multi/none/no DB id).
+    func reloadBookmarksForSelection() async {
+        guard selectedVideoIds.count == 1,
+              let path = selectedVideoIds.first,
+              let video = video(forPath: path),
+              let videoId = video.databaseId else {
+            bookmarksForSelection = []
+            notifyBookmarksChanged()
+            return
+        }
+        bookmarksForSelection = (try? await bookmarkRepo.fetch(forVideoId: videoId)) ?? []
+        notifyBookmarksChanged()
+    }
+
+    /// Insert a bookmark at `seconds`, capture a still, refresh the Inspector list when relevant.
+    /// Default title is the timecode; rename inline in the Inspector.
+    @discardableResult
+    func addBookmark(for video: Video, atSeconds seconds: Double, title: String? = nil) async -> VideoBookmark? {
+        guard let videoId = video.databaseId else { return nil }
+        let clamped = max(0, seconds)
+        let trimmed = (title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedTitle = trimmed.isEmpty ? clamped.formattedDuration : trimmed
+        var bookmark = VideoBookmark(
+            id: nil,
+            videoId: videoId,
+            seconds: clamped,
+            title: resolvedTitle,
+            thumbnailPath: nil,
+            dateCreated: Date()
+        )
+        do {
+            bookmark = try await bookmarkRepo.insert(bookmark)
+            guard let bookmarkId = bookmark.id else { return bookmark }
+            if let stillURL = try? await thumbnailService.captureBookmarkStill(
+                for: video, atSeconds: clamped, videoId: videoId, bookmarkId: bookmarkId
+            ) {
+                try? await bookmarkRepo.updateThumbnailPath(id: bookmarkId, path: stillURL.path)
+                bookmark.thumbnailPath = stillURL.path
+            }
+            pendingBookmarkTitleFocusId = bookmarkId
+            if selectedVideoIds.count == 1, selectedVideoIds.contains(video.filePath) {
+                await reloadBookmarksForSelection()
+            } else {
+                notifyBookmarksChanged()
+            }
+            return bookmark
+        } catch {
+            return nil
+        }
+    }
+
+    func renameBookmark(_ bookmark: VideoBookmark, title: String) async {
+        guard let id = bookmark.id else { return }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newTitle = trimmed.isEmpty ? bookmark.seconds.formattedDuration : trimmed
+        try? await bookmarkRepo.updateTitle(id: id, title: newTitle)
+        await reloadBookmarksForSelection()
+    }
+
+    func deleteBookmark(_ bookmark: VideoBookmark) async {
+        if let id = bookmark.id {
+            thumbnailService.deleteBookmarkStill(videoId: bookmark.videoId, bookmarkId: id)
+        }
+        thumbnailService.deleteBookmarkStill(at: bookmark.thumbnailPath)
+        try? await bookmarkRepo.delete(bookmark)
+        await reloadBookmarksForSelection()
+    }
+
+    /// Jump to a bookmark: seek live player if already playing this video, otherwise start at that time.
+    func jumpToBookmark(_ bookmark: VideoBookmark) {
+        guard let video = videos.first(where: { $0.databaseId == bookmark.videoId })
+                ?? bookmarksSelectionVideoMatching(bookmark) else { return }
+
+        if isPlayingInline, playback.currentVideo?.filePath == video.filePath {
+            playback.seek(toSeconds: bookmark.seconds)
+            return
+        }
+
+        if selectedVideoIds != [video.filePath] {
+            selectedVideoIds = [video.filePath]
+        }
+        pendingFilmstripSeekSeconds = bookmark.seconds
+        pendingIgnoreResumeOnNextStart = true
+        if isPlayingInline {
+            // Restart at the bookmark time (stop persists resume; then start with seek).
+            isPlayingInline = false
+            DispatchQueue.main.async { [weak self] in
+                self?.pendingFilmstripSeekSeconds = bookmark.seconds
+                self?.pendingIgnoreResumeOnNextStart = true
+                self?.isPlayingInline = true
+            }
+        } else {
+            isPlayingInline = true
+        }
+    }
+
+    private func bookmarksSelectionVideoMatching(_ bookmark: VideoBookmark) -> Video? {
+        guard selectedVideoIds.count == 1,
+              let path = selectedVideoIds.first,
+              let video = video(forPath: path),
+              video.databaseId == bookmark.videoId else { return nil }
+        return video
     }
 
     /// Bumps play count / last-played without reloading the library. A naive DB write would fire

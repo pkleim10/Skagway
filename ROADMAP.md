@@ -26,6 +26,7 @@ Key qualities:
 - **Tags**: standalone creation, rename/delete from the filters drawer, stable (non-reshuffling) assignment list, live per-tag counts
 - **Custom metadata** fields integrated into sort menu and List View columns (typed comparators, no per-row parsing)
 - **Thumbnail tools**: Regenerate Thumbnail, Make Thumbnail from Current Frame, Modify Filmstrip…
+- **Video bookmarks**: named timestamps with frame stills (Inspector list; ⌥⌘B while playing); resume position remains separate
 - **Keyboard-driven workflow**: Home/End (go to first/last), arrow-key grid navigation, a rationalized app-wide modifier scheme (⌃ = OS fullscreen only, ⌥ = alternate action, ⇧ = reveals/adds UI), ⌘F search focus
 - Smart libraries for Missing (filesystem check, with a manual rescan affordance) and Corrupt (computed live from in-library metadata, plus an automatic per-selection recheck) files
 - Drag-and-drop import (files and folders) onto the main window

@@ -100,6 +100,12 @@ struct SkagwayApp: App {
                 }
                 .keyboardShortcut("m", modifiers: [.command, .option])
                 .disabled(appState.libraryViewModel?.isPlayingInline != true)
+
+                Button("Bookmark Current Position") {
+                    appState.libraryViewModel?.playback.addBookmarkAtCurrentTime()
+                }
+                .keyboardShortcut("b", modifiers: [.command, .option])
+                .disabled(appState.libraryViewModel?.isPlayingInline != true)
             }
             // Fully replaces .pasteboard rather than composing "default + custom" via `after:` --
             // that approach previously produced a real, structural duplicate (the default group's

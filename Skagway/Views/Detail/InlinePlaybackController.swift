@@ -223,6 +223,30 @@ final class InlinePlaybackController {
         }
     }
 
+    /// Bookmark the current playback position (named + still). Requires a DB-backed video.
+    /// Title defaults to the timecode; rename inline in the Inspector.
+    func addBookmarkAtCurrentTime() {
+        guard let player, let video = currentVideo else { return }
+        let seconds = player.currentTime().seconds
+        guard seconds.isFinite, seconds >= 0 else { return }
+        Task {
+            await viewModel.addBookmark(for: video, atSeconds: seconds)
+        }
+    }
+
+    /// Seek the live player to a bookmark (precise frame).
+    func seek(toSeconds seconds: Double) {
+        guard let player else { return }
+        guard seconds.isFinite, seconds >= 0 else { return }
+        player.seek(
+            to: CMTime(seconds: seconds, preferredTimescale: 600),
+            toleranceBefore: .zero,
+            toleranceAfter: .zero
+        ) { [weak player] _ in
+            player?.play()
+        }
+    }
+
     func dismissError() {
         playerError = nil
     }

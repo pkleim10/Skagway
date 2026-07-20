@@ -131,6 +131,15 @@ final class ThumbnailService: @unchecked Sendable {
         return cacheDirectory.appendingPathComponent("\(h)_detail.jpg")
     }
 
+    private var bookmarkStillsDirectory: URL {
+        cacheDirectory.appendingPathComponent("bookmarks", isDirectory: true)
+    }
+
+    /// Dedicated still for a video bookmark — never collides with library/detail thumb keys.
+    func bookmarkStillURL(videoId: Int64, bookmarkId: Int64) -> URL {
+        bookmarkStillsDirectory.appendingPathComponent("\(videoId)_\(bookmarkId).jpg")
+    }
+
     private func detailPreviewMemoryKey(filePath: String, longEdge: Int) -> NSString {
         let edge = Self.normalizedDetailLongEdge(longEdge)
         return (filePath + Self.detailPreviewCachePrefix + "_\(edge)") as NSString
@@ -629,6 +638,52 @@ final class ThumbnailService: @unchecked Sendable {
             memoryKey: detailPreviewMemoryKey(filePath: filePath, longEdge: 720), timeout: 15, tolerance: .zero
         )
         return thumbURL
+    }
+
+    /// Capture a frame for a bookmark still. Does **not** touch library/detail thumbnail caches.
+    func captureBookmarkStill(
+        for video: Video,
+        atSeconds seconds: Double,
+        videoId: Int64,
+        bookmarkId: Int64
+    ) async throws -> URL {
+        await generationGate.acquire()
+        do {
+            let url = try await performCaptureBookmarkStill(
+                for: video, atSeconds: seconds, videoId: videoId, bookmarkId: bookmarkId
+            )
+            await generationGate.release()
+            return url
+        } catch {
+            await generationGate.release()
+            throw error
+        }
+    }
+
+    private func performCaptureBookmarkStill(
+        for video: Video,
+        atSeconds seconds: Double,
+        videoId: Int64,
+        bookmarkId: Int64
+    ) async throws -> URL {
+        try FileManager.default.createDirectory(at: bookmarkStillsDirectory, withIntermediateDirectories: true)
+        let cacheURL = bookmarkStillURL(videoId: videoId, bookmarkId: bookmarkId)
+        let memoryKey = "bookmark:\(videoId):\(bookmarkId)" as NSString
+        try await writeStill(
+            for: video, atSeconds: seconds, maxDimension: 320,
+            compressionFactor: 0.78, cacheURL: cacheURL,
+            memoryKey: memoryKey, timeout: 10, tolerance: .zero
+        )
+        return cacheURL
+    }
+
+    func deleteBookmarkStill(at path: String?) {
+        guard let path, !path.isEmpty else { return }
+        try? FileManager.default.removeItem(atPath: path)
+    }
+
+    func deleteBookmarkStill(videoId: Int64, bookmarkId: Int64) {
+        try? FileManager.default.removeItem(at: bookmarkStillURL(videoId: videoId, bookmarkId: bookmarkId))
     }
 
     /// Deletes every cached still (thumbnail + all detail-preview long-edge variants + legacy detail

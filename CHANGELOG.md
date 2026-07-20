@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Video bookmarks** — Named points of interest (timestamp + title + frame still) stored per video in the library DB. Bookmark while playing (⌥⌘B / Playback menu); rename inline in the Inspector (title focuses after add); jump via still/play. Resume playback stays a separate automatic “continue watching” position.
+
 ## 0.64.0 (build 777) - 2026-07-17
 
 - **Boolean custom metadata** — New field type (Settings + Inspector toggle); filters (equals/not equals), sort, list display (Yes/No), export, and Import Metadata validation/normalization (`true`/`false`/`yes`/`no`/`1`/`0` → stored `true`/`false`).

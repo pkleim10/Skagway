@@ -209,6 +209,30 @@ enum DatabaseMigration {
             )
         }
 
+        migrator.registerMigration("v12_video_bookmarks") { db in
+            // Named points of interest (timestamp + title + optional frame still). Resume playback
+            // stays in UserDefaults (`PlaybackPositionStore`) and is not modeled as a bookmark.
+            try db.create(table: "video_bookmark") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("videoId", .integer).notNull()
+                    .references("video", onDelete: .cascade)
+                t.column("seconds", .double).notNull()
+                t.column("title", .text).notNull()
+                t.column("thumbnailPath", .text)
+                t.column("dateCreated", .datetime).notNull()
+            }
+            try db.create(
+                index: "idx_video_bookmark_videoId",
+                on: "video_bookmark",
+                columns: ["videoId"]
+            )
+            try db.create(
+                index: "idx_video_bookmark_videoId_seconds",
+                on: "video_bookmark",
+                columns: ["videoId", "seconds"]
+            )
+        }
+
         try migrator.migrate(pool)
     }
 }

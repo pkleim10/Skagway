@@ -28,6 +28,9 @@ struct CuratedWallInspector: View {
     @FocusState private var focusedCustomFieldId: UUID?
     @State private var showUnassigned = false
     @State private var newTagText = ""
+    /// In-progress bookmark title edits keyed by bookmark id (commit on submit / blur).
+    @State private var bookmarkTitleDrafts: [Int64: String] = [:]
+    @FocusState private var focusedBookmarkTitleId: Int64?
 
     var body: some View {
         GeometryReader { _ in
@@ -57,6 +60,11 @@ struct CuratedWallInspector: View {
                             // Tags (restored)
                             tagsBlock()
 
+                            // Bookmarks (single selection only)
+                            if selectedIds.count == 1 {
+                                bookmarksBlock(for: v)
+                            }
+
                             // Custom metadata fields (if any defined)
                             if !viewModel.customMetadataFieldDefinitions.isEmpty {
                                 customMetadataBlock()
@@ -79,13 +87,13 @@ struct CuratedWallInspector: View {
             )
         }
         .frame(minWidth: 300)
-        .onAppear { loadCustomFieldValues() }
         .onChange(of: video?.filePath) { _, _ in
             // Selection changed: stop any in-progress playback and refresh hero assets.
             if viewModel.isPlayingInline { viewModel.isPlayingInline = false }
             loadCustomFieldValues()
             hero = nil
             filmstrip = nil
+            Task { await viewModel.reloadBookmarksForSelection() }
             // Re-validate a corrupt video on reselect — covers files repaired externally after
             // import (no-ops instantly unless the video is currently flagged corrupt).
             if let video {
@@ -99,7 +107,28 @@ struct CuratedWallInspector: View {
             case .lastUsed: break
             }
         }
-        .onChange(of: viewModel.selectedVideoIds) { _, _ in loadCustomFieldValues() }
+        .onAppear {
+            loadCustomFieldValues()
+            Task { await viewModel.reloadBookmarksForSelection() }
+        }
+        .onChange(of: viewModel.selectedVideoIds) { _, _ in
+            loadCustomFieldValues()
+            bookmarkTitleDrafts = [:]
+            Task { await viewModel.reloadBookmarksForSelection() }
+        }
+        .onChange(of: focusedBookmarkTitleId) { old, newValue in
+            viewModel.isEditingText = (newValue != nil)
+            guard let id = old, let draft = bookmarkTitleDrafts[id] else { return }
+            guard let bookmark = viewModel.bookmarksForSelection.first(where: { $0.id == id }) else { return }
+            guard draft != bookmark.title else {
+                bookmarkTitleDrafts.removeValue(forKey: id)
+                return
+            }
+            Task {
+                await viewModel.renameBookmark(bookmark, title: draft)
+                bookmarkTitleDrafts.removeValue(forKey: id)
+            }
+        }
         .onChange(of: focusedCustomFieldId) { old, _ in
             guard let fieldId = old, let value = customFieldValues[fieldId] else { return }
             // A mixed field shows a blank placeholder for values that actually differ across the
@@ -625,6 +654,149 @@ struct CuratedWallInspector: View {
                        displayedComponents: field.valueType == .dateTime ? [.date, .hourAndMinute] : .date)
                 .datePickerStyle(.compact)
                 .labelsHidden()
+        }
+    }
+
+    // MARK: - Bookmarks
+
+    private func bookmarksBlock(for video: Video) -> some View {
+        _ = viewModel.bookmarksRevision
+        let bookmarks = viewModel.bookmarksForSelection
+
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Rectangle().fill(Color.appAccent).frame(width: 3, height: 12).cornerRadius(2)
+                Text("BOOKMARKS").font(.caption.weight(.semibold)).tracking(0.5).foregroundStyle(Color.appAccent)
+                Spacer()
+                if viewModel.isPlayingInline, viewModel.playback.currentVideo?.filePath == video.filePath {
+                    Button {
+                        viewModel.playback.addBookmarkAtCurrentTime()
+                    } label: {
+                        Image(systemName: "bookmark.fill")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Bookmark current position (⌥⌘B)")
+                }
+            }
+
+            if bookmarks.isEmpty {
+                Text("Bookmark a moment while playing (⌥⌘B)")
+                    .font(.caption2)
+                    .foregroundStyle(Color.appTextTertiary)
+            } else {
+                VStack(spacing: 4) {
+                    ForEach(bookmarks) { bookmark in
+                        bookmarkRow(bookmark)
+                    }
+                }
+            }
+        }
+        .onChange(of: viewModel.bookmarksRevision) { _, _ in
+            // Newly added bookmark: focus the title so rename is discoverable without a modal.
+            if let id = viewModel.pendingBookmarkTitleFocusId {
+                viewModel.pendingBookmarkTitleFocusId = nil
+                if let bookmark = viewModel.bookmarksForSelection.first(where: { $0.id == id }) {
+                    bookmarkTitleDrafts[id] = bookmark.title
+                }
+                DispatchQueue.main.async {
+                    focusedBookmarkTitleId = id
+                    viewModel.isEditingText = true
+                }
+            }
+        }
+    }
+
+    private func bookmarkRow(_ bookmark: VideoBookmark) -> some View {
+        let bookmarkId = bookmark.id ?? -1
+        let isEditingTitle = focusedBookmarkTitleId == bookmarkId
+        return HStack(spacing: 8) {
+            Button {
+                viewModel.jumpToBookmark(bookmark)
+            } label: {
+                bookmarkStill(bookmark)
+                    .frame(width: 56, height: 32)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .help("Jump to bookmark")
+
+            VStack(alignment: .leading, spacing: 2) {
+                TextField(
+                    "Name",
+                    text: Binding(
+                        get: { bookmarkTitleDrafts[bookmarkId] ?? bookmark.title },
+                        set: { bookmarkTitleDrafts[bookmarkId] = $0 }
+                    )
+                )
+                .textFieldStyle(.plain)
+                .font(.caption.weight(.medium))
+                .focused($focusedBookmarkTitleId, equals: bookmarkId)
+                .help("Click to rename")
+                .padding(.bottom, 1)
+                .overlay(alignment: .bottom) {
+                    // Light underline when idle — reads as a label until you click; solid when editing.
+                    Rectangle()
+                        .fill(Color.appDivider.opacity(isEditingTitle ? 0.85 : 0.35))
+                        .frame(height: 1)
+                }
+                .onSubmit {
+                    commitBookmarkTitle(bookmark, id: bookmarkId)
+                }
+
+                Text(bookmark.formattedTimecode)
+                    .font(.caption2)
+                    .foregroundStyle(Color.appTextTertiary)
+            }
+
+            Button {
+                viewModel.jumpToBookmark(bookmark)
+            } label: {
+                Image(systemName: "play.fill")
+                    .font(.caption2)
+            }
+            .buttonStyle(.plain)
+            .help("Jump to bookmark")
+
+            Button(role: .destructive) {
+                Task { await viewModel.deleteBookmark(bookmark) }
+            } label: {
+                Image(systemName: "trash")
+                    .font(.caption2)
+            }
+            .buttonStyle(.plain)
+            .help("Delete bookmark")
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 6)
+        .background(Color.appSurface.opacity(0.55))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+
+    private func commitBookmarkTitle(_ bookmark: VideoBookmark, id bookmarkId: Int64) {
+        let draft = bookmarkTitleDrafts[bookmarkId] ?? bookmark.title
+        Task {
+            await viewModel.renameBookmark(bookmark, title: draft)
+            bookmarkTitleDrafts.removeValue(forKey: bookmarkId)
+            viewModel.isEditingText = false
+        }
+    }
+
+    @ViewBuilder
+    private func bookmarkStill(_ bookmark: VideoBookmark) -> some View {
+        if let path = bookmark.thumbnailPath,
+           let image = NSImage(contentsOfFile: path) {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFill()
+        } else {
+            Color.appSurface
+                .overlay {
+                    Image(systemName: "bookmark")
+                        .font(.caption2)
+                        .foregroundStyle(Color.appTextTertiary)
+                }
         }
     }
 
