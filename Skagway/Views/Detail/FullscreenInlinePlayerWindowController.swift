@@ -10,20 +10,16 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private let playerView = AVPlayerView()
     private var subtitleHost: NSHostingView<SubtitleOverlayContainer>?
-    /// Bottom-strip timeline with normal hit testing (not a full-screen pass-through overlay).
-    private var timelineHost: NSHostingView<FullscreenTimelineOverlay>?
-    private var closeButton: NSButton?
-    private var chrome = FullscreenChromeController()
+    private var chromeView: FullscreenTransportChromeView?
+    private var mouseCatcher: FullscreenMouseMoveCatcher?
     private var onEnded: (() -> Void)?
+    /// Esc stops playback entirely (preserves “last was fullscreen” for start preference).
+    private var onStopPlayback: (() -> Void)?
     private var didEnd = false
     private var keyDownMonitor: Any?
     private var mouseMonitor: Any?
     private var savedPresentationOptions: NSApplication.PresentationOptions = []
     private var didApplyPresentationOptions = false
-    /// Bumps on every show/hide so delayed hide-completion can’t clobber a newer reveal.
-    private var visibilityGeneration = 0
-
-    private static let timelineStripHeight: CGFloat = PlaybackTimelineBar.barHeight + 100
 
     func present(
         player: AVPlayer,
@@ -31,9 +27,11 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
         startWindowInFullscreen: Bool,
         subtitleTrack: SubtitleTrack,
         viewModel: LibraryViewModel,
+        onStopPlayback: @escaping () -> Void,
         onEnded: @escaping () -> Void
     ) {
         self.onEnded = onEnded
+        self.onStopPlayback = onStopPlayback
 
         playerView.player = player
         playerView.controlsStyle = .none
@@ -42,16 +40,16 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
         let host = NSHostingView(rootView: SubtitleOverlayContainer(track: subtitleTrack))
         self.subtitleHost = host
 
-        let timeline = NSHostingView(rootView: FullscreenTimelineOverlay(viewModel: viewModel))
-        timeline.wantsLayer = true
-        timeline.layer?.backgroundColor = NSColor.clear.cgColor
-        timeline.alphaValue = 1
-        timeline.isHidden = false
-        self.timelineHost = timeline
-
-        chrome.onVisibilityChange = { [weak self] visible in
-            self?.applyTimelineVisibility(visible)
+        let chrome = FullscreenTransportChromeView(
+            viewModel: viewModel,
+            exitTarget: self,
+            exitAction: #selector(closeButtonTapped)
+        )
+        chrome.onDidHide = { [weak self] in
+            // Lightweight only — rebuilding tracking areas here re-shows chrome immediately.
+            self?.window?.acceptsMouseMovedEvents = true
         }
+        self.chromeView = chrome
 
         if startWindowInFullscreen {
             presentEdgeToEdge(title: title)
@@ -73,20 +71,10 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
         if let host = subtitleHost {
             embedFullSizePassThrough(host, in: content)
         }
-        if let timeline = timelineHost {
-            embedBottomStrip(timeline, in: content, height: Self.timelineStripHeight)
+        embedMouseCatcher(in: content)
+        if let chrome = chromeView {
+            embedBottomChrome(chrome, in: content)
         }
-
-        let close = makeCloseButton()
-        close.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(close)
-        NSLayoutConstraint.activate([
-            close.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
-            close.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -16),
-            close.widthAnchor.constraint(equalToConstant: 28),
-            close.heightAnchor.constraint(equalToConstant: 28),
-        ])
-        self.closeButton = close
 
         let w = NSWindow(
             contentRect: frame,
@@ -105,15 +93,14 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
         w.setFrame(frame, display: true)
         window = w
         w.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
 
         savedPresentationOptions = NSApplication.shared.presentationOptions
         NSApplication.shared.presentationOptions = [.hideMenuBar, .hideDock]
         didApplyPresentationOptions = true
 
         installEventMonitors()
-        // Start visible; hide only after idle away from the transport.
-        chrome.pointerMoved(overTimeline: false)
-        applyTimelineVisibility(true)
+        chromeView?.beginIdleCycle()
     }
 
     private func presentTitledWindow(title: String) {
@@ -123,8 +110,9 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
         if let host = subtitleHost {
             embedFullSizePassThrough(host, in: content)
         }
-        if let timeline = timelineHost {
-            embedBottomStrip(timeline, in: content, height: Self.timelineStripHeight)
+        embedMouseCatcher(in: content)
+        if let chrome = chromeView {
+            embedBottomChrome(chrome, in: content)
         }
 
         let w = NSWindow(
@@ -143,8 +131,7 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
         w.makeKeyAndOrderFront(nil)
 
         installEventMonitors()
-        chrome.pointerMoved(overTimeline: false)
-        applyTimelineVisibility(true)
+        chromeView?.beginIdleCycle()
     }
 
     private func embedFullSize(_ child: NSView, in parent: NSView) {
@@ -163,100 +150,59 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
         parent.addSubview(wrap)
     }
 
-    private func embedBottomStrip(_ child: NSView, in parent: NSView, height: CGFloat) {
-        child.translatesAutoresizingMaskIntoConstraints = true
-        child.frame = NSRect(x: 0, y: 0, width: parent.bounds.width, height: height)
-        child.autoresizingMask = [.width, .maxYMargin]
-        parent.addSubview(child)
+    private func embedMouseCatcher(in parent: NSView) {
+        let catcher = FullscreenMouseMoveCatcher(frame: parent.bounds)
+        catcher.autoresizingMask = [.width, .height]
+        catcher.onMouseMoved = { [weak self] locationInWindow in
+            self?.chromeView?.noteMouseActivity(locationInWindow: locationInWindow, force: false)
+        }
+        parent.addSubview(catcher)
+        mouseCatcher = catcher
+    }
+
+    private func embedBottomChrome(_ chrome: NSView, in parent: NSView) {
+        chrome.translatesAutoresizingMaskIntoConstraints = true
+        let height = FullscreenTransportChromeView.chromeHeight
+        chrome.frame = NSRect(x: 0, y: 0, width: parent.bounds.width, height: height)
+        chrome.autoresizingMask = [.width, .maxYMargin]
+        parent.addSubview(chrome)
     }
 
     private func installEventMonitors() {
         keyDownMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
             guard event.window === self.window else { return event }
-            if event.keyCode == 53 ||
-               (event.keyCode == 3 && event.modifierFlags.intersection(.deviceIndependentFlagsMask) == [.control, .command]) {
+            // Esc → stop playback (same as windowed). ⌃⌘F → exit to floating player.
+            if event.keyCode == 53 {
+                MainActor.assumeIsolated {
+                    self.onStopPlayback?()
+                }
+                return nil
+            }
+            if event.keyCode == 3,
+               event.modifierFlags.intersection(.deviceIndependentFlagsMask) == [.control, .command] {
                 self.closeWindow()
                 return nil
             }
             return event
         }
 
-        // Local monitor sees moves even when AVPlayerView is the hit target (view tracking often doesn’t).
         mouseMonitor = NSEvent.addLocalMonitorForEvents(
-            matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]
+            matching: [
+                .mouseMoved,
+                .leftMouseDown, .rightMouseDown, .otherMouseDown,
+                .leftMouseDragged, .rightMouseDragged, .otherMouseDragged,
+            ]
         ) { [weak self] event in
             guard let self else { return event }
             guard event.window === self.window else { return event }
             let location = event.locationInWindow
-            // Dispatch async onto the main actor queue — the monitor is not MainActor-isolated,
-            // but AppKit delivers these on the main thread; async avoids re-entrancy into SwiftUI.
-            DispatchQueue.main.async {
-                self.handleMouseActivity(locationInWindow: location)
+            let isClickOrDrag = event.type != .mouseMoved
+            MainActor.assumeIsolated {
+                self.chromeView?.noteMouseActivity(locationInWindow: location, force: isClickOrDrag)
             }
             return event
         }
-    }
-
-    private func handleMouseActivity(locationInWindow: CGPoint) {
-        let overTimeline: Bool
-        if let timelineHost, !timelineHost.isHidden {
-            overTimeline = timelineHost.frame.contains(locationInWindow)
-        } else if let timelineHost {
-            // Strip is hidden — still treat the bottom strip region as “over timeline” for reveal,
-            // but more importantly any move should reveal. Use the last known frame.
-            overTimeline = timelineHost.frame.contains(locationInWindow)
-        } else {
-            overTimeline = false
-        }
-        chrome.pointerMoved(overTimeline: overTimeline)
-    }
-
-    private func applyTimelineVisibility(_ visible: Bool) {
-        guard let timelineHost else { return }
-        visibilityGeneration &+= 1
-        let generation = visibilityGeneration
-        let close = closeButton
-
-        if visible {
-            timelineHost.isHidden = false
-            close?.isHidden = false
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.15
-                timelineHost.animator().alphaValue = 1
-                close?.animator().alphaValue = 1
-            }
-            return
-        }
-
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.25
-            timelineHost.animator().alphaValue = 0
-            close?.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
-            DispatchQueue.main.async {
-                guard let self else { return }
-                // Ignore stale hide completions after a newer reveal.
-                guard self.visibilityGeneration == generation else { return }
-                guard !self.chrome.isVisible else { return }
-                self.timelineHost?.isHidden = true
-                self.closeButton?.isHidden = true
-            }
-        })
-    }
-
-    private func makeCloseButton() -> NSButton {
-        let b = NSButton()
-        b.bezelStyle = .accessoryBarAction
-        b.image = NSImage(systemSymbolName: "arrow.down.right.and.arrow.up.left",
-                          accessibilityDescription: "Exit Full Screen")
-        b.imagePosition = .imageOnly
-        b.isBordered = false
-        b.target = self
-        b.action = #selector(closeButtonTapped)
-        b.toolTip = "Exit Full Screen (⌃⌘F or Esc)"
-        b.contentTintColor = .labelColor
-        return b
     }
 
     @objc private func closeButtonTapped() {
@@ -286,25 +232,45 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
             NSEvent.removeMonitor(mouseMonitor)
             self.mouseMonitor = nil
         }
-        chrome.cancel()
+        chromeView?.shutdown()
+        chromeView?.removeFromSuperview()
+        chromeView = nil
+        mouseCatcher?.onMouseMoved = nil
+        mouseCatcher?.removeFromSuperview()
+        mouseCatcher = nil
         playerView.player = nil
         subtitleHost?.removeFromSuperview()
         subtitleHost = nil
-        timelineHost?.removeFromSuperview()
-        timelineHost = nil
-        closeButton = nil
         window?.delegate = nil
         window = nil
         onEnded?()
         onEnded = nil
+        onStopPlayback = nil
     }
 
     func windowWillClose(_ notification: Notification) {
         finishEndedIfNeeded()
     }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        window?.acceptsMouseMovedEvents = true
+    }
+
+    func windowDidResignKey(_ notification: Notification) {
+        guard !didEnd, let window else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.didEnd else { return }
+            let key = NSApp.keyWindow
+            if let key {
+                if key.parent === window || key.isSheet { return }
+                if key.level.rawValue >= NSWindow.Level.popUpMenu.rawValue { return }
+            }
+            window.acceptsMouseMovedEvents = true
+            window.makeKey()
+        }
+    }
 }
 
-/// Forwards hits on empty areas to views below (full-screen subtitle host).
 private final class PassThroughView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         let hit = super.hitTest(point)

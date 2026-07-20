@@ -1,90 +1,216 @@
 import AppKit
+import QuartzCore
 import SwiftUI
 
-/// Full-screen transport visibility: show on pointer activity, hide after idle —
-/// but **never** while the pointer is over the timeline strip.
+/// Full-screen transport + exit control.
+///
+/// Idle model:
+/// - Real pointer **movement** (or click) → show chrome and (re)schedule hide.
+/// - Stationary / spurious tracking noise is ignored (movement threshold).
+/// - Timer fire: if pointer is in the bar band → reschedule; else hide.
+/// - After hide, only re-enable `acceptsMouseMovedEvents` — do **not** rebuild tracking
+///   areas (that synthesizes `mouseEntered` and immediately re-shows chrome).
 @MainActor
-final class FullscreenChromeController {
-    private(set) var isVisible = true
-    /// True while the cursor is inside the timeline hosting view’s frame.
-    private(set) var isPointerOverTimeline = false
+final class FullscreenTransportChromeView: NSView {
+    static let idleSeconds: TimeInterval = 2.5
+    /// Ignore sub-pixel / tracking-area jitter so idle can actually elapse.
+    private static let activitySlop: CGFloat = 3
 
-    private var hideTask: Task<Void, Never>?
-    private let idleNanoseconds: UInt64 = 2_500_000_000
+    private static let previewClearance: CGFloat = PlaybackTimelineBar.scrubPreviewHeight + 16
+    static var chromeHeight: CGFloat { previewClearance + PlaybackTimelineBar.barHeight }
 
-    var onVisibilityChange: ((Bool) -> Void)?
+    private let timelineHost: NSHostingView<FullscreenTimelineOverlay>
+    private let closeButton = NSButton()
+    private var hideWorkItem: DispatchWorkItem?
+    private var lastActivityLocation: CGPoint?
+    private(set) var isChromeVisible = true
 
-    func cancel() {
-        hideTask?.cancel()
-        hideTask = nil
-        onVisibilityChange = nil
+    /// Called after chrome hides so the window can re-enable mouse-moved delivery (lightweight).
+    var onDidHide: (() -> Void)?
+
+    private var barHitRect: NSRect {
+        NSRect(x: 0, y: 0, width: bounds.width, height: PlaybackTimelineBar.barHeight)
     }
 
-    /// Pointer moved/dragged somewhere in the fullscreen window.
-    func pointerMoved(overTimeline: Bool) {
-        isPointerOverTimeline = overTimeline
-        reveal()
-        if overTimeline {
-            // Stay up indefinitely while hovering the transport (no idle hide).
-            cancelHideTimer()
+    init(viewModel: LibraryViewModel, exitTarget: AnyObject, exitAction: Selector) {
+        timelineHost = NSHostingView(rootView: FullscreenTimelineOverlay(viewModel: viewModel))
+        super.init(frame: .zero)
+
+        wantsLayer = true
+        layer?.masksToBounds = false
+        layer?.backgroundColor = NSColor.clear.cgColor
+
+        timelineHost.wantsLayer = true
+        timelineHost.layer?.masksToBounds = false
+        timelineHost.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(timelineHost)
+
+        closeButton.bezelStyle = .accessoryBarAction
+        closeButton.image = NSImage(
+            systemSymbolName: "arrow.down.right.and.arrow.up.left",
+            accessibilityDescription: "Exit Full Screen"
+        )
+        closeButton.imagePosition = .imageOnly
+        closeButton.isBordered = false
+        closeButton.target = exitTarget
+        closeButton.action = exitAction
+        closeButton.toolTip = "Exit Full Screen (⌃⌘F)"
+        closeButton.contentTintColor = .labelColor
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(closeButton)
+
+        NSLayoutConstraint.activate([
+            timelineHost.leadingAnchor.constraint(equalTo: leadingAnchor),
+            timelineHost.trailingAnchor.constraint(equalTo: trailingAnchor),
+            timelineHost.topAnchor.constraint(equalTo: topAnchor),
+            timelineHost.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            closeButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            closeButton.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
+            closeButton.widthAnchor.constraint(equalToConstant: 28),
+            closeButton.heightAnchor.constraint(equalToConstant: 28),
+        ])
+
+        alphaValue = 1
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func beginIdleCycle() {
+        lastActivityLocation = nil
+        applyVisible(true, animated: false)
+        scheduleHide()
+    }
+
+    func shutdown() {
+        hideWorkItem?.cancel()
+        hideWorkItem = nil
+        onDidHide = nil
+    }
+
+    /// - Parameter force: click / drag — always counts as activity even without movement.
+    func noteMouseActivity(locationInWindow: CGPoint, force: Bool = false) {
+        if !force, let last = lastActivityLocation {
+            let dx = locationInWindow.x - last.x
+            let dy = locationInWindow.y - last.y
+            if (dx * dx + dy * dy) < (Self.activitySlop * Self.activitySlop) {
+                return
+            }
+        }
+        lastActivityLocation = locationInWindow
+        applyVisible(true, animated: true)
+        scheduleHide()
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard isChromeVisible else { return nil }
+        guard barHitRect.contains(point) else { return nil }
+        return super.hitTest(point)
+    }
+
+    // MARK: - Visibility
+
+    private func applyVisible(_ visible: Bool, animated: Bool) {
+        if visible == isChromeVisible, visible ? alphaValue > 0.99 : alphaValue < 0.01 {
+            return
+        }
+        isChromeVisible = visible
+        closeButton.isEnabled = visible
+
+        if animated {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = visible ? 0.12 : 0.22
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                self.animator().alphaValue = visible ? 1 : 0
+            }
         } else {
-            scheduleHide()
+            alphaValue = visible ? 1 : 0
         }
-    }
 
-    /// Pointer left the timeline strip for the video (or exited the window).
-    func pointerLeftTimeline() {
-        isPointerOverTimeline = false
-        if isVisible {
-            scheduleHide()
-        }
-    }
-
-    func reveal() {
-        let wasHidden = !isVisible
-        isVisible = true
-        if wasHidden {
-            onVisibilityChange?(true)
+        if !visible {
+            onDidHide?()
         }
     }
 
     private func scheduleHide() {
-        cancelHideTimer()
-        hideTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: idleNanoseconds)
-            guard !Task.isCancelled else { return }
-            // Final checks — don’t hide under the cursor or after a late reveal.
-            guard !self.isPointerOverTimeline else {
-                return
-            }
-            guard self.isVisible else { return }
-            self.isVisible = false
-            self.onVisibilityChange?(false)
+        hideWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.fireIdleHide()
         }
+        hideWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.idleSeconds, execute: work)
     }
 
-    private func cancelHideTimer() {
-        hideTask?.cancel()
-        hideTask = nil
+    private func fireIdleHide() {
+        hideWorkItem = nil
+        if isPointerInsideBar() {
+            scheduleHide()
+            return
+        }
+        applyVisible(false, animated: true)
+    }
+
+    private func isPointerInsideBar() -> Bool {
+        guard let window else { return false }
+        let inWindow = window.convertPoint(fromScreen: NSEvent.mouseLocation)
+        let local = convert(inWindow, from: nil)
+        return barHitRect.contains(local)
     }
 }
 
-/// Full-screen chrome: custom timeline only (`AVPlayerView` controls are `.none`).
+/// Full-window mouse-move sensor. Clicks pass through (`hitTest` → nil).
+/// Uses `.activeInKeyWindow` (not `.activeAlways`) to avoid continuous spurious moves
+/// that permanently reset the idle timer.
+final class FullscreenMouseMoveCatcher: NSView {
+    var onMouseMoved: ((CGPoint) -> Void)?
+    private var tracking: NSTrackingArea?
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(
+            rect: .zero,
+            options: [
+                .activeInKeyWindow,
+                .mouseMoved,
+                .inVisibleRect,
+                .enabledDuringMouseDrag,
+            ],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.acceptsMouseMovedEvents = true
+        updateTrackingAreas()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        onMouseMoved?(event.locationInWindow)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        onMouseMoved?(event.locationInWindow)
+    }
+}
+
 struct FullscreenTimelineOverlay: View {
     @Bindable var viewModel: LibraryViewModel
 
     var body: some View {
-        PlaybackTimelineBar(viewModel: viewModel, controlsVisible: true)
-            .padding(.horizontal, 24)
-            .padding(.bottom, 8)
-            .padding(.top, 8)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-            .background(
-                LinearGradient(
-                    colors: [.clear, Color.black.opacity(0.55)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            PlaybackTimelineBar(viewModel: viewModel, controlsVisible: true)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

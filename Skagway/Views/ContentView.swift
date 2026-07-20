@@ -732,10 +732,14 @@ private struct LibraryContentView: View {
                             title: selectedVideo?.fileName ?? "",
                             startWindowInFullscreen: true,
                             subtitleTrack: vm.playback.subtitleTrack,
-                            viewModel: vm
-                        ) {
-                            vm.isPlayerFullScreen = false
-                        }
+                            viewModel: vm,
+                            onStopPlayback: {
+                                vm.isPlayingInline = false
+                            },
+                            onEnded: {
+                                vm.isPlayerFullScreen = false
+                            }
+                        )
                     }
                 } else {
                     fullScreenController?.closeWindow()
@@ -873,7 +877,7 @@ private struct LibraryContentView: View {
             }
             return event
         }
-        // Escape key — cancel rename, defocus text input, or stop playback (priority order).
+            // Escape key — cancel rename, defocus text input, or stop playback (including fullscreen).
         if event.keyCode == 53 {
             if lvm.renamingTagId != nil {
                 DispatchQueue.main.async {

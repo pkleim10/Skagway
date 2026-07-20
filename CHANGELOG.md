@@ -37,7 +37,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 - **Faster scrub hover previews** — Dedicated warm decoder (not queued behind grid thumbnails), keyframe seeks, instant cache hits, and neighbor prefetch so the preview updates snappier while scrubbing.
 - **Double-click scrubber to bookmark** — Anywhere a single click would move the playhead, double-click bookmarks at the pointer and leaves playback/playhead unchanged.
 - **Skip, nudge, and playback speed** — ±15s skip, ←/→ nudge, and speed menu live *below* the full-width scrubber (never compress the track). Also under View; ⌥←/⌥→ skip.
-- **Fullscreen custom timeline** — Full-screen uses the same Skagway transport in a bottom strip. Idle auto-hide after ~2.5s; mouse movement reveals it. Stays up while the pointer is over the transport; window-level mouse monitoring so reveal works over the video.
+- **Fullscreen Esc stops playback** — Escape always stops play (including fullscreen), so “Last used size” can remember fullscreen. ⌃⌘F and the exit control still return to the floating player.
+- **Fullscreen custom timeline** — Full-screen transport: idle hide with movement-threshold activity (ignores tracking jitter); hide no longer rebuilds tracking areas (that was immediately re-showing chrome). Windowed/compact panel hover auto-hide restored by removing the scrubber’s app-wide mouse monitor that thrashed SwiftUI `.onHover`.
 - **Video bookmarks** — Named points of interest (timestamp + title + frame still) stored per video in the library DB. Bookmark while playing (⌥⌘B / View menu); rename inline in the Inspector (title focuses after add); jump via still/play. Resume playback stays a separate automatic “continue watching” position.
 
 ## 0.64.0 (build 777) - 2026-07-17

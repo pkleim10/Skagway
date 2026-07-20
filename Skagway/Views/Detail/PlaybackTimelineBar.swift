@@ -17,7 +17,9 @@ struct PlaybackTimelineBar: View {
     static let trackCenterYFromBottom: CGFloat = 6
 
     private static let previewWidth: CGFloat = 160
-    private static let previewHeight: CGFloat = 90
+    /// Public so fullscreen chrome can reserve vertical room above the bar.
+    static let scrubPreviewHeight: CGFloat = 90
+    private static let previewHeight: CGFloat = scrubPreviewHeight
 
     @State private var isDragging = false
     @State private var dragSeconds: Double = 0
@@ -310,12 +312,14 @@ struct PlaybackTimelineBar: View {
         }
         let fraction = min(max(x / trackWidth, 0), 1)
         let seconds = fraction * duration
+        // Skip no-op updates — thrashing @State was breaking FloatingPlayerPanel `.onHover` auto-hide.
+        if let hoverFraction, abs(hoverFraction - fraction) < 0.001 {
+            return
+        }
         hoverFraction = fraction
         hoverSeconds = seconds
 
         let thumbService = viewModel.thumbnailService
-        // Instant paint when this scrub step is already cached (no await / no debounce).
-        // Keep the previous frame visible until a newer decode arrives — matches YouTube’s feel.
         if let cached = thumbService.cachedScrubPreviewImage(for: video, atSeconds: seconds) {
             hoverPreview = cached
         }
@@ -350,12 +354,17 @@ struct PlaybackTimelineBar: View {
                 let fraction = min(max(value.location.x / trackWidth, 0), 1)
                 dragSeconds = fraction * duration
                 playback.seek(toSeconds: dragSeconds, resumePlayback: false)
-                updateScrubHover(x: value.location.x, trackWidth: trackWidth)
+                // Preview only while actually dragging — a plain click must not leave a thumbnail up.
+                let dragged = hypot(value.translation.width, value.translation.height) > 2
+                if dragged {
+                    updateScrubHover(x: value.location.x, trackWidth: trackWidth)
+                }
             }
             .onEnded { value in
                 defer {
                     isDragging = false
                     playheadBeforeScrub = nil
+                    clearScrubHover()
                 }
                 guard duration > 0 else { return }
                 if suppressSeekCommit {
@@ -400,8 +409,9 @@ private struct ScrubTrackFrameKey: PreferenceKey {
 
 // MARK: - Hover tracking (AppKit)
 
-/// Pass-through mouse tracker. `hitTest` returns nil so SwiftUI drag/seek still works; an
-/// `NSTrackingArea` still delivers move/exit while the cursor is over the scrubber.
+/// Pass-through mouse tracker. `hitTest` returns nil so SwiftUI drag/seek still works;
+/// an `NSTrackingArea` delivers move/exit while the cursor is over the scrubber.
+/// (No app-wide local monitor — that thrashed SwiftUI state and broke panel hover auto-hide.)
 private struct ScrubHoverTracker: NSViewRepresentable {
     var onMove: (CGPoint) -> Void
     var onExit: () -> Void
@@ -449,13 +459,11 @@ private struct ScrubHoverTracker: NSViewRepresentable {
         }
 
         override func mouseMoved(with event: NSEvent) {
-            let point = convert(event.locationInWindow, from: nil)
-            onMove?(point)
+            onMove?(convert(event.locationInWindow, from: nil))
         }
 
         override func mouseEntered(with event: NSEvent) {
-            let point = convert(event.locationInWindow, from: nil)
-            onMove?(point)
+            onMove?(convert(event.locationInWindow, from: nil))
         }
 
         override func mouseExited(with event: NSEvent) {
