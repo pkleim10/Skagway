@@ -148,8 +148,8 @@ struct FloatingPlayerPanel: View {
                     .opacity(effectiveControlsVisible ? 1 : 0)
                     .allowsHitTesting(effectiveControlsVisible)
             }
-            // Edge/corner resize — always hittable (like a real window frame). Under size chrome
-            // so Compact/Windowed/Close keep priority in the bottom-trailing cluster.
+            // Edge/corner resize — Windowed only (Compact stays locked to the inspector footprint).
+            // Under size chrome so Compact/Windowed/Close keep priority in the bottom-trailing cluster.
             .overlay(alignment: .top) {
                 resizeStrip(.north) {
                     Color.clear
@@ -430,15 +430,17 @@ struct FloatingPlayerPanel: View {
         }
     }
 
-    /// Invisible hit zone for one edge or corner (no drawn affordance).
+    /// Invisible hit zone for one edge or corner (no drawn affordance). Disabled in Compact.
     private func resizeStrip<Content: View>(
         _ edge: ResizeEdge,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        content()
+        let enabled = !viewModel.playerSizeIsCompact
+        return content()
             .contentShape(Rectangle())
             .gesture(resizeDragGesture(for: edge))
             .onHover { hovering in
+                guard enabled else { return }
                 if hovering {
                     edge.cursor.push()
                 } else {
@@ -446,6 +448,7 @@ struct FloatingPlayerPanel: View {
                 }
             }
             .help("Drag to resize")
+            .allowsHitTesting(enabled)
     }
 
     private func resizeDragGesture(for edge: ResizeEdge) -> some Gesture {
