@@ -409,9 +409,10 @@ private struct ScrubTrackFrameKey: PreferenceKey {
 
 // MARK: - Hover tracking (AppKit)
 
-/// Pass-through mouse tracker. `hitTest` returns nil so SwiftUI drag/seek still works;
-/// an `NSTrackingArea` delivers move/exit while the cursor is over the scrubber.
-/// (No app-wide local monitor — that thrashed SwiftUI state and broke panel hover auto-hide.)
+/// Pass-through mouse tracker. `hitTest` returns nil so SwiftUI drag/seek still works.
+/// Uses `NSTrackingArea` in the floating panel. In the borderless fullscreen window,
+/// tracking areas are unreliable over `NSHostingView`, so a **window-scoped** local
+/// event monitor is added only there (not app-wide over the library window).
 private struct ScrubHoverTracker: NSViewRepresentable {
     var onMove: (CGPoint) -> Void
     var onExit: () -> Void
@@ -432,6 +433,8 @@ private struct ScrubHoverTracker: NSViewRepresentable {
         var onMove: ((CGPoint) -> Void)?
         var onExit: (() -> Void)?
         private var tracking: NSTrackingArea?
+        private var mouseMonitor: Any?
+        private var pointerInside = false
 
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
@@ -439,11 +442,57 @@ private struct ScrubHoverTracker: NSViewRepresentable {
             super.viewDidMoveToWindow()
             window?.acceptsMouseMovedEvents = true
             rebuildTracking()
+            refreshEventMonitor()
+        }
+
+        override func viewWillMove(toWindow newWindow: NSWindow?) {
+            if newWindow == nil {
+                removeEventMonitor()
+            }
+            super.viewWillMove(toWindow: newWindow)
         }
 
         override func updateTrackingAreas() {
             super.updateTrackingAreas()
             rebuildTracking()
+        }
+
+        /// Borderless = Skagway’s edge-to-edge fullscreen player (not the titled library window).
+        private var isFullscreenPlayerWindow: Bool {
+            window?.styleMask.contains(.borderless) == true
+        }
+
+        private func refreshEventMonitor() {
+            removeEventMonitor()
+            guard isFullscreenPlayerWindow, window != nil else { return }
+            mouseMonitor = NSEvent.addLocalMonitorForEvents(
+                matching: [.mouseMoved]
+            ) { [weak self] event in
+                guard let self else { return event }
+                guard event.window === self.window else { return event }
+                // Seek drag owns the pointer while the button is down.
+                if NSEvent.pressedMouseButtons & (1 << 0) != 0 {
+                    return event
+                }
+                let point = self.convert(event.locationInWindow, from: nil)
+                let inside = self.bounds.contains(point)
+                if inside {
+                    self.pointerInside = true
+                    self.onMove?(point)
+                } else if self.pointerInside {
+                    self.pointerInside = false
+                    self.onExit?()
+                }
+                return event
+            }
+        }
+
+        private func removeEventMonitor() {
+            if let mouseMonitor {
+                NSEvent.removeMonitor(mouseMonitor)
+                self.mouseMonitor = nil
+            }
+            pointerInside = false
         }
 
         private func rebuildTracking() {
@@ -459,14 +508,17 @@ private struct ScrubHoverTracker: NSViewRepresentable {
         }
 
         override func mouseMoved(with event: NSEvent) {
+            pointerInside = true
             onMove?(convert(event.locationInWindow, from: nil))
         }
 
         override func mouseEntered(with event: NSEvent) {
+            pointerInside = true
             onMove?(convert(event.locationInWindow, from: nil))
         }
 
         override func mouseExited(with event: NSEvent) {
+            pointerInside = false
             onExit?()
         }
     }

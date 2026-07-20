@@ -1,9 +1,13 @@
+import AppKit
 import SwiftUI
 
 /// The single resizable, movable player surface. Positioned within the content area overlay;
 /// Compact snaps to the top-right inspector footprint, otherwise the panel floats freely.
-/// The lower-left handle resizes (top + right edges stay pinned). The title bar drags to reposition.
-/// Size and position are persisted to `viewModel` on release.
+/// The title bar drags to reposition. Size and position are persisted to `viewModel` on release.
+///
+/// Chrome (timeline, title, size controls) uses the same idle model as fullscreen: show on
+/// pointer activity, stay up while over the transport/title chrome, hide after inactivity
+/// even if the cursor is still on the video.
 struct FloatingPlayerPanel: View {
     let video: Video
     @Bindable var viewModel: LibraryViewModel
@@ -17,13 +21,18 @@ struct FloatingPlayerPanel: View {
     /// Center snapshot at the start of any drag, used to compute the delta.
     @State private var dragStartCenter: CGPoint?
 
-    /// The title bar (drag) and size-control buttons only show while the mouse is over the
-    /// panel, fading out ~1s after it leaves (the resize handle stays always visible).
-    @State private var controlsVisible = false
+    @State private var controlsVisible = true
     @State private var controlsHideTask: Task<Void, Never>?
+    @State private var pointerOverChrome = false
+    @State private var lastActivityPoint: CGPoint?
 
     private let minSize = CGSize(width: 240, height: 140)
     private let outerPadding: CGFloat = 12
+    /// Match fullscreen idle so compact / windowed / fullscreen feel the same.
+    private static let idleSeconds: TimeInterval = FullscreenTransportChromeView.idleSeconds
+    private static let activitySlop: CGFloat = 3
+    private static let titleChromeHeight: CGFloat = 34
+
     // MARK: - Size helpers
 
     private var compactSize: CGSize {
@@ -93,10 +102,7 @@ struct FloatingPlayerPanel: View {
         dragCenter ?? baseCenter
     }
 
-    /// `controlsVisible`, but forced true while a resize or move drag is active — the 1s hover-out
-    /// timer is driven by `.onHover`, which can report "not hovering" mid-drag if the cursor
-    /// momentarily leaves the panel's current (pre-resize) bounds. Without this, the controls
-    /// could fade out while still being actively dragged.
+    /// Forced true while a resize or move drag is active.
     private var effectiveControlsVisible: Bool {
         controlsVisible || dragSize != nil || dragCenter != nil
     }
@@ -141,26 +147,60 @@ struct FloatingPlayerPanel: View {
                     .opacity(effectiveControlsVisible ? 1 : 0)
                     .allowsHitTesting(effectiveControlsVisible)
             }
-            // `.onHover` moved to before `.padding`/`.shadow` below (was after): its hover-tracking
-            // region matches whatever frame it's attached to, so applying it to the padded frame
-            // extended that region 12pt beyond the visible video on every side — in Compact mode,
-            // enough to reach past the Inspector's hero-resize handle just below, silently
-            // swallowing drags meant for it even though nothing is drawn there.
-            .onHover { hovering in
-                controlsHideTask?.cancel()
-                if hovering {
-                    controlsHideTask = nil
-                    withAnimation(.easeInOut(duration: 0.15)) { controlsVisible = true }
-                } else {
-                    controlsHideTask = Task {
-                        try? await Task.sleep(for: .seconds(1))
-                        guard !Task.isCancelled else { return }
-                        withAnimation(.easeInOut(duration: 0.3)) { controlsVisible = false }
+            .background {
+                PanelChromeMouseTracker(
+                    transportHeight: PlaybackTimelineBar.barHeight + 8,
+                    titleHeight: Self.titleChromeHeight,
+                    onActivity: { point, overChrome in
+                        notePointerActivity(at: point, overChrome: overChrome)
+                    },
+                    onExit: {
+                        pointerOverChrome = false
+                        scheduleChromeHide()
                     }
-                }
+                )
+            }
+            .onAppear {
+                controlsVisible = true
+                scheduleChromeHide()
+            }
+            .onDisappear {
+                controlsHideTask?.cancel()
+                controlsHideTask = nil
             }
             .shadow(color: .black.opacity(0.45), radius: 18, x: 0, y: 8)
             .padding(outerPadding)
+    }
+
+    // MARK: - Idle chrome (parity with fullscreen)
+
+    private func notePointerActivity(at point: CGPoint, overChrome: Bool) {
+        if let last = lastActivityPoint {
+            let dx = point.x - last.x
+            let dy = point.y - last.y
+            if (dx * dx + dy * dy) < (Self.activitySlop * Self.activitySlop) {
+                pointerOverChrome = overChrome
+                return
+            }
+        }
+        lastActivityPoint = point
+        pointerOverChrome = overChrome
+        withAnimation(.easeInOut(duration: 0.15)) { controlsVisible = true }
+        scheduleChromeHide()
+    }
+
+    private func scheduleChromeHide() {
+        controlsHideTask?.cancel()
+        controlsHideTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(Self.idleSeconds))
+            guard !Task.isCancelled else { return }
+            // Keep chrome up while dragging or resting on transport / title.
+            if dragSize != nil || dragCenter != nil || pointerOverChrome {
+                scheduleChromeHide()
+                return
+            }
+            withAnimation(.easeInOut(duration: 0.25)) { controlsVisible = false }
+        }
     }
 
     // MARK: - Title bar drag
@@ -196,6 +236,7 @@ struct FloatingPlayerPanel: View {
                         if let c = dragCenter { viewModel.playerFloatingPosition = c }
                         dragCenter = nil
                         dragStartCenter = nil
+                        scheduleChromeHide()
                     }
             )
             .help("Drag to move")
@@ -306,8 +347,80 @@ struct FloatingPlayerPanel: View {
                         if let c = dragCenter { viewModel.playerFloatingPosition = c }
                         dragSize        = nil; dragStartSize   = nil
                         dragCenter      = nil; dragStartCenter  = nil
+                        scheduleChromeHide()
                     }
             )
             .help("Drag to resize")
+    }
+}
+
+// MARK: - Mouse activity (idle chrome)
+
+/// Pass-through tracker over the player panel. Reports moves and whether the pointer is in the
+/// bottom transport band or top title strip (chrome stay-up zones).
+private struct PanelChromeMouseTracker: NSViewRepresentable {
+    var transportHeight: CGFloat
+    var titleHeight: CGFloat
+    var onActivity: (_ point: CGPoint, _ overChrome: Bool) -> Void
+    var onExit: () -> Void
+
+    func makeNSView(context: Context) -> TrackerView {
+        let view = TrackerView()
+        view.transportHeight = transportHeight
+        view.titleHeight = titleHeight
+        view.onActivity = onActivity
+        view.onExit = onExit
+        return view
+    }
+
+    func updateNSView(_ nsView: TrackerView, context: Context) {
+        nsView.transportHeight = transportHeight
+        nsView.titleHeight = titleHeight
+        nsView.onActivity = onActivity
+        nsView.onExit = onExit
+    }
+
+    final class TrackerView: NSView {
+        var transportHeight: CGFloat = 0
+        var titleHeight: CGFloat = 0
+        var onActivity: ((CGPoint, Bool) -> Void)?
+        var onExit: (() -> Void)?
+        private var tracking: NSTrackingArea?
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            window?.acceptsMouseMovedEvents = true
+            rebuildTracking()
+        }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            rebuildTracking()
+        }
+
+        private func rebuildTracking() {
+            if let tracking { removeTrackingArea(tracking) }
+            let area = NSTrackingArea(
+                rect: .zero,
+                options: [.activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited, .inVisibleRect],
+                owner: self,
+                userInfo: nil
+            )
+            addTrackingArea(area)
+            tracking = area
+        }
+
+        private func report(_ event: NSEvent) {
+            let point = convert(event.locationInWindow, from: nil)
+            let overChrome = point.y <= transportHeight || point.y >= bounds.height - titleHeight
+            onActivity?(point, overChrome)
+        }
+
+        override func mouseMoved(with event: NSEvent) { report(event) }
+        override func mouseEntered(with event: NSEvent) { report(event) }
+        override func mouseDragged(with event: NSEvent) { report(event) }
+        override func mouseExited(with event: NSEvent) { onExit?() }
     }
 }

@@ -9,8 +9,8 @@ import SwiftUI
 struct OverlayInlinePlayerView: View {
     let video: Video
     @Bindable var viewModel: LibraryViewModel
-    /// Whether the title bar is currently shown — driven by `FloatingPlayerPanel`'s hover
-    /// tracking, so this fades in/out together with the panel's other controls.
+    /// Whether the title bar is currently shown — driven by `FloatingPlayerPanel`'s idle
+    /// chrome tracking, so this fades in/out together with the panel's other controls.
     let controlsVisible: Bool
 
     private var playback: InlinePlaybackController { viewModel.playback }
@@ -55,7 +55,7 @@ struct OverlayInlinePlayerView: View {
             }
 
             // Minimal header bar — signals that this is a placed, first-class player panel
-            // rather than video that just happens to be here. Only shown on hover (see
+            // rather than video that just happens to be here. Only shown with idle chrome (see
             // `FloatingPlayerPanel`), fading with the rest of the panel's controls.
             overlayHeader
                 .opacity(controlsVisible ? 1 : 0)
