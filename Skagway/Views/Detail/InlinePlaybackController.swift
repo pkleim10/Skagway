@@ -38,12 +38,16 @@ final class InlinePlaybackController {
     private(set) var isPlaying: Bool = false
     /// Desired playback rate (persists across pause/seek within the session). Applied on play.
     private(set) var playbackRate: Float = 1.0
+    /// Session-only “return here” after jumping to a bookmark (not a bookmark; cleared on stop).
+    private(set) var returnPointSeconds: Double?
 
     /// Skip buttons / ⌥←⌥→ while playing.
     static let skipSeconds: Double = 15
     /// ←/→ nudge while playing (smaller than skip).
     static let nudgeSeconds: Double = 5
     static let playbackRateChoices: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+    /// Ignore bookmark jumps that barely move the playhead.
+    private static let returnPointMinDeltaSeconds: Double = 1.0
 
     @ObservationIgnored private var statusTask: Task<Void, Never>?
     @ObservationIgnored private var resumeBannerFadeTask: Task<Void, Never>?
@@ -60,6 +64,8 @@ final class InlinePlaybackController {
     /// `seconds > 0` is an explicit seek (filmstrip click) that suppresses resume. `ignoreResume`
     /// starts plainly at `seconds` even when a saved position exists (⌥-Space "Play from Beginning").
     func start(video: Video, at seconds: Double, ignoreResume: Bool = false) {
+        // New load — drop any session return point from the previous item.
+        clearReturnPoint()
         currentVideo = video
         playerError = nil
         statusTask?.cancel()
@@ -203,6 +209,7 @@ final class InlinePlaybackController {
         durationSeconds = 0
         isPlaying = false
         currentVideo = nil
+        clearReturnPoint()
         Task { await viewModel.reloadBookmarksForPlayback(video: nil) }
     }
 
@@ -323,6 +330,25 @@ final class InlinePlaybackController {
                 self.playAtConfiguredRate(player)
             }
         }
+    }
+
+    /// Remember the current playhead before jumping away to a bookmark (session-only).
+    func rememberReturnPointBeforeJump(to destinationSeconds: Double) {
+        let here = currentTimeSeconds
+        guard here.isFinite, here >= 0 else { return }
+        guard abs(here - destinationSeconds) >= Self.returnPointMinDeltaSeconds else { return }
+        returnPointSeconds = here
+    }
+
+    func clearReturnPoint() {
+        returnPointSeconds = nil
+    }
+
+    /// Seek back to the session return point (chip), then dismiss the chip.
+    func returnToSavedPoint() {
+        guard let seconds = returnPointSeconds else { return }
+        clearReturnPoint()
+        seek(toSeconds: seconds)
     }
 
     /// Play (or resume) at the user’s chosen rate — `play()` alone would reset to 1×.

@@ -98,6 +98,30 @@ struct PlaybackTimelineBar: View {
 
                 playbackSpeedMenu
 
+                if let returnSeconds = playback.returnPointSeconds {
+                    Button {
+                        playback.returnToSavedPoint()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.uturn.backward")
+                                .font(.system(size: 10, weight: .semibold))
+                            Text(returnSeconds.formattedDuration)
+                                .font(.system(size: 11, weight: .medium).monospacedDigit())
+                        }
+                        .foregroundStyle(Color.appTextPrimary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(Color.white.opacity(0.14))
+                        )
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Return to \(returnSeconds.formattedDuration)")
+                    .accessibilityLabel("Return to \(returnSeconds.formattedDuration)")
+                }
+
                 Spacer(minLength: 72)
             }
             .padding(.horizontal, 12)

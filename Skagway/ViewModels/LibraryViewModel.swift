@@ -4348,6 +4348,7 @@ final class LibraryViewModel {
                 ?? bookmarksSelectionVideoMatching(bookmark) else { return }
 
         if isPlayingInline, playback.currentVideo?.filePath == video.filePath {
+            playback.rememberReturnPointBeforeJump(to: bookmark.seconds)
             playback.seek(toSeconds: bookmark.seconds)
             return
         }
