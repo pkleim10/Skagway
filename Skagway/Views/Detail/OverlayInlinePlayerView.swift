@@ -23,13 +23,23 @@ struct OverlayInlinePlayerView: View {
             if let player = playback.player {
                 // The actual player is framed to feel like a deliberate piece of media
                 // rather than raw video bleeding to the edges of the panel.
-                FloatingPlayerView(player: player, showsFullscreenButton: false,
-                                   onRestartFromBeginning: { playback.restartFromBeginning() })
-                    .appMediaFrame(cornerRadius: AppRadius.lg)
-                    .padding(.horizontal, 10)
-                    .padding(.top, 34)   // leave room for the (25%-larger) header, always — it
-                                         // occupies this space whether visible or faded out
-                    .padding(.bottom, 10)
+                ZStack(alignment: .bottom) {
+                    FloatingPlayerView(player: player, showsFullscreenButton: false,
+                                       onRestartFromBeginning: { playback.restartFromBeginning() })
+
+                    PlaybackTimelineBar(
+                        viewModel: viewModel,
+                        controlsVisible: controlsVisible
+                    )
+                        // Do not clipShape the bar — the scrub hover preview draws above the
+                        // track into the video. Corner rounding comes from `.appMediaFrame`.
+                        .frame(maxWidth: .infinity, alignment: .bottom)
+                }
+                .appMediaFrame(cornerRadius: AppRadius.lg)
+                .padding(.horizontal, 10)
+                .padding(.top, 34)   // leave room for the (25%-larger) header, always — it
+                                     // occupies this space whether visible or faded out
+                .padding(.bottom, 10)
 
                 SubtitleOverlayContainer(track: playback.subtitleTrack)
 

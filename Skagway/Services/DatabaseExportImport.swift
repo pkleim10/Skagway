@@ -10,7 +10,9 @@ struct RecentLibraryItem: Identifiable {
 
 enum DatabaseExportImport {
     private static let activeLibraryBookmarkKey = PrefsKeys.activeLibraryBookmark
+    private static let activeLibraryPathKey = PrefsKeys.activeLibraryPath
     private static let recentLibraryBookmarksKey = PrefsKeys.recentLibraryBookmarks
+    private static let recentLibraryPathsKey = PrefsKeys.recentLibraryPaths
     private static let userClosedLibraryKey = PrefsKeys.userClosedLibrary
     private static let maxRecentLibraries = 10
 
@@ -78,20 +80,25 @@ enum DatabaseExportImport {
         UserDefaults.standard.removeObject(forKey: userClosedLibraryKey)
     }
 
-    /// Path to open for database. Resolves from active bookmark or default (if exists from migration). Nil = no library.
+    /// Path to open for database. Prefers the durable path key, then bookmark, then default library.
+    /// Nil = no library. Does **not** erase prefs when a bookmark fails to resolve after a rebuild —
+    /// that used to wipe the active library and prune recents.
     static func databasePathForLaunch() -> String? {
-        if let bookmark = UserDefaults.standard.data(forKey: activeLibraryBookmarkKey) {
-            var isStale = false
-            if let url = try? URL(
-                resolvingBookmarkData: bookmark,
-                options: .withSecurityScope,
-                relativeTo: nil,
-                bookmarkDataIsStale: &isStale
-            ), FileManager.default.fileExists(atPath: url.path) {
-                return url.path
-            }
-            UserDefaults.standard.removeObject(forKey: activeLibraryBookmarkKey)
+        if let path = UserDefaults.standard.string(forKey: activeLibraryPathKey),
+           FileManager.default.fileExists(atPath: path) {
+            refreshBookmarkIfNeeded(forPath: path, isActive: true)
+            return path
         }
+
+        if let bookmark = UserDefaults.standard.data(forKey: activeLibraryBookmarkKey),
+           let url = resolveLibraryBookmark(bookmark),
+           FileManager.default.fileExists(atPath: url.path) {
+            // Persist path so the next launch survives bookmark resolution failures.
+            let path = (url.path as NSString).standardizingPath
+            UserDefaults.standard.set(path, forKey: activeLibraryPathKey)
+            return path
+        }
+
         if FileManager.default.fileExists(atPath: defaultLibraryURL.path) {
             return defaultLibraryURL.path
         }
@@ -135,53 +142,157 @@ enum DatabaseExportImport {
         _ = try db.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM video") }
     }
 
+    // MARK: - Bookmark / path helpers
+
+    /// Resolve a saved bookmark. Tries plain resolution first (app is not sandboxed), then security-scope
+    /// for older bookmarks created with `.withSecurityScope`.
+    private static func resolveLibraryBookmark(_ data: Data) -> URL? {
+        var isStale = false
+        if let url = try? URL(
+            resolvingBookmarkData: data,
+            options: [],
+            relativeTo: nil,
+            bookmarkDataIsStale: &isStale
+        ) {
+            return url
+        }
+        isStale = false
+        if let url = try? URL(
+            resolvingBookmarkData: data,
+            options: .withSecurityScope,
+            relativeTo: nil,
+            bookmarkDataIsStale: &isStale
+        ) {
+            return url
+        }
+        return nil
+    }
+
+    private static func makeLibraryBookmark(for url: URL) -> Data? {
+        // Non-sandboxed app: plain bookmarks survive rebuilds far more reliably than security-scoped ones.
+        if let data = try? url.bookmarkData(
+            options: [],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        ) {
+            return data
+        }
+        return try? url.bookmarkData(
+            options: .withSecurityScope,
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+    }
+
+    private static func setActiveLibraryPreferences(url: URL) {
+        let path = (url.path as NSString).standardizingPath
+        UserDefaults.standard.set(path, forKey: activeLibraryPathKey)
+        if let bookmark = makeLibraryBookmark(for: url) {
+            UserDefaults.standard.set(bookmark, forKey: activeLibraryBookmarkKey)
+        }
+    }
+
+    private static func clearActiveLibraryPreferences() {
+        UserDefaults.standard.removeObject(forKey: activeLibraryBookmarkKey)
+        UserDefaults.standard.removeObject(forKey: activeLibraryPathKey)
+    }
+
+    private static func refreshBookmarkIfNeeded(forPath path: String, isActive: Bool) {
+        let url = URL(fileURLWithPath: path)
+        guard FileManager.default.fileExists(atPath: path) else { return }
+        guard let bookmark = makeLibraryBookmark(for: url) else { return }
+        if isActive {
+            UserDefaults.standard.set(bookmark, forKey: activeLibraryBookmarkKey)
+        }
+    }
+
     // MARK: - Recent Libraries
 
-    /// Returns recent library items from bookmarks. Prunes stale bookmarks.
+    /// Returns recent libraries. Paths are authoritative; bookmarks are best-effort.
+    /// Only drops entries whose files are actually gone — never because a bookmark failed to resolve.
     static func recentLibraryItems() -> [RecentLibraryItem] {
-        var bookmarks = UserDefaults.standard.array(forKey: recentLibraryBookmarksKey) as? [Data] ?? []
+        migrateRecentBookmarksIntoPathsIfNeeded()
+
+        var paths = UserDefaults.standard.stringArray(forKey: recentLibraryPathsKey) ?? []
         var result: [RecentLibraryItem] = []
-        var kept: [Data] = []
-        for bookmark in bookmarks {
-            var isStale = false
-            guard let url = try? URL(
-                resolvingBookmarkData: bookmark,
-                options: .withSecurityScope,
-                relativeTo: nil,
-                bookmarkDataIsStale: &isStale
-            ) else { continue }
-            if result.contains(where: { $0.url.path == url.path }) { continue }
-            kept.append(bookmark)
+        var keptPaths: [String] = []
+
+        for path in paths {
+            let standardized = (path as NSString).standardizingPath
+            guard FileManager.default.fileExists(atPath: standardized) else { continue }
+            if keptPaths.contains(standardized) { continue }
+            keptPaths.append(standardized)
+            let url = URL(fileURLWithPath: standardized)
             result.append(RecentLibraryItem(
-                id: url.path,
+                id: standardized,
                 displayName: displayName(for: url),
                 url: url
             ))
         }
-        if kept.count != bookmarks.count {
-            UserDefaults.standard.set(kept, forKey: recentLibraryBookmarksKey)
+
+        if keptPaths != paths {
+            UserDefaults.standard.set(keptPaths, forKey: recentLibraryPathsKey)
         }
+
+        // Keep bookmark blobs in sync when we can (non-fatal if creation fails).
+        var bookmarks: [Data] = []
+        for path in keptPaths.prefix(maxRecentLibraries) {
+            if let data = makeLibraryBookmark(for: URL(fileURLWithPath: path)) {
+                bookmarks.append(data)
+            }
+        }
+        UserDefaults.standard.set(bookmarks, forKey: recentLibraryBookmarksKey)
+
         return result
+    }
+
+    /// One-shot: pull paths out of legacy bookmark-only recents so rebuilds don’t erase history.
+    private static func migrateRecentBookmarksIntoPathsIfNeeded() {
+        var paths = UserDefaults.standard.stringArray(forKey: recentLibraryPathsKey) ?? []
+        let bookmarks = UserDefaults.standard.array(forKey: recentLibraryBookmarksKey) as? [Data] ?? []
+
+        var changed = false
+        for data in bookmarks {
+            guard let url = resolveLibraryBookmark(data) else { continue }
+            let path = (url.path as NSString).standardizingPath
+            guard FileManager.default.fileExists(atPath: path) else { continue }
+            if !paths.contains(path) {
+                paths.append(path)
+                changed = true
+            }
+        }
+        if changed {
+            UserDefaults.standard.set(Array(paths.prefix(maxRecentLibraries)), forKey: recentLibraryPathsKey)
+        }
+
+        // Also migrate active bookmark → path once (even when recents are empty).
+        if UserDefaults.standard.string(forKey: activeLibraryPathKey) == nil,
+           let bookmark = UserDefaults.standard.data(forKey: activeLibraryBookmarkKey),
+           let url = resolveLibraryBookmark(bookmark),
+           FileManager.default.fileExists(atPath: url.path) {
+            UserDefaults.standard.set((url.path as NSString).standardizingPath, forKey: activeLibraryPathKey)
+        }
     }
 
     /// Adds a library URL to the recent list. Dedupes by path, trims to max.
     static func addToRecent(url: URL) {
-        guard let bookmark = try? url.bookmarkData(
-            options: .withSecurityScope,
-            includingResourceValuesForKeys: nil,
-            relativeTo: nil
-        ) else { return }
-        let path = url.path
-        var kept: [Data] = []
-        for data in UserDefaults.standard.array(forKey: recentLibraryBookmarksKey) as? [Data] ?? [] {
-            var isStale = false
-            guard let u = try? URL(resolvingBookmarkData: data, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale),
-                  u.path != path else { continue }
-            kept.append(data)
+        let path = (url.path as NSString).standardizingPath
+        var paths = UserDefaults.standard.stringArray(forKey: recentLibraryPathsKey) ?? []
+        paths.removeAll { ($0 as NSString).standardizingPath == path }
+        paths.insert(path, at: 0)
+        paths = Array(paths.prefix(maxRecentLibraries))
+        UserDefaults.standard.set(paths, forKey: recentLibraryPathsKey)
+
+        if let bookmark = makeLibraryBookmark(for: url) {
+            var kept: [Data] = []
+            for data in UserDefaults.standard.array(forKey: recentLibraryBookmarksKey) as? [Data] ?? [] {
+                guard let u = resolveLibraryBookmark(data),
+                      (u.path as NSString).standardizingPath != path else { continue }
+                kept.append(data)
+            }
+            kept.insert(bookmark, at: 0)
+            UserDefaults.standard.set(Array(kept.prefix(maxRecentLibraries)), forKey: recentLibraryBookmarksKey)
         }
-        kept.insert(bookmark, at: 0)
-        kept = Array(kept.prefix(maxRecentLibraries))
-        UserDefaults.standard.set(kept, forKey: recentLibraryBookmarksKey)
     }
 
     /// Switches to a library and restarts.
@@ -189,13 +300,9 @@ enum DatabaseExportImport {
         checkpointAndCleanWAL()
         let didStartAccess = item.url.startAccessingSecurityScopedResource()
         defer { if didStartAccess { item.url.stopAccessingSecurityScopedResource() } }
-        guard let bookmark = try? item.url.bookmarkData(
-            options: .withSecurityScope,
-            includingResourceValuesForKeys: nil,
-            relativeTo: nil
-        ) else { return }
-        UserDefaults.standard.set(bookmark, forKey: activeLibraryBookmarkKey)
+        setActiveLibraryPreferences(url: item.url)
         addToRecent(url: item.url)
+        clearUserClosedLibrary()
         relaunchAfterTerminate()
         NSApplication.shared.terminate(nil)
     }
@@ -203,6 +310,7 @@ enum DatabaseExportImport {
     /// Clears all recent library bookmarks.
     static func clearRecentLibraries() {
         UserDefaults.standard.removeObject(forKey: recentLibraryBookmarksKey)
+        UserDefaults.standard.removeObject(forKey: recentLibraryPathsKey)
     }
 
     /// Schedules the app to relaunch after this process terminates. Uses launchctl so the relaunch survives our exit.
@@ -308,6 +416,7 @@ enum DatabaseExportImport {
         do {
             try DatabaseMigration.createEmptyDatabase(at: destURL.path)
             clearUserClosedLibrary()
+            setActiveLibraryPreferences(url: destURL)
             addToRecent(url: destURL)
             relaunchAfterTerminate()
             NSApplication.shared.terminate(nil)
@@ -331,7 +440,7 @@ enum DatabaseExportImport {
             return
         }
         checkpointAndCleanWAL()
-        UserDefaults.standard.removeObject(forKey: activeLibraryBookmarkKey)
+        clearActiveLibraryPreferences()
         clearUserClosedLibrary()
         addToRecent(url: defaultLibraryURL)
         relaunchAfterTerminate()
@@ -369,7 +478,7 @@ enum DatabaseExportImport {
     /// Closes the current library and relaunches to show landing. Keeps file on disk.
     static func closeLibrary() {
         checkpointAndCleanWAL()
-        UserDefaults.standard.removeObject(forKey: activeLibraryBookmarkKey)
+        clearActiveLibraryPreferences()
         UserDefaults.standard.set(true, forKey: userClosedLibraryKey)
         UserDefaults.standard.synchronize()
         relaunchAfterTerminate()
@@ -386,8 +495,12 @@ enum DatabaseExportImport {
             }
         }
         removeFromRecent(url: url)
-        if databasePathForLaunch() == url.path {
-            UserDefaults.standard.removeObject(forKey: activeLibraryBookmarkKey)
+        let standardized = (url.path as NSString).standardizingPath
+        if let active = UserDefaults.standard.string(forKey: activeLibraryPathKey),
+           (active as NSString).standardizingPath == standardized {
+            clearActiveLibraryPreferences()
+        } else if databasePathForLaunch() == url.path {
+            clearActiveLibraryPreferences()
         }
         relaunchAfterTerminate()
         NSApplication.shared.terminate(nil)
@@ -395,12 +508,15 @@ enum DatabaseExportImport {
 
     /// Removes a library URL from the recent list.
     static func removeFromRecent(url: URL) {
-        let path = url.path
+        let path = (url.path as NSString).standardizingPath
+        var paths = UserDefaults.standard.stringArray(forKey: recentLibraryPathsKey) ?? []
+        paths.removeAll { ($0 as NSString).standardizingPath == path }
+        UserDefaults.standard.set(paths, forKey: recentLibraryPathsKey)
+
         var kept: [Data] = []
         for data in UserDefaults.standard.array(forKey: recentLibraryBookmarksKey) as? [Data] ?? [] {
-            var isStale = false
-            guard let u = try? URL(resolvingBookmarkData: data, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale),
-                  u.path != path else { continue }
+            guard let u = resolveLibraryBookmark(data),
+                  (u.path as NSString).standardizingPath != path else { continue }
             kept.append(data)
         }
         UserDefaults.standard.set(kept, forKey: recentLibraryBookmarksKey)

@@ -731,7 +731,8 @@ private struct LibraryContentView: View {
                             player: player,
                             title: selectedVideo?.fileName ?? "",
                             startWindowInFullscreen: true,
-                            subtitleTrack: vm.playback.subtitleTrack
+                            subtitleTrack: vm.playback.subtitleTrack,
+                            viewModel: vm
                         ) {
                             vm.isPlayerFullScreen = false
                         }

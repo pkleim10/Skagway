@@ -6,9 +6,12 @@ enum PrefsKeys {
 
     static let didCompleteLegacyRename = "Skagway.didCompleteLegacyRename"
 
-    // Library bookmarks
+    // Library bookmarks / paths
+    // Paths are the durable source of truth (bookmarks can fail to resolve after re-signing/rebuilds).
     static let activeLibraryBookmark = "Skagway.activeLibraryBookmark"
+    static let activeLibraryPath = "Skagway.activeLibraryPath"
     static let recentLibraryBookmarks = "Skagway.recentLibraryBookmarks"
+    static let recentLibraryPaths = "Skagway.recentLibraryPaths"
     static let userClosedLibrary = "Skagway.userClosedLibrary"
 
     // Extensions / playback positions / split dividers
@@ -73,7 +76,9 @@ enum PrefsKeys {
     /// Suffixes that map former `*.<suffix>` prefs into `Skagway.<suffix>` (see LegacyRenameMigrator).
     static let migratableSuffixes: [String] = [
         "activeLibraryBookmark",
+        "activeLibraryPath",
         "recentLibraryBookmarks",
+        "recentLibraryPaths",
         "userClosedLibrary",
         "lastOpenedLibraryBookmark", // maps into activeLibraryBookmark specially if needed
         "videoExtensions",

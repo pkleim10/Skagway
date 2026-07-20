@@ -24,7 +24,6 @@ struct FloatingPlayerPanel: View {
 
     private let minSize = CGSize(width: 240, height: 140)
     private let outerPadding: CGFloat = 12
-
     // MARK: - Size helpers
 
     private var compactSize: CGSize {
@@ -130,17 +129,14 @@ struct FloatingPlayerPanel: View {
                 RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
                     .stroke(Color.appAccent.opacity(0.3), lineWidth: 1)
             )
+            // Chrome stays in the bottom-trailing corner. The timeline adds clearance *below* its
+            // scrubber line so these don’t sit on the track. Resize handle removed for now.
             .overlay(alignment: .bottomTrailing) {
                 sizeControls
                     .opacity(effectiveControlsVisible ? 1 : 0)
                     .allowsHitTesting(effectiveControlsVisible)
             }
-            .overlay(alignment: .bottomLeading)  {
-                resizeHandle
-                    .opacity(effectiveControlsVisible ? 1 : 0)
-                    .allowsHitTesting(effectiveControlsVisible)
-            }
-            .overlay(alignment: .top)            {
+            .overlay(alignment: .top) {
                 titleBarDragArea
                     .opacity(effectiveControlsVisible ? 1 : 0)
                     .allowsHitTesting(effectiveControlsVisible)

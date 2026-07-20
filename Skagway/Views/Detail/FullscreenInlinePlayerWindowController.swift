@@ -11,6 +11,8 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
     /// Hosting view that renders the Netflix-style subtitle overlay on top of `playerView`.
     /// Created lazily in `present(...)` so the SwiftUI view observes the provided `SubtitleTrack`.
     private var subtitleHost: NSHostingView<SubtitleOverlayContainer>?
+    /// Skagway timeline (sole scrubber) over the video in full screen.
+    private var timelineHost: PassThroughHostingView<FullscreenTimelineOverlay>?
     private var onEnded: (() -> Void)?
     private var didEnd = false
     private var keyDownMonitor: Any?
@@ -22,19 +24,26 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
         title: String,
         startWindowInFullscreen: Bool,
         subtitleTrack: SubtitleTrack,
+        viewModel: LibraryViewModel,
         onEnded: @escaping () -> Void
     ) {
         self.onEnded = onEnded
 
         playerView.player = player
-        playerView.controlsStyle = .floating
+        // Skagway owns the sole scrubber (`PlaybackTimelineBar`).
+        playerView.controlsStyle = .none
         // Edge-to-edge already fills the display; hide to avoid a second fullscreen mode.
         playerView.showsFullScreenToggleButton = !startWindowInFullscreen
 
         let host = NSHostingView(rootView: SubtitleOverlayContainer(track: subtitleTrack))
         host.translatesAutoresizingMaskIntoConstraints = false
-        // Overlay is hit-testing-disabled inside the SwiftUI view itself; clicks still reach AVPlayerView controls.
         self.subtitleHost = host
+
+        let timeline = PassThroughHostingView(rootView: FullscreenTimelineOverlay(viewModel: viewModel))
+        timeline.translatesAutoresizingMaskIntoConstraints = false
+        timeline.wantsLayer = true
+        timeline.layer?.backgroundColor = NSColor.clear.cgColor
+        self.timelineHost = timeline
 
         if startWindowInFullscreen {
             presentEdgeToEdge(title: title)
@@ -55,8 +64,7 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
         playerView.autoresizingMask = [.width, .height]
         content.addSubview(playerView)
 
-        // Subtitle overlay is layered above the player view but below the close button,
-        // so the close button remains clickable even when a cue is visible.
+        // Subtitles under the timeline; close button stays on top for exit.
         if let host = subtitleHost {
             content.addSubview(host)
             NSLayoutConstraint.activate([
@@ -64,6 +72,16 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
                 host.trailingAnchor.constraint(equalTo: content.trailingAnchor),
                 host.topAnchor.constraint(equalTo: content.topAnchor),
                 host.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            ])
+        }
+
+        if let timeline = timelineHost {
+            content.addSubview(timeline)
+            NSLayoutConstraint.activate([
+                timeline.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+                timeline.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+                timeline.topAnchor.constraint(equalTo: content.topAnchor),
+                timeline.bottomAnchor.constraint(equalTo: content.bottomAnchor),
             ])
         }
 
@@ -130,6 +148,16 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
             ])
         }
 
+        if let timeline = timelineHost {
+            content.addSubview(timeline)
+            NSLayoutConstraint.activate([
+                timeline.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+                timeline.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+                timeline.topAnchor.constraint(equalTo: content.topAnchor),
+                timeline.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            ])
+        }
+
         let w = NSWindow(
             contentRect: content.bounds,
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -190,6 +218,8 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
         playerView.player = nil
         subtitleHost?.removeFromSuperview()
         subtitleHost = nil
+        timelineHost?.removeFromSuperview()
+        timelineHost = nil
         window?.delegate = nil
         window = nil
         onEnded?()

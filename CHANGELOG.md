@@ -31,7 +31,12 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
-- **Video bookmarks** — Named points of interest (timestamp + title + frame still) stored per video in the library DB. Bookmark while playing (⌥⌘B / Playback menu); rename inline in the Inspector (title focuses after add); jump via still/play. Resume playback stays a separate automatic “continue watching” position.
+- **Library choice survives rebuilds** — Active library and Recents are remembered by file path (not only security-scoped bookmarks). Bookmark resolve failures after re-signing no longer wipe the active library or prune Recents.
+- **Custom playback timeline** — Skagway-owned transport bar is the sole scrubber (AVPlayerView floating controls removed): play/pause, click/drag seek, times, and bookmark ticks. Full-width scrubber; hover shows a pointer-aligned preview of the frame at that time (not bookmark stills). Extra height below the track so corner size/close chrome doesn’t sit on the line. Resume stays a separate automatic store.
+- **Scrubber hover preview fix** — Preview was clipped away (and SwiftUI hover was blocked by the seek drag gesture); now uses AppKit mouse tracking and draws above the track into the video.
+- **Faster scrub hover previews** — Dedicated warm decoder (not queued behind grid thumbnails), keyframe seeks, instant cache hits, and neighbor prefetch so the preview updates snappier while scrubbing.
+- **Double-click diamond lane to bookmark** — While the scrub preview is up, double-click the bookmark diamond strip to add a bookmark at the pointer time (playback/playhead unchanged).
+- **Video bookmarks** — Named points of interest (timestamp + title + frame still) stored per video in the library DB. Bookmark while playing (⌥⌘B / View menu); rename inline in the Inspector (title focuses after add); jump via still/play. Resume playback stays a separate automatic “continue watching” position.
 
 ## 0.64.0 (build 777) - 2026-07-17
 

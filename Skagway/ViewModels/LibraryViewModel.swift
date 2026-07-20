@@ -490,6 +490,8 @@ final class LibraryViewModel {
 
     /// Bookmarks for the currently inspected single selection (empty when multi/none).
     private(set) var bookmarksForSelection: [VideoBookmark] = []
+    /// Bookmarks for the video currently in the player (timeline ticks); may differ from selection.
+    private(set) var bookmarksForPlayback: [VideoBookmark] = []
     /// Bumped when bookmark rows change so Inspector rows refresh reliably.
     private(set) var bookmarksRevision: Int = 0
     private func notifyBookmarksChanged() {
@@ -4266,6 +4268,17 @@ final class LibraryViewModel {
         notifyBookmarksChanged()
     }
 
+    /// Timeline ticks follow the playing video, not merely the Inspector selection.
+    func reloadBookmarksForPlayback(video: Video?) async {
+        guard let video, let videoId = video.databaseId else {
+            bookmarksForPlayback = []
+            notifyBookmarksChanged()
+            return
+        }
+        bookmarksForPlayback = (try? await bookmarkRepo.fetch(forVideoId: videoId)) ?? []
+        notifyBookmarksChanged()
+    }
+
     /// Insert a bookmark at `seconds`, capture a still, refresh the Inspector list when relevant.
     /// Default title is the timecode; rename inline in the Inspector.
     @discardableResult
@@ -4294,7 +4307,10 @@ final class LibraryViewModel {
             pendingBookmarkTitleFocusId = bookmarkId
             if selectedVideoIds.count == 1, selectedVideoIds.contains(video.filePath) {
                 await reloadBookmarksForSelection()
-            } else {
+            }
+            if playback.currentVideo?.filePath == video.filePath {
+                await reloadBookmarksForPlayback(video: video)
+            } else if selectedVideoIds.count != 1 || !selectedVideoIds.contains(video.filePath) {
                 notifyBookmarksChanged()
             }
             return bookmark
@@ -4309,6 +4325,9 @@ final class LibraryViewModel {
         let newTitle = trimmed.isEmpty ? bookmark.seconds.formattedDuration : trimmed
         try? await bookmarkRepo.updateTitle(id: id, title: newTitle)
         await reloadBookmarksForSelection()
+        if playback.currentVideo?.databaseId == bookmark.videoId {
+            await reloadBookmarksForPlayback(video: playback.currentVideo)
+        }
     }
 
     func deleteBookmark(_ bookmark: VideoBookmark) async {
@@ -4318,6 +4337,9 @@ final class LibraryViewModel {
         thumbnailService.deleteBookmarkStill(at: bookmark.thumbnailPath)
         try? await bookmarkRepo.delete(bookmark)
         await reloadBookmarksForSelection()
+        if playback.currentVideo?.databaseId == bookmark.videoId {
+            await reloadBookmarksForPlayback(video: playback.currentVideo)
+        }
     }
 
     /// Jump to a bookmark: seek live player if already playing this video, otherwise start at that time.

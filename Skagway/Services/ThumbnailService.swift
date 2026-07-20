@@ -46,6 +46,53 @@ private actor ThumbnailGenerationGate {
     }
 }
 
+/// Dedicated scrub-hover decoder: reuses one generator per file, latest-wins cancellation, never
+/// shares the grid/filmstrip generation gate (that queue was a major source of scrub lag).
+private actor ScrubPreviewGenerator {
+    private var path: String?
+    private var generator: AVAssetImageGenerator?
+    private var ticket = 0
+
+    func image(url: URL, path: String, seconds: Double) async -> NSImage? {
+        ticket += 1
+        let myTicket = ticket
+
+        let gen = ensureGenerator(url: url, path: path)
+        // Drop any in-flight decode so a fast mouse move doesn’t wait on a stale time.
+        gen.cancelAllCGImageGeneration()
+
+        do {
+            let time = CMTime(seconds: seconds, preferredTimescale: 600)
+            let (cgImage, _) = try await gen.image(at: time)
+            guard myTicket == ticket else { return nil }
+            return NSImage(
+                cgImage: cgImage,
+                size: NSSize(width: cgImage.width, height: cgImage.height)
+            )
+        } catch {
+            return nil
+        }
+    }
+
+    private func ensureGenerator(url: URL, path: String) -> AVAssetImageGenerator {
+        if self.path == path, let generator {
+            return generator
+        }
+        generator?.cancelAllCGImageGeneration()
+        let asset = AVURLAsset(url: url)
+        let gen = AVAssetImageGenerator(asset: asset)
+        gen.appliesPreferredTrackTransform = true
+        // Preview card is 160×90 — keep decode tiny for speed.
+        gen.maximumSize = CGSize(width: 180, height: 180)
+        // Keyframe-only: much closer to YouTube sprite snappiness than exact-frame seeks.
+        gen.requestedTimeToleranceBefore = .positiveInfinity
+        gen.requestedTimeToleranceAfter = .positiveInfinity
+        generator = gen
+        self.path = path
+        return gen
+    }
+}
+
 /// Disk + memory cache for thumbnails/filmstrips. **Not** an `actor`: fast `load*` calls must not wait behind
 /// `generate*` work from hundreds of grid cells (that was causing multi‑second stalls in the detail pane).
 final class ThumbnailService: @unchecked Sendable {
@@ -55,11 +102,15 @@ final class ThumbnailService: @unchecked Sendable {
     private let managementLock = NSLock()
     /// P0: bound concurrent AV thumbnail/filmstrip generation (grid + scanner + detail).
     private let generationGate = ThumbnailGenerationGate(maxConcurrent: 4)
+    /// Scrub hover — isolated from `generationGate` so grid work can’t stall the timeline preview.
+    private let scrubPreviewGenerator = ScrubPreviewGenerator()
     /// Coalesce multiple awaiters for the same path (grid scroll, scanner, detail).
     private let inflightLock = NSLock()
     private var inflightThumbnails: [String: Task<URL, Error>] = [:]
     private var inflightFilmstrips: [String: Task<NSImage, Error>] = [:]
     private var inflightDetailPreviews: [String: Task<URL, Error>] = [:]
+    private let scrubPrefetchLock = NSLock()
+    private var scrubPrefetchTask: Task<Void, Never>?
 
     var hasPendingThumbnails: Bool {
         inflightLock.lock()
@@ -684,6 +735,82 @@ final class ThumbnailService: @unchecked Sendable {
 
     func deleteBookmarkStill(videoId: Int64, bookmarkId: Int64) {
         try? FileManager.default.removeItem(at: bookmarkStillURL(videoId: videoId, bookmarkId: bookmarkId))
+    }
+
+    /// Scrub timeline quantization (~2 frames/sec). Coarser than exact playhead → hotter memory cache
+    /// and fewer decodes while the pointer moves (YouTube sprite sheets are often ~1s or coarser).
+    private static let scrubPreviewStepSeconds: Double = 0.5
+
+    private static func quantizeScrubSeconds(_ seconds: Double) -> Double {
+        let step = scrubPreviewStepSeconds
+        return (max(0, seconds) / step).rounded() * step
+    }
+
+    private static func scrubPreviewCacheKey(filePath: String, quantizedSeconds: Double) -> NSString {
+        "scrubPreview:\(filePath):\(String(format: "%.2f", quantizedSeconds))" as NSString
+    }
+
+    /// Synchronous cache peek for instant UI paint (no debounce / no await).
+    func cachedScrubPreviewImage(for video: Video, atSeconds seconds: Double) -> NSImage? {
+        let quantized = Self.quantizeScrubSeconds(seconds)
+        return memoryCache.object(forKey: Self.scrubPreviewCacheKey(filePath: video.filePath, quantizedSeconds: quantized))
+    }
+
+    /// Lightweight still for scrubber hover preview. Memory-cached; not written to disk.
+    /// Bypasses the shared thumbnail gate, reuses a warm generator, and prefetches neighbors.
+    func scrubPreviewImage(for video: Video, atSeconds seconds: Double) async -> NSImage? {
+        await scrubPreviewImage(for: video, atSeconds: seconds, prefetchNeighbors: true)
+    }
+
+    private func scrubPreviewImage(
+        for video: Video,
+        atSeconds seconds: Double,
+        prefetchNeighbors: Bool
+    ) async -> NSImage? {
+        let quantized = Self.quantizeScrubSeconds(seconds)
+        let key = Self.scrubPreviewCacheKey(filePath: video.filePath, quantizedSeconds: quantized)
+        if let cached = memoryCache.object(forKey: key) {
+            if prefetchNeighbors {
+                scheduleScrubNeighborPrefetch(video: video, around: quantized)
+            }
+            return cached
+        }
+
+        guard let image = await scrubPreviewGenerator.image(
+            url: video.url,
+            path: video.filePath,
+            seconds: quantized
+        ) else {
+            return nil
+        }
+        memoryCache.setObject(image, forKey: key)
+        if prefetchNeighbors {
+            scheduleScrubNeighborPrefetch(video: video, around: quantized)
+        }
+        return image
+    }
+
+    /// Warm ±1 / ±2 scrub steps so the next mouse move often hits memory cache.
+    private func scheduleScrubNeighborPrefetch(video: Video, around seconds: Double) {
+        let step = Self.scrubPreviewStepSeconds
+        let targets = [seconds + step, seconds - step, seconds + 2 * step, seconds - 2 * step]
+            .map(Self.quantizeScrubSeconds)
+            .filter { $0 >= 0 }
+
+        scrubPrefetchLock.lock()
+        scrubPrefetchTask?.cancel()
+        scrubPrefetchTask = Task(priority: .utility) { [weak self] in
+            guard let self else { return }
+            var seen = Set<Double>()
+            for t in targets {
+                guard !Task.isCancelled else { return }
+                guard seen.insert(t).inserted else { continue }
+                let key = Self.scrubPreviewCacheKey(filePath: video.filePath, quantizedSeconds: t)
+                if self.memoryCache.object(forKey: key) != nil { continue }
+                _ = await self.scrubPreviewImage(for: video, atSeconds: t, prefetchNeighbors: false)
+            }
+        }
+        scrubPrefetchLock.unlock()
     }
 
     /// Deletes every cached still (thumbnail + all detail-preview long-edge variants + legacy detail

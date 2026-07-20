@@ -31,7 +31,8 @@ struct FloatingPlayerView: NSViewRepresentable {
     func makeNSView(context: Context) -> KeyAwarePlayerView {
         let view = KeyAwarePlayerView()
         view.player = player
-        view.controlsStyle = .floating
+        // Skagway owns the sole scrubber (`PlaybackTimelineBar`); hide AVKit transport.
+        view.controlsStyle = .none
         view.showsFullScreenToggleButton = showsFullscreenButton
         view.onRestartFromBeginning = onRestartFromBeginning
         // Do not steal first responder. Space is handled by the local key monitor in ContentView

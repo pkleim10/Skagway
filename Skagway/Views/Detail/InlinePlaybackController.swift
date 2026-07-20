@@ -31,8 +31,16 @@ final class InlinePlaybackController {
     private(set) var playerError: String?
     private(set) var currentVideo: Video?
 
+    /// Wall-clock playhead for `PlaybackTimelineBar` (updated by a periodic observer).
+    private(set) var currentTimeSeconds: Double = 0
+    /// Duration used by the timeline; prefers item duration, falls back to `Video.duration`.
+    private(set) var durationSeconds: Double = 0
+    private(set) var isPlaying: Bool = false
+
     @ObservationIgnored private var statusTask: Task<Void, Never>?
     @ObservationIgnored private var resumeBannerFadeTask: Task<Void, Never>?
+    @ObservationIgnored private var timeObserverToken: Any?
+    @ObservationIgnored private var timeControlObservation: NSKeyValueObservation?
 
     init(viewModel: LibraryViewModel) {
         self.viewModel = viewModel
@@ -86,8 +94,12 @@ final class InlinePlaybackController {
             }
 
             let newPlayer = AVPlayer(url: videoURL)
+            detachTimelineObservers()
+            player?.pause()
             player = newPlayer
             subtitleTrack.attach(to: newPlayer)
+            attachTimelineObservers(to: newPlayer, fallbackDuration: video.duration)
+            Task { await self.viewModel.reloadBookmarksForPlayback(video: video) }
 
             // Start playback immediately — subtitles attach when the sidecar task finishes.
             let resumeSeconds: Double? = {
@@ -155,9 +167,13 @@ final class InlinePlaybackController {
         if viewModel.isPlayerFullScreen { viewModel.isPlayerFullScreen = false }
         // Tear down any prior (now-stale) player so an earlier video doesn't keep playing behind the
         // error overlay when a *switch* to an unreachable file fails. No-op on a cold start (player nil).
+        detachTimelineObservers()
         subtitleTrack.detach()
         player?.pause()
         player = nil
+        currentTimeSeconds = 0
+        durationSeconds = 0
+        isPlaying = false
     }
 
     /// Tear down the player, persisting the current position so the next play can resume.
@@ -167,16 +183,28 @@ final class InlinePlaybackController {
         persistPosition()
         cancelResumeBannerFadeTask()
         resumeBannerOpacity = 1
+        detachTimelineObservers()
         subtitleTrack.detach()
         player?.pause()
         player = nil
+        currentTimeSeconds = 0
+        durationSeconds = 0
+        isPlaying = false
+        currentVideo = nil
+        Task { await viewModel.reloadBookmarksForPlayback(video: nil) }
     }
 
     // MARK: - Intents
 
     func togglePlayPause() {
         guard let player else { return }
-        if player.timeControlStatus == .playing { player.pause() } else { player.play() }
+        if player.timeControlStatus == .playing {
+            player.pause()
+            isPlaying = false
+        } else {
+            player.play()
+            isPlaying = true
+        }
     }
 
     func restartFromBeginning() {
@@ -234,16 +262,26 @@ final class InlinePlaybackController {
         }
     }
 
-    /// Seek the live player to a bookmark (precise frame).
-    func seek(toSeconds seconds: Double) {
+    /// Seek the live player (precise frame). When `resumePlayback` is true (default), play after seek
+    /// — used for bookmark jumps. Scrubbing passes `false` so drag doesn’t force play.
+    func seek(toSeconds seconds: Double, resumePlayback: Bool = true) {
         guard let player else { return }
         guard seconds.isFinite, seconds >= 0 else { return }
+        let clamped: Double = {
+            if durationSeconds > 0 { return min(max(0, seconds), durationSeconds) }
+            return max(0, seconds)
+        }()
+        currentTimeSeconds = clamped
         player.seek(
-            to: CMTime(seconds: seconds, preferredTimescale: 600),
+            to: CMTime(seconds: clamped, preferredTimescale: 600),
             toleranceBefore: .zero,
             toleranceAfter: .zero
-        ) { [weak player] _ in
-            player?.play()
+        ) { [weak self, weak player] _ in
+            guard let self else { return }
+            if resumePlayback {
+                player?.play()
+                self.isPlaying = true
+            }
         }
     }
 
@@ -282,6 +320,46 @@ final class InlinePlaybackController {
         guard seconds.isFinite, seconds > 0 else { return }
         PlaybackPositionStore.saveSeconds(seconds, filePath: video.filePath)
         viewModel.notifyResumePositionsChanged()
+    }
+
+    // MARK: - Timeline observers
+
+    private func attachTimelineObservers(to newPlayer: AVPlayer, fallbackDuration: Double?) {
+        detachTimelineObservers()
+        durationSeconds = fallbackDuration ?? 0
+        currentTimeSeconds = max(0, newPlayer.currentTime().seconds)
+        isPlaying = newPlayer.timeControlStatus == .playing
+
+        let interval = CMTime(seconds: 0.25, preferredTimescale: 600)
+        timeObserverToken = newPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
+            guard let self else { return }
+            let seconds = time.seconds
+            if seconds.isFinite, seconds >= 0 {
+                self.currentTimeSeconds = seconds
+            }
+            if let item = newPlayer.currentItem {
+                let d = item.duration.seconds
+                if d.isFinite, d > 0 {
+                    self.durationSeconds = d
+                }
+            }
+            self.isPlaying = newPlayer.timeControlStatus == .playing
+        }
+
+        timeControlObservation = newPlayer.observe(\.timeControlStatus, options: [.initial, .new]) { [weak self] player, _ in
+            Task { @MainActor in
+                self?.isPlaying = player.timeControlStatus == .playing
+            }
+        }
+    }
+
+    private func detachTimelineObservers() {
+        if let token = timeObserverToken, let player {
+            player.removeTimeObserver(token)
+        }
+        timeObserverToken = nil
+        timeControlObservation?.invalidate()
+        timeControlObservation = nil
     }
 
     // MARK: - Internals
