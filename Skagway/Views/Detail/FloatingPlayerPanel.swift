@@ -3,7 +3,8 @@ import SwiftUI
 
 /// The single resizable, movable player surface. Positioned within the content area overlay;
 /// Compact snaps to the top-right inspector footprint, otherwise the panel floats freely.
-/// The title bar drags to reposition. Size and position are persisted to `viewModel` on release.
+/// The title bar drags to reposition; edges and corners drag to resize (standard window cursors).
+/// Size and position are persisted to `viewModel` on release.
 ///
 /// Chrome (timeline, title, size controls) uses the same idle model as fullscreen: show on
 /// pointer activity, stay up while over the transport/title chrome, hide after inactivity
@@ -32,6 +33,10 @@ struct FloatingPlayerPanel: View {
     private static let idleSeconds: TimeInterval = FullscreenTransportChromeView.idleSeconds
     private static let activitySlop: CGFloat = 3
     private static let titleChromeHeight: CGFloat = 34
+    /// Invisible edge grab thickness (not drawn — hit-test only).
+    private static let resizeEdgeThickness: CGFloat = 6
+    /// Corner grab size (wins over edges where they meet).
+    private static let resizeCornerSize: CGFloat = 12
 
     // MARK: - Size helpers
 
@@ -135,15 +140,70 @@ struct FloatingPlayerPanel: View {
                 RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
                     .stroke(Color.appAccent.opacity(0.3), lineWidth: 1)
             )
-            // Chrome stays in the bottom-trailing corner. The timeline adds clearance *below* its
-            // scrubber line so these don’t sit on the track. Resize handle removed for now.
-            .overlay(alignment: .bottomTrailing) {
-                sizeControls
+            .overlay(alignment: .top) {
+                // Interior title drag — inset so top edge/corners remain resize targets.
+                titleBarDragArea
+                    .padding(.top, Self.resizeEdgeThickness)
+                    .padding(.horizontal, Self.resizeCornerSize)
                     .opacity(effectiveControlsVisible ? 1 : 0)
                     .allowsHitTesting(effectiveControlsVisible)
             }
+            // Edge/corner resize — always hittable (like a real window frame). Under size chrome
+            // so Compact/Windowed/Close keep priority in the bottom-trailing cluster.
             .overlay(alignment: .top) {
-                titleBarDragArea
+                resizeStrip(.north) {
+                    Color.clear
+                        .frame(height: Self.resizeEdgeThickness)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, Self.resizeCornerSize)
+                }
+            }
+            .overlay(alignment: .bottom) {
+                resizeStrip(.south) {
+                    Color.clear
+                        .frame(height: Self.resizeEdgeThickness)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, Self.resizeCornerSize)
+                }
+            }
+            .overlay(alignment: .leading) {
+                resizeStrip(.west) {
+                    Color.clear
+                        .frame(width: Self.resizeEdgeThickness)
+                        .frame(maxHeight: .infinity)
+                        .padding(.vertical, Self.resizeCornerSize)
+                }
+            }
+            .overlay(alignment: .trailing) {
+                resizeStrip(.east) {
+                    Color.clear
+                        .frame(width: Self.resizeEdgeThickness)
+                        .frame(maxHeight: .infinity)
+                        .padding(.vertical, Self.resizeCornerSize)
+                }
+            }
+            .overlay(alignment: .topLeading) {
+                resizeStrip(.northWest) {
+                    Color.clear.frame(width: Self.resizeCornerSize, height: Self.resizeCornerSize)
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                resizeStrip(.northEast) {
+                    Color.clear.frame(width: Self.resizeCornerSize, height: Self.resizeCornerSize)
+                }
+            }
+            .overlay(alignment: .bottomLeading) {
+                resizeStrip(.southWest) {
+                    Color.clear.frame(width: Self.resizeCornerSize, height: Self.resizeCornerSize)
+                }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                resizeStrip(.southEast) {
+                    Color.clear.frame(width: Self.resizeCornerSize, height: Self.resizeCornerSize)
+                }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                sizeControls
                     .opacity(effectiveControlsVisible ? 1 : 0)
                     .allowsHitTesting(effectiveControlsVisible)
             }
@@ -244,8 +304,7 @@ struct FloatingPlayerPanel: View {
 
     // MARK: - Size controls
 
-    /// The three semantic size states; everything in between (a manual drag) is the resize
-    /// handle's job — Windowed just recalls whatever size/position that last produced.
+    /// Compact / Windowed / Full screen snaps. Free sizing is edge/corner drag.
     private var sizeControls: some View {
         HStack(spacing: 4) {
             iconButton("camera.viewfinder", help: "Make thumbnail from current frame (⌥⌘M)") {
@@ -300,57 +359,168 @@ struct FloatingPlayerPanel: View {
         .help(help)
     }
 
-    // MARK: - Resize handle
+    // MARK: - Edge / corner resize
 
-    private var resizeHandle: some View {
-        Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
-            // 14pt vs. the original 11pt — 25% larger, matching the other controls.
-            .font(.system(size: 14, weight: .bold))
-            .foregroundStyle(Color.appTextSecondary)
-            .padding(6)
-            .background(Color.appSurface.opacity(0.85), in: Circle())
-            .padding(8)
+    private enum ResizeEdge {
+        case north, south, east, west
+        case northEast, northWest, southEast, southWest
+
+        var affectsWidth: Bool {
+            switch self {
+            case .east, .west, .northEast, .northWest, .southEast, .southWest: true
+            case .north, .south: false
+            }
+        }
+
+        var affectsHeight: Bool {
+            switch self {
+            case .north, .south, .northEast, .northWest, .southEast, .southWest: true
+            case .east, .west: false
+            }
+        }
+
+        /// Growing when dragging in the positive translation direction for this edge.
+        func sizeDelta(translation: CGSize) -> CGSize {
+            var dw: CGFloat = 0
+            var dh: CGFloat = 0
+            if affectsWidth {
+                switch self {
+                case .east, .northEast, .southEast: dw = translation.width
+                case .west, .northWest, .southWest: dw = -translation.width
+                default: break
+                }
+            }
+            if affectsHeight {
+                switch self {
+                case .south, .southEast, .southWest: dh = translation.height
+                case .north, .northEast, .northWest: dh = -translation.height
+                default: break
+                }
+            }
+            return CGSize(width: dw, height: dh)
+        }
+
+        var cursor: NSCursor {
+            switch self {
+            case .north, .south:
+                return .resizeUpDown
+            case .east, .west:
+                return .resizeLeftRight
+            case .northEast:
+                return .frameResize(
+                    position: .topTrailing(relativeTo: .leftToRight),
+                    directions: .all
+                )
+            case .northWest:
+                return .frameResize(
+                    position: .topLeading(relativeTo: .leftToRight),
+                    directions: .all
+                )
+            case .southEast:
+                return .frameResize(
+                    position: .bottomTrailing(relativeTo: .leftToRight),
+                    directions: .all
+                )
+            case .southWest:
+                return .frameResize(
+                    position: .bottomLeading(relativeTo: .leftToRight),
+                    directions: .all
+                )
+            }
+        }
+    }
+
+    /// Invisible hit zone for one edge or corner (no drawn affordance).
+    private func resizeStrip<Content: View>(
+        _ edge: ResizeEdge,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
             .contentShape(Rectangle())
-            .gesture(
-                // Global coordinate space avoids feedback: the handle moves as the panel resizes.
-                // Round to whole points to avoid sub-pixel thrash of the live-resizing player layer.
-                // Center is updated each frame to maintain the top-right corner of the panel.
-                DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                    .onChanged { value in
-                        if dragStartSize == nil {
-                            dragStartSize = size
-                            dragStartCenter = effectiveCenter   // snapshot before exiting compact
-                            viewModel.playerSizeIsCompact = false
-                            viewModel.playerLastWasFullScreen = false
-                        }
-                        let baseSize   = dragStartSize!
-                        let startCtr   = dragStartCenter!
-                        let proposed   = CGSize(
-                            width:  (baseSize.width  - value.translation.width ).rounded(),
-                            height: (baseSize.height + value.translation.height).rounded()
-                        )
-                        let newSize   = clampSize(proposed)
-                        let newTotalW = newSize.width  + 2 * outerPadding
-                        let newTotalH = newSize.height + 2 * outerPadding
-                        let baseTotalW = baseSize.width  + 2 * outerPadding
-                        let baseTotalH = baseSize.height + 2 * outerPadding
-                        // Keep the top-right corner fixed while dragging the bottom-left handle.
-                        let topRightX = startCtr.x + baseTotalW / 2
-                        let topRightY = startCtr.y - baseTotalH / 2
-                        let newCtr    = CGPoint(x: topRightX - newTotalW / 2,
-                                                y: topRightY + newTotalH / 2)
-                        dragSize   = newSize
-                        dragCenter = clampCenter(newCtr, totalW: newTotalW, totalH: newTotalH)
-                    }
-                    .onEnded { _ in
-                        if let s = dragSize   { viewModel.playerFloatingSize     = s }
-                        if let c = dragCenter { viewModel.playerFloatingPosition = c }
-                        dragSize        = nil; dragStartSize   = nil
-                        dragCenter      = nil; dragStartCenter  = nil
-                        scheduleChromeHide()
-                    }
-            )
+            .gesture(resizeDragGesture(for: edge))
+            .onHover { hovering in
+                if hovering {
+                    edge.cursor.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
             .help("Drag to resize")
+    }
+
+    private func resizeDragGesture(for edge: ResizeEdge) -> some Gesture {
+        DragGesture(minimumDistance: 1, coordinateSpace: .global)
+            .onChanged { value in
+                if dragStartSize == nil {
+                    dragStartSize = size
+                    dragStartCenter = effectiveCenter
+                    if viewModel.playerSizeIsCompact {
+                        viewModel.playerFloatingSize = size
+                    }
+                    viewModel.playerSizeIsCompact = false
+                    viewModel.playerLastWasFullScreen = false
+                }
+                applyResize(edge: edge, translation: value.translation)
+            }
+            .onEnded { _ in
+                if let s = dragSize { viewModel.playerFloatingSize = s }
+                if let c = dragCenter { viewModel.playerFloatingPosition = c }
+                dragSize = nil
+                dragStartSize = nil
+                dragCenter = nil
+                dragStartCenter = nil
+                scheduleChromeHide()
+            }
+    }
+
+    /// Resize while keeping the opposite edge/corner fixed in the content area.
+    private func applyResize(edge: ResizeEdge, translation: CGSize) {
+        guard let baseSize = dragStartSize, let startCtr = dragStartCenter else { return }
+        let delta = edge.sizeDelta(translation: translation)
+        let proposed = CGSize(
+            width: (baseSize.width + delta.width).rounded(),
+            height: (baseSize.height + delta.height).rounded()
+        )
+        let newSize = clampSize(proposed)
+
+        let baseTotalW = baseSize.width + 2 * outerPadding
+        let baseTotalH = baseSize.height + 2 * outerPadding
+        let newTotalW = newSize.width + 2 * outerPadding
+        let newTotalH = newSize.height + 2 * outerPadding
+
+        let left = startCtr.x - baseTotalW / 2
+        let right = startCtr.x + baseTotalW / 2
+        let top = startCtr.y - baseTotalH / 2
+        let bottom = startCtr.y + baseTotalH / 2
+
+        var newCtr = startCtr
+        if edge.affectsWidth {
+            switch edge {
+            case .east, .northEast, .southEast:
+                // Left edge fixed.
+                newCtr.x = left + newTotalW / 2
+            case .west, .northWest, .southWest:
+                // Right edge fixed.
+                newCtr.x = right - newTotalW / 2
+            default:
+                break
+            }
+        }
+        if edge.affectsHeight {
+            switch edge {
+            case .south, .southEast, .southWest:
+                // Top edge fixed.
+                newCtr.y = top + newTotalH / 2
+            case .north, .northEast, .northWest:
+                // Bottom edge fixed.
+                newCtr.y = bottom - newTotalH / 2
+            default:
+                break
+            }
+        }
+
+        dragSize = newSize
+        dragCenter = clampCenter(newCtr, totalW: newTotalW, totalH: newTotalH)
     }
 }
 

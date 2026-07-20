@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Floating player edge resize** — Drag any edge or corner to resize (no handle); resize cursors on hover. Opposite side stays anchored; exits Compact on first drag. Size/close chrome still wins over the bottom-trailing corner.
+
 ## 0.65.0 (build 825) - 2026-07-20
 
 - **Transport volume** — Mute toggle + compact volume slider on the custom transport row (below the scrubber), in the leading control cluster so floating size/close chrome doesn’t cover it. Leading controls keep layout priority so Compact no longer crushes speed/volume; very narrow widths fall back to mute-only. Level and mute persist across launches; applied to each new player. Hover previews stay independently muted.
