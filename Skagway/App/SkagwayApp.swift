@@ -221,10 +221,13 @@ struct SkagwayApp: App {
             // the entire Format menu, Print) have no relevance to a video library and nothing in
             // the app implements their underlying actions — replacing each with empty content
             // removes the dead menu clutter instead of leaving it permanently disabled.
-            CommandGroup(replacing: .undoRedo) { }
-            CommandGroup(replacing: .textEditing) { }
-            CommandGroup(replacing: .textFormatting) { }
-            CommandGroup(replacing: .printItem) { }
+            // Wrapped in Group so `.commands` stays within CommandsBuilder’s 10-child limit.
+            Group {
+                CommandGroup(replacing: .undoRedo) { }
+                CommandGroup(replacing: .textEditing) { }
+                CommandGroup(replacing: .textFormatting) { }
+                CommandGroup(replacing: .printItem) { }
+            }
             CommandGroup(replacing: .appInfo) {
                 Button("About Skagway") {
                     let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
@@ -388,6 +391,14 @@ struct SkagwayApp: App {
                     }
                 }
                 .disabled(!appState.hasLibrary)
+            }
+
+            CommandGroup(after: .help) {
+                Button("Contact Support…") {
+                    if let url = URL(string: "mailto:support@machiilabs.com?subject=Skagway%20support%20request") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
             }
         }
 

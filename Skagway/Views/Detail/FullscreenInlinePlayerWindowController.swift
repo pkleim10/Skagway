@@ -192,14 +192,19 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
                 .mouseMoved,
                 .leftMouseDown, .rightMouseDown, .otherMouseDown,
                 .leftMouseDragged, .rightMouseDragged, .otherMouseDragged,
+                .scrollWheel,
             ]
         ) { [weak self] event in
             guard let self else { return event }
             guard event.window === self.window else { return event }
             let location = event.locationInWindow
-            let isClickOrDrag = event.type != .mouseMoved
             MainActor.assumeIsolated {
-                self.chromeView?.noteMouseActivity(locationInWindow: location, force: isClickOrDrag)
+                if event.type == .scrollWheel {
+                    self.chromeView?.noteScrollWheel(locationInWindow: location, event: event)
+                } else {
+                    let isClickOrDrag = event.type != .mouseMoved
+                    self.chromeView?.noteMouseActivity(locationInWindow: location, force: isClickOrDrag)
+                }
             }
             return event
         }

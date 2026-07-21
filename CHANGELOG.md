@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Help → Contact Support…** — Opens a mail message to support@machiilabs.com with subject “Skagway support request”.
+- **Playback transport idle hide** — Mouse-wheel / trackpad scrolling over the video keeps the transport visible (floating and fullscreen); hide resumes after scrolling stops.
 ## 0.68.0 (build 877) - 2026-07-21
 
 - **Custom Settings window** — Replaces the system `Settings` scene with a normal `Window` (hidden title bar) so chrome is fully controllable: left-aligned sheet titles, in-content sidebar search, ⌘, to open/focus. Same sidebar categories and form panes as before.

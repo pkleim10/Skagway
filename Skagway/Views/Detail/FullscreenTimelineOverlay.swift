@@ -6,8 +6,10 @@ import SwiftUI
 ///
 /// Idle model:
 /// - Real pointer **movement** (or click) → show chrome and (re)schedule hide.
+/// - Mouse-wheel / trackpad scroll over the video → show chrome; stay up while the
+///   scroll gesture (or its momentum) is active; each discrete notch also resets idle.
 /// - Stationary / spurious tracking noise is ignored (movement threshold).
-/// - Timer fire: if pointer is in the bar band → reschedule; else hide.
+/// - Timer fire: if pointer is in the bar band or wheel-scrubbing → reschedule; else hide.
 /// - After hide, only re-enable `acceptsMouseMovedEvents` — do **not** rebuild tracking
 ///   areas (that synthesizes `mouseEntered` and immediately re-shows chrome).
 @MainActor
@@ -23,6 +25,7 @@ final class FullscreenTransportChromeView: NSView {
     private let closeButton = NSButton()
     private var hideWorkItem: DispatchWorkItem?
     private var lastActivityLocation: CGPoint?
+    private var wheelScrubActive = false
     private(set) var isChromeVisible = true
 
     /// Called after chrome hides so the window can re-enable mouse-moved delivery (lightweight).
@@ -81,6 +84,7 @@ final class FullscreenTransportChromeView: NSView {
 
     func beginIdleCycle() {
         lastActivityLocation = nil
+        wheelScrubActive = false
         applyVisible(true, animated: false)
         scheduleHide()
     }
@@ -88,6 +92,7 @@ final class FullscreenTransportChromeView: NSView {
     func shutdown() {
         hideWorkItem?.cancel()
         hideWorkItem = nil
+        wheelScrubActive = false
         onDidHide = nil
     }
 
@@ -103,6 +108,22 @@ final class FullscreenTransportChromeView: NSView {
         lastActivityLocation = locationInWindow
         applyVisible(true, animated: true)
         scheduleHide()
+    }
+
+    /// Mouse-wheel / trackpad scroll over the player — keep transport visible while scrubbing.
+    func noteScrollWheel(locationInWindow: CGPoint, event: NSEvent) {
+        let phaseActive = Self.isScrollPhaseActive(event.phase)
+        let momentumActive = Self.isScrollPhaseActive(event.momentumPhase)
+        if event.phase == .none, event.momentumPhase == .none {
+            wheelScrubActive = false
+        } else {
+            wheelScrubActive = phaseActive || momentumActive
+        }
+        noteMouseActivity(locationInWindow: locationInWindow, force: true)
+    }
+
+    private static func isScrollPhaseActive(_ phase: NSEvent.Phase) -> Bool {
+        phase.contains(.began) || phase.contains(.changed) || phase.contains(.mayBegin)
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -146,7 +167,7 @@ final class FullscreenTransportChromeView: NSView {
 
     private func fireIdleHide() {
         hideWorkItem = nil
-        if isPointerInsideBar() {
+        if wheelScrubActive || isPointerInsideBar() {
             scheduleHide()
             return
         }

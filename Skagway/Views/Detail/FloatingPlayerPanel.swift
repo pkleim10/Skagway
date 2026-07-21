@@ -7,8 +7,8 @@ import SwiftUI
 /// Size and position are persisted to `viewModel` on release.
 ///
 /// Chrome (timeline, title, size controls) uses the same idle model as fullscreen: show on
-/// pointer activity, stay up while over the transport/title chrome, hide after inactivity
-/// even if the cursor is still on the video.
+/// pointer activity, stay up while over the transport/title chrome or while mouse-wheel
+/// scrubbing the video, hide after inactivity even if the cursor is still on the video.
 struct FloatingPlayerPanel: View {
     let video: Video
     @Bindable var viewModel: LibraryViewModel
@@ -25,6 +25,9 @@ struct FloatingPlayerPanel: View {
     @State private var controlsVisible = true
     @State private var controlsHideTask: Task<Void, Never>?
     @State private var pointerOverChrome = false
+    /// Trackpad/Magic Mouse scroll gesture in progress (phase / momentum). Classic notch
+    /// wheels fire discrete events with `.none` phases — those only force-reset the idle timer.
+    @State private var wheelScrubActive = false
     @State private var lastActivityPoint: CGPoint?
 
     private let minSize = CGSize(width: 240, height: 140)
@@ -211,11 +214,15 @@ struct FloatingPlayerPanel: View {
                 PanelChromeMouseTracker(
                     transportHeight: PlaybackTimelineBar.barHeight + 8,
                     titleHeight: Self.titleChromeHeight,
-                    onActivity: { point, overChrome in
-                        notePointerActivity(at: point, overChrome: overChrome)
+                    onActivity: { point, overChrome, force in
+                        notePointerActivity(at: point, overChrome: overChrome, force: force)
+                    },
+                    onScrollWheel: { point, overChrome, event in
+                        noteScrollWheel(at: point, overChrome: overChrome, event: event)
                     },
                     onExit: {
                         pointerOverChrome = false
+                        wheelScrubActive = false
                         scheduleChromeHide()
                     }
                 )
@@ -234,8 +241,8 @@ struct FloatingPlayerPanel: View {
 
     // MARK: - Idle chrome (parity with fullscreen)
 
-    private func notePointerActivity(at point: CGPoint, overChrome: Bool) {
-        if let last = lastActivityPoint {
+    private func notePointerActivity(at point: CGPoint, overChrome: Bool, force: Bool = false) {
+        if !force, let last = lastActivityPoint {
             let dx = point.x - last.x
             let dy = point.y - last.y
             if (dx * dx + dy * dy) < (Self.activitySlop * Self.activitySlop) {
@@ -249,13 +256,29 @@ struct FloatingPlayerPanel: View {
         scheduleChromeHide()
     }
 
+    private func noteScrollWheel(at point: CGPoint, overChrome: Bool, event: NSEvent) {
+        let phaseActive = Self.isScrollPhaseActive(event.phase)
+        let momentumActive = Self.isScrollPhaseActive(event.momentumPhase)
+        // Classic mouse wheels usually report `.none` for both — each notch still counts as activity.
+        if event.phase == .none, event.momentumPhase == .none {
+            wheelScrubActive = false
+        } else {
+            wheelScrubActive = phaseActive || momentumActive
+        }
+        notePointerActivity(at: point, overChrome: overChrome, force: true)
+    }
+
+    private static func isScrollPhaseActive(_ phase: NSEvent.Phase) -> Bool {
+        phase.contains(.began) || phase.contains(.changed) || phase.contains(.mayBegin)
+    }
+
     private func scheduleChromeHide() {
         controlsHideTask?.cancel()
         controlsHideTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(Self.idleSeconds))
             guard !Task.isCancelled else { return }
-            // Keep chrome up while dragging or resting on transport / title.
-            if dragSize != nil || dragCenter != nil || pointerOverChrome {
+            // Keep chrome up while dragging, resting on transport/title, or wheel-scrubbing.
+            if dragSize != nil || dragCenter != nil || pointerOverChrome || wheelScrubActive {
                 scheduleChromeHide()
                 return
             }
@@ -530,11 +553,14 @@ struct FloatingPlayerPanel: View {
 // MARK: - Mouse activity (idle chrome)
 
 /// Pass-through tracker over the player panel. Reports moves and whether the pointer is in the
-/// bottom transport band or top title strip (chrome stay-up zones).
+/// bottom transport band or top title strip (chrome stay-up zones). Scroll-wheel events use a
+/// window-scoped local monitor because `hitTest` returns nil (so SwiftUI/AVPlayerView still
+/// receive the wheel for seeking).
 private struct PanelChromeMouseTracker: NSViewRepresentable {
     var transportHeight: CGFloat
     var titleHeight: CGFloat
-    var onActivity: (_ point: CGPoint, _ overChrome: Bool) -> Void
+    var onActivity: (_ point: CGPoint, _ overChrome: Bool, _ force: Bool) -> Void
+    var onScrollWheel: (_ point: CGPoint, _ overChrome: Bool, _ event: NSEvent) -> Void
     var onExit: () -> Void
 
     func makeNSView(context: Context) -> TrackerView {
@@ -542,6 +568,7 @@ private struct PanelChromeMouseTracker: NSViewRepresentable {
         view.transportHeight = transportHeight
         view.titleHeight = titleHeight
         view.onActivity = onActivity
+        view.onScrollWheel = onScrollWheel
         view.onExit = onExit
         return view
     }
@@ -550,15 +577,18 @@ private struct PanelChromeMouseTracker: NSViewRepresentable {
         nsView.transportHeight = transportHeight
         nsView.titleHeight = titleHeight
         nsView.onActivity = onActivity
+        nsView.onScrollWheel = onScrollWheel
         nsView.onExit = onExit
     }
 
     final class TrackerView: NSView {
         var transportHeight: CGFloat = 0
         var titleHeight: CGFloat = 0
-        var onActivity: ((CGPoint, Bool) -> Void)?
+        var onActivity: ((CGPoint, Bool, Bool) -> Void)?
+        var onScrollWheel: ((CGPoint, Bool, NSEvent) -> Void)?
         var onExit: (() -> Void)?
         private var tracking: NSTrackingArea?
+        private var scrollMonitor: Any?
 
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
@@ -566,6 +596,14 @@ private struct PanelChromeMouseTracker: NSViewRepresentable {
             super.viewDidMoveToWindow()
             window?.acceptsMouseMovedEvents = true
             rebuildTracking()
+            refreshScrollMonitor()
+        }
+
+        override func viewWillMove(toWindow newWindow: NSWindow?) {
+            if newWindow == nil {
+                removeScrollMonitor()
+            }
+            super.viewWillMove(toWindow: newWindow)
         }
 
         override func updateTrackingAreas() {
@@ -585,15 +623,36 @@ private struct PanelChromeMouseTracker: NSViewRepresentable {
             tracking = area
         }
 
-        private func report(_ event: NSEvent) {
+        private func refreshScrollMonitor() {
+            removeScrollMonitor()
+            guard window != nil else { return }
+            scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+                guard let self else { return event }
+                guard event.window === self.window else { return event }
+                let point = self.convert(event.locationInWindow, from: nil)
+                guard self.bounds.contains(point) else { return event }
+                let overChrome = point.y <= self.transportHeight || point.y >= self.bounds.height - self.titleHeight
+                self.onScrollWheel?(point, overChrome, event)
+                return event
+            }
+        }
+
+        private func removeScrollMonitor() {
+            if let scrollMonitor {
+                NSEvent.removeMonitor(scrollMonitor)
+                self.scrollMonitor = nil
+            }
+        }
+
+        private func report(_ event: NSEvent, force: Bool = false) {
             let point = convert(event.locationInWindow, from: nil)
             let overChrome = point.y <= transportHeight || point.y >= bounds.height - titleHeight
-            onActivity?(point, overChrome)
+            onActivity?(point, overChrome, force)
         }
 
         override func mouseMoved(with event: NSEvent) { report(event) }
         override func mouseEntered(with event: NSEvent) { report(event) }
-        override func mouseDragged(with event: NSEvent) { report(event) }
+        override func mouseDragged(with event: NSEvent) { report(event, force: true) }
         override func mouseExited(with event: NSEvent) { onExit?() }
     }
 }
