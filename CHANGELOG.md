@@ -31,9 +31,11 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
-- **Settings** — Custom Settings window (normal `Window`, not system `Settings` scene): hidden title bar, left-aligned sheet titles, in-content sidebar search; ⌘, opens/focuses it. Same sidebar/detail categories and forms as before.
-- **Settings** — Sidebar charcoal RGB 21, 24, 26; detail sheet RGB 35, 39, 40.
-- **Settings** — Data Sources / Extensions / Custom Metadata use the same grouped Form list treatment; hover Remove on rows; sidebar “File Ext” renamed to “Extensions”.
+## 0.68.0 (build 877) - 2026-07-21
+
+- **Custom Settings window** — Replaces the system `Settings` scene with a normal `Window` (hidden title bar) so chrome is fully controllable: left-aligned sheet titles, in-content sidebar search, ⌘, to open/focus. Same sidebar categories and form panes as before.
+- **Settings chrome** — Sidebar charcoal RGB 21, 24, 26; detail sheet RGB 35, 39, 40.
+- **Settings list sheets** — Data Sources / Extensions / Custom Metadata use the same grouped Form list treatment; hover Remove on rows; sidebar “File Ext” renamed to “Extensions”.
 
 ## 0.67.0 (build 850) - 2026-07-20
 
