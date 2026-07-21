@@ -35,8 +35,10 @@ final class AppState {
         libraryViewModel = vm
         DatabaseExportImport.activeDbPool = db?.dbPool
 
-        // `NSApp` / shared application is not ready during `App.init` — applying here crashes (IUO nil).
+        // `NSApp` / shared application is not ready during `App.init` — defer Sparkle + appearance.
         DispatchQueue.main.async {
+            // Start Sparkle after NSApp exists (auto-check stays off until Settings enables it).
+            _ = UpdateChecker.shared
             Self.applyDarkAppearance()
         }
     }

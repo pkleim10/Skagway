@@ -10,6 +10,9 @@ packages:
   GRDB:
     url: https://github.com/groue/GRDB.swift
     from: "7.0.0"
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.7.0"
 
 targets:
   Skagway:
@@ -24,7 +27,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.machiilabs.skagway
         PRODUCT_NAME: Skagway
         MARKETING_VERSION: "0.68.0"
-        CURRENT_PROJECT_VERSION: "880"
+        CURRENT_PROJECT_VERSION: "881"
         GENERATE_INFOPLIST_FILE: "YES"
         INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
         INFOPLIST_KEY_CFBundleDisplayName: Skagway
@@ -46,6 +49,12 @@ targets:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSHumanReadableCopyright: "Copyright © 2026 Mach II Labs. Skagway is free forever."
+        # Sparkle — feed on downloads host; auto-check off until user enables (privacy).
+        SUFeedURL: https://downloads.machiilabs.com/Skagway.appcast.xml
+        SUPublicEDKey: IgBXr+5bwC2fwPBzZsim7vZEkVw5/oOgUbXk9Fjq1wY=
+        SUEnableAutomaticChecks: false
+        SUAutomaticallyUpdate: false
+        SUScheduledCheckInterval: 86400
         CFBundleDocumentTypes:
           - CFBundleTypeName: Skagway Library
             CFBundleTypeRole: Editor
@@ -55,6 +64,8 @@ targets:
     dependencies:
       - package: GRDB
         product: GRDB
+      - package: Sparkle
+        product: Sparkle
   SkagwayTests:
     type: bundle.unit-test
     platform: macOS

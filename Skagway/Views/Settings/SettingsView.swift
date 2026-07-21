@@ -204,6 +204,20 @@ struct LibrarySettingsView: View {
                 }
             }
 
+            Section {
+                Toggle(isOn: Binding(
+                    get: { UpdateChecker.shared.automaticallyChecksForUpdates },
+                    set: { UpdateChecker.shared.automaticallyChecksForUpdates = $0 }
+                )) {
+                    SettingsLabel(
+                        "Automatically check for updates",
+                        description: "Occasionally checks downloads.machiilabs.com for a newer Skagway build. Does not send usage analytics."
+                    )
+                }
+            } header: {
+                Text("Updates")
+            }
+
             Section("Smart Libraries") {
                 smartLibraryToggle(
                     "Recently Added",

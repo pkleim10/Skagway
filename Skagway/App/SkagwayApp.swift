@@ -250,6 +250,11 @@ struct SkagwayApp: App {
                         .credits: credits
                     ])
                 }
+                Divider()
+                Button("Check for Updates…") {
+                    UpdateChecker.shared.checkForUpdates()
+                }
+                .disabled(!UpdateChecker.shared.canCheckForUpdates)
             }
             CommandGroup(replacing: .newItem) {
                 Button("Add Folder\u{2026}") {

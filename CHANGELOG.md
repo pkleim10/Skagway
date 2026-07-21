@@ -33,6 +33,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 - **Help → Contact Support…** — Opens a mail message to support@machiilabs.com with subject “Skagway support request”.
 - **Playback transport idle hide** — Mouse-wheel / trackpad scrolling over the video keeps the transport visible (floating and fullscreen); hide resumes after scrolling stops.
+- **Check for Updates (Sparkle)** — Skagway → Check for Updates…; Settings → Library → Automatically check for updates (default off). Feed URL `https://downloads.machiilabs.com/Skagway.appcast.xml`; packaging emits the appcast for publish (see `docs/SPARKLE.md`).
 ## 0.68.0 (build 877) - 2026-07-21
 
 - **Custom Settings window** — Replaces the system `Settings` scene with a normal `Window` (hidden title bar) so chrome is fully controllable: left-aligned sheet titles, in-content sidebar search, ⌘, to open/focus. Same sidebar categories and form panes as before.

@@ -40,6 +40,12 @@ enum SettingsSearchCatalog {
             keywords: ["delete", "trash", "confirmation"]
         ),
         .init(
+            id: "library.autoUpdates",
+            title: "Automatically check for updates",
+            category: .library,
+            keywords: ["sparkle", "update", "download", "appcast"]
+        ),
+        .init(
             id: "library.smartLibraries",
             title: "Smart Libraries",
             category: .library,
