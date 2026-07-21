@@ -31,6 +31,11 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Settings** — Library tab section renamed from “Sidebar Filters” to “Smart Libraries”.
+- **Export fields list** — Checked metadata columns stay at the top of the export dialog (relative order preserved within checked and unchecked groups).
+- **Bookmark diamond name on hover** — Hovering a scrubber bookmark diamond shows its name in a capsule above the track (same AppKit hover path as scrub preview; no system tooltip).
+- **Fix: Collection create/edit not saving** — Libraries whose `collection_rule` table lacked an `id` primary key (from an early migration) failed rule inserts; the editor swallowed the error and dismissed anyway. Migration adds the column; save is transactional and surfaces failures.
+
 ## 0.66.0 (build 828) - 2026-07-20
 
 - **Floating player edge resize** — Drag any edge or corner to resize in Windowed mode (no handle); resize cursors on hover. Opposite side stays anchored. Compact keeps inspector-locked sizing (no edge hits). Size/close chrome still wins over the bottom-trailing corner.

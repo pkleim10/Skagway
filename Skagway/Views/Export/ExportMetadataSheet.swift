@@ -43,7 +43,7 @@ struct ExportMetadataSheet: View {
             Text("Fields")
                 .font(.headline)
 
-            Text("Check fields to include. Drag to reorder. Optional fields start unchecked at the bottom.")
+            Text("Check fields to include. Checked fields stay at the top; drag to reorder within each group.")
                 .font(.caption)
                 .foregroundStyle(Color.appTextSecondary)
 
@@ -101,6 +101,7 @@ struct ExportMetadataSheet: View {
             )
             listOrder = viewModel.loadMetadataExportColumnOrder()
             includedIDs = viewModel.loadMetadataExportIncludedColumnIDs()
+            pinCheckedColumnsToTop()
         }
         .onDisappear {
             viewModel.cancelMetadataExport()
@@ -123,12 +124,24 @@ struct ExportMetadataSheet: View {
                 } else {
                     includedIDs.remove(id)
                 }
+                pinCheckedColumnsToTop()
             }
         )
     }
 
     private func moveColumns(from source: IndexSet, to destination: Int) {
         listOrder.move(fromOffsets: source, toOffset: destination)
+        pinCheckedColumnsToTop()
+    }
+
+    /// Keep checked fields above unchecked; preserve relative order within each group.
+    private func pinCheckedColumnsToTop() {
+        let checked = listOrder.filter { includedIDs.contains($0) }
+        let unchecked = listOrder.filter { !includedIDs.contains($0) }
+        let pinned = checked + unchecked
+        if pinned != listOrder {
+            listOrder = pinned
+        }
     }
 
     private func beginExport() {

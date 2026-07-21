@@ -34,6 +34,9 @@ struct PlaybackTimelineBar: View {
     @State private var hoverSeconds: Double?
     @State private var hoverPreview: NSImage?
     @State private var hoverRequestID = 0
+    /// Bookmark under the pointer (same AppKit hover path as scrub preview — system tooltips lose here).
+    @State private var hoverBookmarkTitle: String?
+    @State private var hoverBookmarkFraction: CGFloat?
     /// Track frame in the bar’s coordinate space (for preview placement above the scrubber).
     @State private var trackFrame: CGRect = .zero
 
@@ -149,6 +152,7 @@ struct PlaybackTimelineBar: View {
         // the video without being clipped by the track’s layout bounds.
         .overlay(alignment: .topLeading) {
             scrubPreviewOverlay
+            bookmarkNameOverlay
         }
         .onPreferenceChange(ScrubTrackFrameKey.self) { trackFrame = $0 }
         .opacity(controlsVisible ? 1 : 0)
@@ -237,7 +241,8 @@ struct PlaybackTimelineBar: View {
 
     @ViewBuilder
     private var scrubPreviewOverlay: some View {
-        if let hoverFraction, let hoverSeconds, trackFrame.width > 1 {
+        // Hide frame preview while naming a bookmark so the two don’t stack.
+        if hoverBookmarkTitle == nil, let hoverFraction, let hoverSeconds, trackFrame.width > 1 {
             let xInBar = trackFrame.minX + hoverFraction * trackFrame.width
             scrubPreviewCard(seconds: hoverSeconds)
                 .position(
@@ -246,6 +251,30 @@ struct PlaybackTimelineBar: View {
                 )
                 .allowsHitTesting(false)
                 .zIndex(100)
+        }
+    }
+
+    @ViewBuilder
+    private var bookmarkNameOverlay: some View {
+        if let title = hoverBookmarkTitle,
+           let fraction = hoverBookmarkFraction,
+           trackFrame.width > 1 {
+            let xInBar = trackFrame.minX + fraction * trackFrame.width
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Color.black.opacity(0.75), in: Capsule())
+                .shadow(color: .black.opacity(0.4), radius: 4, y: 1)
+                .position(
+                    x: clampedPreviewCenterX(xInBar, trackMinX: trackFrame.minX, trackWidth: trackFrame.width),
+                    y: -10
+                )
+                .allowsHitTesting(false)
+                .zIndex(101)
         }
     }
 
@@ -278,11 +307,6 @@ struct PlaybackTimelineBar: View {
                     .frame(width: 12, height: 12)
                     .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
                     .position(x: playheadX, y: trackY)
-
-                // Existing bookmarks stay on top so a single click still jumps.
-                ForEach(viewModel.bookmarksForPlayback) { bookmark in
-                    bookmarkTick(bookmark, trackWidth: width, trackY: trackY)
-                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
@@ -312,6 +336,12 @@ struct PlaybackTimelineBar: View {
                     key: ScrubTrackFrameKey.self,
                     value: geo.frame(in: .named(Self.barSpaceName))
                 )
+            }
+            // Bookmarks above scrub gestures so diamond clicks win over seek.
+            .overlay {
+                ForEach(viewModel.bookmarksForPlayback) { bookmark in
+                    bookmarkTick(bookmark, trackWidth: width, trackY: trackY)
+                }
             }
         }
     }
@@ -382,10 +412,42 @@ struct PlaybackTimelineBar: View {
         }
         let fraction = min(max(x / trackWidth, 0), 1)
         let seconds = fraction * duration
+
+        let hitPx: CGFloat = 14
+        var nearestTitle: String?
+        var nearestFraction: CGFloat?
+        var nearestDist = CGFloat.greatestFiniteMagnitude
+        for bookmark in viewModel.bookmarksForPlayback {
+            let bf = min(max(bookmark.seconds / duration, 0), 1)
+            let dist = abs(bf * trackWidth - x)
+            if dist <= hitPx, dist < nearestDist {
+                nearestDist = dist
+                nearestTitle = bookmark.title
+                nearestFraction = bf
+            }
+        }
+
         // Skip no-op updates — thrashing @State was breaking FloatingPlayerPanel `.onHover` auto-hide.
-        if let hoverFraction, abs(hoverFraction - fraction) < 0.001 {
+        let fractionUnchanged = hoverFraction.map { abs($0 - fraction) < 0.001 } ?? false
+        let bookmarkUnchanged =
+            hoverBookmarkTitle == nearestTitle
+            && (
+                (hoverBookmarkFraction == nil && nearestFraction == nil)
+                    || (
+                        hoverBookmarkFraction != nil
+                            && nearestFraction != nil
+                            && abs(hoverBookmarkFraction! - nearestFraction!) < 0.0001
+                    )
+            )
+        if fractionUnchanged && bookmarkUnchanged {
             return
         }
+
+        hoverBookmarkTitle = nearestTitle
+        hoverBookmarkFraction = nearestFraction
+
+        guard !fractionUnchanged else { return }
+
         hoverFraction = fraction
         hoverSeconds = seconds
 
@@ -408,6 +470,8 @@ struct PlaybackTimelineBar: View {
         hoverFraction = nil
         hoverSeconds = nil
         hoverPreview = nil
+        hoverBookmarkTitle = nil
+        hoverBookmarkFraction = nil
     }
 
     private func scrubGesture(trackWidth: CGFloat) -> some Gesture {
@@ -452,18 +516,13 @@ struct PlaybackTimelineBar: View {
     private func bookmarkTick(_ bookmark: VideoBookmark, trackWidth: CGFloat, trackY: CGFloat) -> some View {
         let fraction = duration > 0 ? min(max(bookmark.seconds / duration, 0), 1) : 0
         let x = fraction * trackWidth
+        let hit: CGFloat = 22
 
-        Button {
-            viewModel.jumpToBookmark(bookmark)
-        } label: {
-            DiamondTick()
-                .fill(Color.appAccent)
-                .frame(width: 10, height: 10)
-                .contentShape(Rectangle().inset(by: -6))
-        }
-        .buttonStyle(.plain)
-        .help("\(bookmark.title) — \(bookmark.formattedTimecode)")
-        .position(x: x, y: max(6, trackY - 10))
+        BookmarkDiamondControl(
+            onActivate: { viewModel.jumpToBookmark(bookmark) }
+        )
+        .frame(width: hit, height: hit)
+        .position(x: x, y: max(hit / 2, trackY - 10))
     }
 }
 
@@ -594,14 +653,57 @@ private struct ScrubHoverTracker: NSViewRepresentable {
     }
 }
 
-private struct DiamondTick: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
-        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.midY))
+/// AppKit-backed diamond so clicks/cursor win over the scrubber’s tracking/gestures.
+private struct BookmarkDiamondControl: NSViewRepresentable {
+    var onActivate: () -> Void
+
+    func makeNSView(context: Context) -> BookmarkDiamondNSView {
+        let view = BookmarkDiamondNSView()
+        view.onActivate = onActivate
+        return view
+    }
+
+    func updateNSView(_ nsView: BookmarkDiamondNSView, context: Context) {
+        nsView.onActivate = onActivate
+    }
+}
+
+private final class BookmarkDiamondNSView: NSView {
+    var onActivate: (() -> Void)?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var isFlipped: Bool { true }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        onActivate?()
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        let side = min(bounds.width, bounds.height) * 0.45
+        let cx = bounds.midX
+        let cy = bounds.midY
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: cx, y: cy - side / 2))
+        path.addLine(to: CGPoint(x: cx + side / 2, y: cy))
+        path.addLine(to: CGPoint(x: cx, y: cy + side / 2))
+        path.addLine(to: CGPoint(x: cx - side / 2, y: cy))
         path.closeSubpath()
-        return path
+        ctx.setFillColor(NSColor(srgbRed: 0x3B / 255, green: 0x82 / 255, blue: 0xF6 / 255, alpha: 1).cgColor)
+        ctx.addPath(path)
+        ctx.fillPath()
     }
 }

@@ -68,7 +68,7 @@ struct LibrarySettingsView: View {
                 Text("When enabled, a confirmation dialog will appear before moving files to Trash.")
             }
 
-            Section("Sidebar Filters") {
+            Section("Smart Libraries") {
                 filterRow(
                     title: "Recently Added",
                     isOn: $viewModel.showRecentlyAdded

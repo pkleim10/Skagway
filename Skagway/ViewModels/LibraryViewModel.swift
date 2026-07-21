@@ -4733,10 +4733,13 @@ final class LibraryViewModel {
         guard !inputs.isEmpty else { return false }
 
         let collection = VideoCollection(name: trimmed, dateCreated: Date(), matchMode: group.mode, kind: .smart)
-        guard let saved = try? await collectionRepo.insert(collection), let id = saved.id else { return false }
-        try? await collectionRepo.replaceRuleGroups(for: id, with: inputs)
-        await loadCollections()
-        return true
+        do {
+            _ = try await collectionRepo.saveSmartCollection(collection, groups: inputs)
+            await loadCollections()
+            return true
+        } catch {
+            return false
+        }
     }
 
     /// Phase 4 bridge: load a Collection's rule tree into the live Advanced Filter and open the

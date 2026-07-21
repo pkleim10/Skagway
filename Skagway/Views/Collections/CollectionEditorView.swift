@@ -15,6 +15,8 @@ struct CollectionEditorView: View {
     @State private var name: String = ""
     @State private var outerMatchMode: MatchMode = .all
     @State private var groups: [EditableGroup] = [EditableGroup()]
+    @State private var saveError: String?
+    @State private var isSaving = false
 
     struct EditableRule: Identifiable {
         let id = UUID()
@@ -64,6 +66,14 @@ struct CollectionEditorView: View {
         }
         .frame(width: 660, height: 500)
         .onAppear { loadExisting() }
+        .alert("Couldn’t Save Collection", isPresented: Binding(
+            get: { saveError != nil },
+            set: { if !$0 { saveError = nil } }
+        )) {
+            Button("OK", role: .cancel) { saveError = nil }
+        } message: {
+            Text(saveError ?? "")
+        }
     }
 
     private var header: some View {
@@ -366,9 +376,10 @@ struct CollectionEditorView: View {
             Spacer()
             Button("Cancel") { dismiss() }
                 .keyboardShortcut(.cancelAction)
+                .disabled(isSaving)
             Button(collection == nil ? "Create" : "Save") { save() }
                 .keyboardShortcut(.defaultAction)
-                .disabled(!isValid)
+                .disabled(!isValid || isSaving)
         }
         .padding()
     }
@@ -420,7 +431,10 @@ struct CollectionEditorView: View {
 
     private func save() {
         let trimmedName = name.trimmingCharacters(in: .whitespaces)
+        guard !isSaving else { return }
+        isSaving = true
         Task {
+            defer { isSaving = false }
             let groupInputs: [(mode: MatchMode, rules: [CollectionRule])] = groups.map { g in
                 (
                     mode: g.matchMode,
@@ -436,22 +450,26 @@ struct CollectionEditorView: View {
                     }
                 )
             }
+            var draft: VideoCollection
             if var existing = collection {
                 existing.name = trimmedName
                 existing.matchMode = outerMatchMode
-                try? await repository.update(existing)
-                if let id = existing.id {
-                    try? await repository.replaceRuleGroups(for: id, with: groupInputs)
-                }
+                draft = existing
             } else {
-                let newCollection = VideoCollection(name: trimmedName, dateCreated: Date(), matchMode: outerMatchMode)
-                let saved = try? await repository.insert(newCollection)
-                if let id = saved?.id {
-                    try? await repository.replaceRuleGroups(for: id, with: groupInputs)
-                }
+                draft = VideoCollection(
+                    name: trimmedName,
+                    dateCreated: Date(),
+                    matchMode: outerMatchMode,
+                    kind: .smart
+                )
             }
-            onSave()
-            dismiss()
+            do {
+                _ = try await repository.saveSmartCollection(draft, groups: groupInputs)
+                onSave()
+                dismiss()
+            } catch {
+                saveError = error.localizedDescription
+            }
         }
     }
 }

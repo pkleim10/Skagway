@@ -75,6 +75,7 @@ enum DatabaseMigration {
             }
 
             try db.create(table: "collection_rule") { t in
+                t.autoIncrementedPrimaryKey("id")
                 t.column("collectionId", .integer).notNull()
                     .references("collection", onDelete: .cascade)
                 t.column("attribute", .text).notNull()
@@ -230,6 +231,40 @@ enum DatabaseMigration {
                 index: "idx_video_bookmark_videoId_seconds",
                 on: "video_bookmark",
                 columns: ["videoId", "seconds"]
+            )
+        }
+
+        migrator.registerMigration("v13_collectionRulePrimaryKey") { db in
+            // Early `v3_collections` created `collection_rule` without an `id` PK. The Swift model
+            // encodes `id`, so inserts fail with "table collection_rule has no column named id"
+            // and Collection create/edit silently dropped rules (`try?`). Libraries that already
+            // gained an `id` (hand-fixed / older tooling) are no-ops.
+            let columns = try db.columns(in: "collection_rule").map(\.name)
+            guard !columns.contains("id") else { return }
+
+            try db.create(table: "collection_rule_new") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("collectionId", .integer).notNull()
+                    .references("collection", onDelete: .cascade)
+                t.column("attribute", .text).notNull()
+                t.column("comparison", .text).notNull()
+                t.column("value", .text).notNull()
+                t.column("groupId", .integer)
+                    .references("collection_rule_group", onDelete: .cascade)
+                t.column("value2", .text)
+            }
+            try db.execute(sql: """
+                INSERT INTO collection_rule_new
+                    (collectionId, attribute, comparison, value, groupId, value2)
+                SELECT collectionId, attribute, comparison, value, groupId, value2
+                FROM collection_rule
+                """)
+            try db.drop(table: "collection_rule")
+            try db.rename(table: "collection_rule_new", to: "collection_rule")
+            try db.create(
+                index: "idx_collection_rule_collectionId",
+                on: "collection_rule",
+                columns: ["collectionId"]
             )
         }
 

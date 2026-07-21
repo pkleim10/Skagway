@@ -91,6 +91,42 @@ struct CollectionRepository {
         }
     }
 
+    /// Insert or update a collection and replace its rule groups in one transaction.
+    @discardableResult
+    func saveSmartCollection(
+        _ collection: VideoCollection,
+        groups: [(mode: MatchMode, rules: [CollectionRule])]
+    ) async throws -> VideoCollection {
+        try await dbPool.write { db in
+            var c = collection
+            if c.id == nil {
+                try c.insert(db)
+            } else {
+                try c.update(db)
+            }
+            guard let collectionId = c.id else {
+                throw DatabaseError(message: "Collection insert did not produce an id")
+            }
+
+            try CollectionRuleGroup
+                .filter(Column("collectionId") == collectionId)
+                .deleteAll(db)
+
+            for (index, group) in groups.enumerated() {
+                var g = CollectionRuleGroup(collectionId: collectionId, orderIndex: index, matchMode: group.mode)
+                try g.insert(db)
+                guard let groupId = g.id else { continue }
+                for rule in group.rules {
+                    var r = rule
+                    r.collectionId = collectionId
+                    r.groupId = groupId
+                    try r.insert(db)
+                }
+            }
+            return c
+        }
+    }
+
     // MARK: - Album membership (manual collections)
 
     /// All album memberships: collectionId → set of video database ids.
