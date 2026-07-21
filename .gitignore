@@ -20,6 +20,7 @@ Package.resolved
 # Public packaging output (DMGs / archives are not committed)
 dist/
 *.dmg
+*.appcast.xml
 packaging/.venv/
 
 # Sparkle EdDSA private key — never commit (see docs/SPARKLE.md)

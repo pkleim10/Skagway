@@ -31,8 +31,15 @@ find_sparkle_bin() {
     echo "$SPARKLE_BIN"
     return 0
   fi
-  local candidate
-  candidate=$(find "${HOME}/Library/Developer/Xcode/DerivedData" \
+  local candidate dd
+  # Prefer this project's DerivedData (fast); fall back to a bounded search.
+  for dd in "${HOME}/Library/Developer/Xcode/DerivedData"/Skagway-*/SourcePackages/artifacts/sparkle/Sparkle/bin; do
+    if [[ -x "${dd}/generate_appcast" ]]; then
+      echo "$dd"
+      return 0
+    fi
+  done
+  candidate=$(find "${HOME}/Library/Developer/Xcode/DerivedData" -maxdepth 6 \
     -path '*/artifacts/sparkle/Sparkle/bin/generate_appcast' 2>/dev/null | head -1 || true)
   if [[ -n "$candidate" ]]; then
     dirname "$candidate"
@@ -47,6 +54,10 @@ if ! SPARKLE_TOOLS=$(find_sparkle_bin); then
 fi
 
 mkdir -p "$OUT_DIR"
+OUT_DIR="$(cd "$OUT_DIR" && pwd)"
+DMG_PATH="$(cd "$(dirname "$DMG_PATH")" && pwd)/$(basename "$DMG_PATH")"
+APPCAST_OUT="${OUT_DIR}/Skagway.appcast.xml"
+
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/skagway-appcast.XXXXXX")
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
@@ -57,7 +68,7 @@ cp -f "$DMG_PATH" "${WORK}/Skagway.dmg"
 GEN_ARGS=(
   --account "$KEY_ACCOUNT"
   --download-url-prefix "$DOWNLOAD_PREFIX"
-  -o Skagway.appcast.xml
+  -o "$APPCAST_OUT"
 )
 
 if [[ -f "$PRIVATE_KEY_FILE" ]]; then
@@ -67,10 +78,14 @@ fi
 echo "Generating appcast with ${SPARKLE_TOOLS}/generate_appcast…"
 "${SPARKLE_TOOLS}/generate_appcast" "${GEN_ARGS[@]}" "$WORK"
 
-cp -f "${WORK}/Skagway.appcast.xml" "${OUT_DIR}/Skagway.appcast.xml"
-# Also copy the enclosure sibling used for the feed (same bytes as input DMG).
-cp -f "${WORK}/Skagway.dmg" "${OUT_DIR}/Skagway.dmg"
+# Ensure stable DMG name sits next to the appcast for upload.
+cp -f "$DMG_PATH" "${OUT_DIR}/Skagway.dmg"
 
-echo "✓ Appcast: ${OUT_DIR}/Skagway.appcast.xml"
+if [[ ! -f "$APPCAST_OUT" ]]; then
+  echo "generate_appcast did not write ${APPCAST_OUT}" >&2
+  exit 1
+fi
+
+echo "✓ Appcast: ${APPCAST_OUT}"
 echo "  Enclosure URL: ${DOWNLOAD_PREFIX}Skagway.dmg"
 echo "  Publish both files to downloads.machiilabs.com (see docs/SPARKLE.md)."
