@@ -82,6 +82,15 @@ struct SettingsView: View {
     /// Single stable `List` — swapping Lists when search starts steals focus from the search field.
     private var settingsSidebar: some View {
         List(selection: $selectedCategory) {
+            // Explicit spacer under Search (~1 rem). contentMargins does not sit between
+            // `.searchable` and the first row the way System Settings spacing does.
+            Color.clear
+                .frame(height: 16)
+                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .accessibilityHidden(true)
+
             if isSearching {
                 ForEach(searchResults) { item in
                     VStack(alignment: .leading, spacing: 2) {
@@ -107,6 +116,8 @@ struct SettingsView: View {
             }
         }
         .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .background(Color(red: 21 / 255, green: 24 / 255, blue: 26 / 255))
         .navigationTitle("Settings")
         .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
         .overlay {
