@@ -85,6 +85,7 @@ struct DataSourcesSettingsView: View {
             }
             .padding(10)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task {
             await loadDataSources()
         }

@@ -13,13 +13,15 @@ struct ListColumnsSettingsContent: View {
 
     var body: some View {
         Group {
-            HStack {
-                Label("Name", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(Color.appTextSecondary)
-                Spacer()
-                Text("Always visible")
-                    .font(.caption)
-                    .foregroundStyle(Color.appTextSecondary)
+            HStack(alignment: .firstTextBaseline) {
+                SettingsLabel(
+                    "Name",
+                    description: "Always visible. Choose which metadata columns appear in list view. Up to 16 custom columns can be shown at once (alphabetically). Reorder and resize visible columns from the table header."
+                )
+                Spacer(minLength: 8)
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Color.secondary)
+                    .help("Always visible")
             }
 
             Toggle("Duration", isOn: bindingStandard("duration"))
@@ -32,9 +34,9 @@ struct ListColumnsSettingsContent: View {
             Toggle("Last played", isOn: bindingStandard("lastPlayed"))
 
             if listableCustomDefinitions.isEmpty {
-                Text("No listable custom metadata fields (multiline “Text” fields are excluded). Add fields in the Custom Metadata settings tab.")
+                Text("No listable custom metadata fields (multiline “Text” fields are excluded). Add fields in Custom Metadata settings.")
                     .font(.caption)
-                    .foregroundStyle(Color.appTextSecondary)
+                    .foregroundStyle(Color.secondary)
                     .padding(.top, 4)
             } else {
                 ForEach(listableCustomDefinitions) { field in

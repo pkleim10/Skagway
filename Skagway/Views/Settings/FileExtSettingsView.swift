@@ -9,56 +9,58 @@ struct FileExtSettingsView: View {
             Section {
                 ForEach(manager.entries) { entry in
                     HStack(spacing: 12) {
-                        Toggle("", isOn: Binding(
+                        Toggle(isOn: Binding(
                             get: { entry.enabled },
                             set: { manager.setEnabled(entry.ext, $0) }
-                        ))
-                        .toggleStyle(.checkbox)
-                        .labelsHidden()
+                        )) {
+                            Text(".\(entry.ext)")
+                                .font(.system(.body, design: .monospaced))
+                        }
 
-                        Text(".\(entry.ext)")
-                            .font(.system(.body, design: .monospaced))
-                            .foregroundStyle(entry.enabled ? .primary : .secondary)
-
-                        Spacer()
+                        Spacer(minLength: 8)
 
                         Button {
                             manager.remove(entry.ext)
                         } label: {
-                            Image(systemName: "minus.circle")
-                                .foregroundStyle(Color.appTextSecondary)
+                            Image(systemName: "minus.circle.fill")
+                                .symbolRenderingMode(.hierarchical)
+                                .foregroundStyle(Color.secondary)
                         }
                         .buttonStyle(.borderless)
+                        .help("Remove .\(entry.ext)")
                     }
                 }
             } header: {
                 Text("Extensions")
-            } footer: {
-                Text("Extensions recognized as video files when scanning folders. Uncheck to temporarily exclude an extension from scans.")
-            }
-
-            Section("Add extension") {
-                HStack(spacing: 8) {
-                    TextField("e.g. mp4", text: $newExt)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 100)
-                        .onSubmit { addNew() }
-
-                    Button("Add") {
-                        addNew()
-                    }
-                    .disabled(newExt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
             }
 
             Section {
-                Button("Reset to defaults") {
+                LabeledContent {
+                    HStack(spacing: 8) {
+                        TextField("e.g. mp4", text: $newExt)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 100)
+                            .onSubmit { addNew() }
+                        Button("Add") { addNew() }
+                            .disabled(newExt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                } label: {
+                    SettingsLabel(
+                        "Extension",
+                        description: "Extensions recognized as video files when scanning folders. Turn off an extension above to temporarily exclude it from scans."
+                    )
+                }
+            } header: {
+                Text("Add Extension")
+            }
+
+            Section {
+                Button("Reset to Defaults") {
                     manager.resetToDefaults()
                 }
             }
         }
         .formStyle(.grouped)
-        .padding()
     }
 
     private func addNew() {

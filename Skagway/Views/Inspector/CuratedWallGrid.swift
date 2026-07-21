@@ -155,7 +155,7 @@ struct CuratedWallGrid: View {
                             .disabled(isMoving)
                             .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "")
                             Divider()
-                            Button("Re-encode to MP4\u{2026}") {
+                            Button("Fix for Built-in Player\u{2026}") {
                                 if let ffmpeg = viewModel.resolvedFFmpegPath {
                                     let ids = viewModel.selectedVideoIds.contains(video.id)
                                         ? viewModel.selectedVideoIds : [video.id]

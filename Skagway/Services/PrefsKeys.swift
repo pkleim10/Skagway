@@ -32,8 +32,6 @@ enum PrefsKeys {
     static let confirmDeletions = "Skagway.confirmDeletions"
     static let showThumbnailInDetail = "Skagway.showThumbnailInDetail"
     static let gridHoverPreviewEnabled = "Skagway.gridHoverPreviewEnabled"
-    static let detailPreviewMaxLongEdge = "Skagway.detailPreviewMaxLongEdge"
-    static let autoAdjustVideoPane = "Skagway.autoAdjustVideoPane"
     static let browsingLayout = "Skagway.browsingLayout"
     static let filmstripRows = "Skagway.filmstripRows"
     static let filmstripColumns = "Skagway.filmstripColumns"
@@ -92,9 +90,6 @@ enum PrefsKeys {
         "excludeCorrupt",
         "confirmDeletions",
         "showThumbnailInDetail",
-        "detailPreviewMaxLongEdge",
-        "autoAdjustVideoPane",
-        "autoAdjustVideoPanePadding",
         "browsingLayout",
         "filmstripRows",
         "filmstripColumns",

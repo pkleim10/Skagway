@@ -1141,10 +1141,6 @@ final class LibraryViewModel {
     private static let excludeCorruptKey = "Skagway.excludeCorrupt"
     private static let confirmDeletionsKey = "Skagway.confirmDeletions"
     private static let showThumbnailInDetailKey = "Skagway.showThumbnailInDetail"
-    private static let detailPreviewMaxLongEdgeKey = "Skagway.detailPreviewMaxLongEdge"
-    private static let autoAdjustVideoPaneKey = "Skagway.autoAdjustVideoPane"
-    /// Legacy Int padding stepper; migrated once to boolean toggle.
-    private static let legacyAutoAdjustVideoPanePaddingKey = "Skagway.autoAdjustVideoPanePadding"
     private static let browsingLayoutKey = "Skagway.browsingLayout"
     private static let filmstripRowsKey = "Skagway.filmstripRows"
     private static let filmstripColumnsKey = "Skagway.filmstripColumns"
@@ -1443,20 +1439,6 @@ final class LibraryViewModel {
     var showThumbnailInDetail: Bool = true {
         didSet {
             UserDefaults.standard.set(showThumbnailInDetail, forKey: Self.showThumbnailInDetailKey)
-        }
-    }
-
-    /// Long edge (px) for disk-backed hi-res still in the detail pane (`ThumbnailService`); not the 400px grid thumb.
-    var detailPreviewMaxLongEdge: Int = 1080 {
-        didSet {
-            UserDefaults.standard.set(detailPreviewMaxLongEdge, forKey: Self.detailPreviewMaxLongEdgeKey)
-        }
-    }
-
-    /// When true, the horizontal splitter between preview and metadata is adjusted so the thumbnail or filmstrip fits (no extra spacing).
-    var autoAdjustVideoPane: Bool = false {
-        didSet {
-            UserDefaults.standard.set(autoAdjustVideoPane, forKey: Self.autoAdjustVideoPaneKey)
         }
     }
 
@@ -1916,18 +1898,6 @@ final class LibraryViewModel {
         if let ids = defaults.stringArray(forKey: Self.missingVideoIdsKey) { missingVideoIds = Set(ids) }
         if defaults.object(forKey: Self.showThumbnailInDetailKey) != nil {
             showThumbnailInDetail = defaults.bool(forKey: Self.showThumbnailInDetailKey)
-        }
-        if let edge = defaults.object(forKey: Self.detailPreviewMaxLongEdgeKey) as? Int,
-           ThumbnailService.detailPreviewLongEdgeChoices.contains(edge)
-        {
-            detailPreviewMaxLongEdge = edge
-        }
-        if defaults.object(forKey: Self.autoAdjustVideoPaneKey) != nil {
-            autoAdjustVideoPane = defaults.bool(forKey: Self.autoAdjustVideoPaneKey)
-        } else if let pad = defaults.object(forKey: Self.legacyAutoAdjustVideoPanePaddingKey) as? Int {
-            autoAdjustVideoPane = pad > 0
-            defaults.removeObject(forKey: Self.legacyAutoAdjustVideoPanePaddingKey)
-            defaults.set(autoAdjustVideoPane, forKey: Self.autoAdjustVideoPaneKey)
         }
         if let data = defaults.data(forKey: Self.customMetadataFieldDefinitionsKey),
            let decoded = try? JSONDecoder().decode([CustomMetadataFieldDefinition].self, from: data)

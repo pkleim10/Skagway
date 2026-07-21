@@ -31,6 +31,10 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Tahoe-style Settings** — Sidebar + detail shell with category search. Descriptions sit under control titles inside the same list row (System Settings style), not as section footers. Library “Exclude corrupt…” and “Confirm deletions” share one grouped list. Shared integer field+chevron stepper; Tools/File Ext Form rows. Data Sources and Custom Metadata list UIs deferred.
+- **Settings cleanup** — Removed unused Video settings “Maximum large preview thumbnail” and “Auto adjust video pane” (VideoMaster leftovers; prefs were never read by current UI).
+- **Context menu** — “Re-encode to MP4…” renamed to “Fix for Built-in Player…” (matches Tools settings copy).
+- **Settings search** — Search finds individual settings (and sheets) by title/keywords; choosing a result opens that sheet.
 - **Settings** — Library tab section renamed from “Sidebar Filters” to “Smart Libraries”.
 - **Export fields list** — Checked metadata columns stay at the top of the export dialog (relative order preserved within checked and unchecked groups).
 - **Bookmark diamond name on hover** — Hovering a scrubber bookmark diamond shows its name in a capsule above the track (same AppKit hover path as scrub preview; no system tooltip).

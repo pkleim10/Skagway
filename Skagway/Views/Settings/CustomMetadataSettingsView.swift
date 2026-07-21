@@ -38,7 +38,8 @@ struct CustomMetadataSettingsView: View {
                             }
                         }
                         .labelsHidden()
-                        .frame(width: 168)
+                        .pickerStyle(.menu)
+                        .fixedSize()
                     }
                     .tag(field.id)
                 }

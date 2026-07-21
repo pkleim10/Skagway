@@ -1,6 +1,6 @@
 import Foundation
 
-/// A single "Re-encode to MP4" job, tracked from enqueue through completion.
+/// A single “Fix for Built-in Player” (re-encode to MP4) job, tracked from enqueue through completion.
 ///
 /// The design keeps the user's original file intact under its real name until the
 /// encode provably succeeds:

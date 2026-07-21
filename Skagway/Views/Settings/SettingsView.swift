@@ -2,42 +2,71 @@ import GRDB
 import SwiftUI
 import UniformTypeIdentifiers
 
+// MARK: - Categories
+
+enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
+    case library
+    case video
+    case dataSources
+    case fileExt
+    case tools
+    case customMetadata
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .library: return "Library"
+        case .video: return "Video"
+        case .dataSources: return "Data Sources"
+        case .fileExt: return "File Ext"
+        case .tools: return "Tools"
+        case .customMetadata: return "Custom Metadata"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .library: return "books.vertical"
+        case .video: return "film"
+        case .dataSources: return "folder"
+        case .fileExt: return "doc.badge.gearshape"
+        case .tools: return "wrench.and.screwdriver"
+        case .customMetadata: return "square.grid.3x3.square.badge.ellipsis"
+        }
+    }
+}
+
+// MARK: - Shell
+
 struct SettingsView: View {
     @Bindable var appState: AppState
+
+    @State private var selectedCategory: SettingsCategory? = .library
+    @State private var searchText = ""
+
+    private var isSearching: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var searchResults: [SettingsSearchItem] {
+        SettingsSearchCatalog.matches(for: searchText)
+    }
 
     var body: some View {
         Group {
             if let pool = appState.dbManager?.dbPool, let vm = appState.libraryViewModel {
-                TabView {
-                    LibrarySettingsView(viewModel: vm)
-                        .tabItem {
-                            Label("Library", systemImage: "books.vertical")
-                        }
-
-                    VideoSettingsView(viewModel: vm)
-                        .tabItem {
-                            Label("Video", systemImage: "film")
-                        }
-
-                    DataSourcesSettingsView(dbPool: pool)
-                        .tabItem {
-                            Label("Data Sources", systemImage: "folder")
-                        }
-
-                    FileExtSettingsView()
-                        .tabItem {
-                            Label("File Ext", systemImage: "doc.badge.gearshape")
-                        }
-
-                    ToolsSettingsView(viewModel: vm)
-                        .tabItem {
-                            Label("Tools", systemImage: "wrench.and.screwdriver")
-                        }
-
-                    CustomMetadataSettingsView(viewModel: vm)
-                        .tabItem {
-                            Label("Custom Metadata", systemImage: "square.grid.3x3.square.badge.ellipsis")
-                        }
+                NavigationSplitView {
+                    settingsSidebar
+                } detail: {
+                    settingsDetail(pool: pool, viewModel: vm)
+                }
+                .navigationSplitViewStyle(.balanced)
+                .searchable(text: $searchText, placement: .sidebar, prompt: "Search")
+                .onAppear {
+                    if selectedCategory == nil {
+                        selectedCategory = .library
+                    }
                 }
             } else {
                 ContentUnavailableView(
@@ -47,9 +76,76 @@ struct SettingsView: View {
                 )
             }
         }
-        .frame(minWidth: 500, minHeight: 350)
+        .frame(minWidth: 720, minHeight: 520)
+    }
+
+    /// Single stable `List` — swapping Lists when search starts steals focus from the search field.
+    private var settingsSidebar: some View {
+        List(selection: $selectedCategory) {
+            if isSearching {
+                ForEach(searchResults) { item in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.title)
+                            .foregroundStyle(Color.primary)
+                            .multilineTextAlignment(.leading)
+                        Text(item.category.title)
+                            .font(.caption)
+                            .foregroundStyle(Color.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        selectedCategory = item.category
+                        searchText = ""
+                    }
+                }
+            } else {
+                ForEach(SettingsCategory.allCases) { category in
+                    Label(category.title, systemImage: category.systemImage)
+                        .tag(category)
+                }
+            }
+        }
+        .listStyle(.sidebar)
+        .navigationTitle("Settings")
+        .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
+        .overlay {
+            if isSearching && searchResults.isEmpty {
+                ContentUnavailableView.search(text: searchText)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func settingsDetail(pool: DatabasePool, viewModel: LibraryViewModel) -> some View {
+        Group {
+            switch selectedCategory {
+            case .library:
+                LibrarySettingsView(viewModel: viewModel)
+            case .video:
+                VideoSettingsView(viewModel: viewModel)
+            case .dataSources:
+                DataSourcesSettingsView(dbPool: pool)
+            case .fileExt:
+                FileExtSettingsView()
+            case .tools:
+                ToolsSettingsView(viewModel: viewModel)
+            case .customMetadata:
+                CustomMetadataSettingsView(viewModel: viewModel)
+            case .none:
+                ContentUnavailableView(
+                    "Select a Category",
+                    systemImage: "sidebar.left",
+                    description: Text("Choose a settings category from the sidebar.")
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .navigationTitle(selectedCategory?.title ?? "Settings")
     }
 }
+
+// MARK: - Library
 
 struct LibrarySettingsView: View {
     @Bindable var viewModel: LibraryViewModel
@@ -57,40 +153,49 @@ struct LibrarySettingsView: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Exclude corrupt files from filters", isOn: $viewModel.excludeCorrupt)
-            } footer: {
-                Text("Corrupt files (missing duration and resolution) will be hidden from Library, Collections, Rating, and Tag filters. They remain visible in the Corrupt filter and name search.")
-            }
-
-            Section {
-                Toggle("Confirm deletions", isOn: $viewModel.confirmDeletions)
-            } footer: {
-                Text("When enabled, a confirmation dialog will appear before moving files to Trash.")
+                Toggle(isOn: $viewModel.excludeCorrupt) {
+                    SettingsLabel(
+                        "Exclude corrupt files from filters",
+                        description: "Corrupt files (missing duration and resolution) will be hidden from Library, Collections, Rating, and Tag filters. They remain visible in the Corrupt filter and name search."
+                    )
+                }
+                Toggle(isOn: $viewModel.confirmDeletions) {
+                    SettingsLabel(
+                        "Confirm deletions",
+                        description: "When enabled, a confirmation dialog will appear before moving files to Trash."
+                    )
+                }
             }
 
             Section("Smart Libraries") {
-                filterRow(
-                    title: "Recently Added",
+                smartLibraryToggle(
+                    "Recently Added",
                     isOn: $viewModel.showRecentlyAdded
                 ) {
-                    daysField(value: $viewModel.recentlyAddedDays)
-                        .disabled(!viewModel.showRecentlyAdded)
-                    Text("days")
-                        .foregroundStyle(viewModel.showRecentlyAdded ? Color.appTextSecondary : Color.appTextTertiary)
+                    SettingsIntegerStepper(
+                        value: $viewModel.recentlyAddedDays,
+                        range: 1...365,
+                        unit: "days"
+                    )
+                    .disabled(!viewModel.showRecentlyAdded)
+                    .opacity(viewModel.showRecentlyAdded ? 1 : 0.45)
                 }
 
-                filterRow(
-                    title: "Recently Played",
+                smartLibraryToggle(
+                    "Recently Played",
                     isOn: $viewModel.showRecentlyPlayed
                 ) {
-                    daysField(value: $viewModel.recentlyPlayedDays)
-                        .disabled(!viewModel.showRecentlyPlayed)
-                    Text("days")
-                        .foregroundStyle(viewModel.showRecentlyPlayed ? Color.appTextSecondary : Color.appTextTertiary)
+                    SettingsIntegerStepper(
+                        value: $viewModel.recentlyPlayedDays,
+                        range: 1...365,
+                        unit: "days"
+                    )
+                    .disabled(!viewModel.showRecentlyPlayed)
+                    .opacity(viewModel.showRecentlyPlayed ? 1 : 0.45)
                 }
 
-                filterRow(
-                    title: "Top Rated",
+                smartLibraryToggle(
+                    "Top Rated",
                     isOn: $viewModel.showTopRated
                 ) {
                     RatingView(rating: viewModel.topRatedMinRating, size: 14) { newRating in
@@ -100,55 +205,35 @@ struct LibrarySettingsView: View {
                     .opacity(viewModel.showTopRated ? 1 : 0.4)
                 }
 
-                filterRow(title: "Duplicates", isOn: $viewModel.showDuplicates)
-
-                filterRow(title: "Corrupt", isOn: $viewModel.showCorrupt)
-
-                filterRow(title: "Missing", isOn: $viewModel.showMissing)
-
-                filterRow(title: "Recently Converted", isOn: $viewModel.showRecentlyConverted)
+                Toggle("Duplicates", isOn: $viewModel.showDuplicates)
+                Toggle("Corrupt", isOn: $viewModel.showCorrupt)
+                Toggle("Missing", isOn: $viewModel.showMissing)
+                Toggle("Recently Converted", isOn: $viewModel.showRecentlyConverted)
             }
 
             Section {
                 ListColumnsSettingsContent(viewModel: viewModel)
             } header: {
                 Text("List view columns")
-            } footer: {
-                Text("Choose which metadata columns appear in list view. Name is always shown. Up to 16 custom columns can be shown at once (alphabetically). You can still reorder and resize visible columns using the table header.")
             }
         }
         .formStyle(.grouped)
-        .padding()
     }
 
-    private func filterRow<C: View>(
-        title: String,
+    private func smartLibraryToggle<C: View>(
+        _ title: String,
         isOn: Binding<Bool>,
-        @ViewBuilder config: () -> C
+        @ViewBuilder trailing: () -> C
     ) -> some View {
-        HStack {
+        HStack(spacing: 12) {
             Toggle(title, isOn: isOn)
-            Spacer()
-            config()
+            Spacer(minLength: 8)
+            trailing()
         }
     }
-
-    private func filterRow(title: String, isOn: Binding<Bool>) -> some View {
-        Toggle(title, isOn: isOn)
-    }
-
-    private func daysField(value: Binding<Int>) -> some View {
-        TextField("", value: value, format: .number)
-            .frame(width: 50)
-            .multilineTextAlignment(.trailing)
-            .textFieldStyle(.roundedBorder)
-            .onChange(of: value.wrappedValue) { _, newVal in
-                if newVal < 1 { value.wrappedValue = 1 }
-                if newVal > 365 { value.wrappedValue = 365 }
-            }
-    }
-
 }
+
+// MARK: - Video
 
 struct VideoSettingsView: View {
     @Bindable var viewModel: LibraryViewModel
@@ -156,13 +241,27 @@ struct VideoSettingsView: View {
     var body: some View {
         Form {
             Section {
-                HStack(spacing: 24) {
-                    compactStepper("Rows", value: $viewModel.defaultFilmstripRows, range: 1...6)
-                    compactStepper("Columns", value: $viewModel.defaultFilmstripColumns, range: 1...8)
-                    Spacer()
-                    Text("\(viewModel.defaultFilmstripRows * viewModel.defaultFilmstripColumns) frames per filmstrip")
-                        .font(.caption)
-                        .foregroundStyle(Color.appTextSecondary)
+                LabeledContent {
+                    SettingsIntegerStepper(
+                        value: $viewModel.defaultFilmstripRows,
+                        range: 1...6
+                    )
+                } label: {
+                    SettingsLabel(
+                        "Rows",
+                        description: "Default grid size when generating new filmstrips. Override per video with Modify Filmstrip."
+                    )
+                }
+                LabeledContent("Columns") {
+                    SettingsIntegerStepper(
+                        value: $viewModel.defaultFilmstripColumns,
+                        range: 1...8
+                    )
+                }
+                LabeledContent("Frames per filmstrip") {
+                    Text("\(viewModel.defaultFilmstripRows * viewModel.defaultFilmstripColumns)")
+                        .foregroundStyle(Color.secondary)
+                        .monospacedDigit()
                 }
 
                 Button("Regenerate filmstrips") {
@@ -171,119 +270,91 @@ struct VideoSettingsView: View {
                 .disabled(!viewModel.filmstripLayoutChanged)
             } header: {
                 Text("Default Filmstrip Size")
-            } footer: {
-                Text("This sets the default grid size when generating new filmstrips. You can override it per video using Modify Filmstrip. Regenerate clears cached filmstrips so they are recreated with the new layout when you view each video.")
             }
 
             Section {
-                Toggle("Surprise Me! auto-plays selected video", isOn: $viewModel.surpriseMeAutoPlays)
-                Toggle("Hover preview on Grid cards", isOn: $viewModel.gridHoverPreviewEnabled)
-            } footer: {
-                Text("Surprise Me updates selection immediately, loads or generates the filmstrip for the detail pane, then starts auto-play if enabled, then scrolls the grid or list to the selection. Hover preview plays a muted cycling scrub when the pointer rests on a Grid card (disabled automatically while the floating player is open).")
+                Toggle(isOn: $viewModel.surpriseMeAutoPlays) {
+                    SettingsLabel(
+                        "Surprise Me! auto-plays selected video",
+                        description: "Updates selection immediately, loads or generates the filmstrip for the detail pane, starts auto-play if enabled, then scrolls the grid or list to the selection."
+                    )
+                }
+                Toggle(isOn: $viewModel.gridHoverPreviewEnabled) {
+                    SettingsLabel(
+                        "Hover preview on Grid cards",
+                        description: "Plays a muted cycling scrub when the pointer rests on a Grid card (disabled automatically while the floating player is open)."
+                    )
+                }
             }
 
             Section {
-                Picker("Tag blind default state", selection: $viewModel.tagBlindDefaultState) {
+                Picker(selection: $viewModel.tagBlindDefaultState) {
                     ForEach(TagBlindDefaultState.allCases) { state in
                         Text(state.label).tag(state)
                     }
+                } label: {
+                    SettingsLabel(
+                        "Tag blind default state",
+                        description: "Controls the Inspector’s “Add tags” blind (the unassigned-tags list) each time you select a different video: always start closed, always start open, or leave it exactly as you last set it."
+                    )
                 }
             } header: {
                 Text("Tags")
-            } footer: {
-                Text("Controls the Inspector's \u{201c}Add tags\u{201d} blind (the unassigned-tags list) each time you select a different video: always start closed, always start open, or leave it exactly as you last set it.")
             }
 
             Section {
-                Picker("Filter drawer height", selection: $viewModel.filterDrawerHeightMode) {
+                Picker(selection: $viewModel.filterDrawerHeightMode) {
                     ForEach(FilterDrawerHeightMode.allCases) { mode in
                         Text(mode.label).tag(mode)
                     }
+                } label: {
+                    SettingsLabel(
+                        "Filter drawer height",
+                        description: "How the filters drawer sizes itself when opened. Fit to content sizes it to just show all the filter cards (no scrollbar) and hides the resize handle; Last used reopens it at whatever height you last dragged it to."
+                    )
                 }
             } header: {
                 Text("Filters")
-            } footer: {
-                Text("How the filters drawer sizes itself when opened. Fit to content sizes it to just show all the filter cards (no scrollbar) and hides the resize handle; Last used reopens it at whatever height you last dragged it to.")
             }
 
             Section {
-                Picker("Player opens at", selection: $viewModel.playerStartPreference) {
+                Picker(selection: $viewModel.playerStartPreference) {
                     ForEach(PlayerStartPreference.allCases) { pref in
                         Text(pref.label).tag(pref)
                     }
+                } label: {
+                    SettingsLabel(
+                        "Player opens at",
+                        description: "When you start inline playback, the resizable player opens at this size. Compact fits the inspector still/filmstrip area; Full screen opens borderless edge-to-edge; Last used size reopens the player at whatever size you last left it. You can always resize, snap, or go full-screen from the player's own controls."
+                    )
                 }
-            } footer: {
-                Text("When you start inline playback, the resizable player opens at this size. Compact fits the inspector still/filmstrip area; Full screen opens borderless edge-to-edge; Last used size reopens the player at whatever size you last left it. You can always resize, snap, or go full-screen from the player's own controls.")
             }
 
             Section {
-                Toggle("Fade resume banner after delay", isOn: $viewModel.fadeResumeBannerAutomatically)
-                HStack(spacing: 24) {
-                    compactStepper(
-                        "Seconds before fade",
-                        value: $viewModel.resumeBannerFadeDelaySeconds,
-                        range: 1...120
+                Toggle(isOn: $viewModel.fadeResumeBannerAutomatically) {
+                    SettingsLabel(
+                        "Fade resume banner after delay",
+                        description: "After resuming inline playback from a remembered position, Skagway shows a banner with Start at beginning. When fade is enabled, that banner fades out after the delay; playback keeps going from the resumed time."
                     )
-                    Spacer()
+                }
+                LabeledContent("Seconds before fade") {
+                    SettingsIntegerStepper(
+                        value: $viewModel.resumeBannerFadeDelaySeconds,
+                        range: 1...120,
+                        unit: "sec"
+                    )
                 }
                 .disabled(!viewModel.fadeResumeBannerAutomatically)
                 .opacity(viewModel.fadeResumeBannerAutomatically ? 1 : 0.45)
             } header: {
                 Text("Playback")
-            } footer: {
-                Text("After resuming inline playback from a remembered position, Skagway shows a banner with Start at beginning. When fade is enabled, that banner fades out after the delay; playback keeps going from the resumed time.")
-            }
-
-            Section {
-                Picker("Maximum large preview thumbnail (long-edge)", selection: $viewModel.detailPreviewMaxLongEdge) {
-                    ForEach(ThumbnailService.detailPreviewLongEdgeChoices, id: \.self) { w in
-                        Text("\(w) px").tag(w)
-                    }
-                }
-                Toggle("Auto adjust video pane", isOn: $viewModel.autoAdjustVideoPane)
-            } header: {
-                Text("Detail Pane Preview")
-            } footer: {
-                Text("Maximum width or height (long edge) for the disk-backed hi-res still when Thumbnail is selected. Larger values use more cache space. Grid and list thumbnails stay 400 px. When Auto adjust video pane is on, the horizontal splitter between the preview and the metadata area is adjusted so the thumbnail or filmstrip fits the media.")
             }
         }
         .formStyle(.grouped)
-        .padding()
-    }
-
-    private func compactStepper(_ label: String, value: Binding<Int>, range: ClosedRange<Int>) -> some View {
-        VStack(spacing: 4) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(Color.appTextSecondary)
-            HStack(spacing: 0) {
-                Button {
-                    if value.wrappedValue > range.lowerBound { value.wrappedValue -= 1 }
-                } label: {
-                    Image(systemName: "minus")
-                        .frame(width: 24, height: 24)
-                }
-                .buttonStyle(.borderless)
-                .disabled(value.wrappedValue <= range.lowerBound)
-
-                Text("\(value.wrappedValue)")
-                    .font(.title3)
-                    .fontWeight(.medium)
-                    .monospacedDigit()
-                    .frame(width: 30, alignment: .center)
-
-                Button {
-                    if value.wrappedValue < range.upperBound { value.wrappedValue += 1 }
-                } label: {
-                    Image(systemName: "plus")
-                        .frame(width: 24, height: 24)
-                }
-                .buttonStyle(.borderless)
-                .disabled(value.wrappedValue >= range.upperBound)
-            }
-        }
     }
 }
+
+// MARK: - Tools
 
 struct ToolsSettingsView: View {
     @Bindable var viewModel: LibraryViewModel
@@ -292,44 +363,39 @@ struct ToolsSettingsView: View {
     var body: some View {
         Form {
             Section {
-                HStack(spacing: 8) {
-                    if let resolved = viewModel.resolvedFFmpegPath {
-                        Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                        Text(resolved)
-                            .font(.callout.monospaced())
-                            .foregroundStyle(Color.appTextSecondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        if viewModel.ffmpegUserPath.isEmpty {
-                            Text("auto-discovered")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
-                    } else {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
-                        Text(viewModel.ffmpegUserPath.isEmpty ? "Not found at standard paths" : "Not found at configured path")
-                            .font(.callout)
-                            .foregroundStyle(Color.appTextSecondary)
-                    }
+                VStack(alignment: .leading, spacing: 8) {
+                    SettingsLabel(
+                        "Status",
+                        description: "FFmpeg repairs videos that won’t play in Skagway’s built-in player (“Fix for Built-in Player” in the video context menu)."
+                    )
+                    ffmpegStatusLabel
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                HStack {
-                    TextField("Custom path to ffmpeg binary", text: $viewModel.ffmpegUserPath)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.callout.monospaced())
-                    Button("Choose\u{2026}") { showingFilePicker = true }
-                    if !viewModel.ffmpegUserPath.isEmpty {
-                        Button("Clear") { viewModel.ffmpegUserPath = "" }
+                VStack(alignment: .leading, spacing: 8) {
+                    SettingsLabel(
+                        "Path",
+                        description: "Skagway auto-discovers ffmpeg at standard Homebrew and system paths. Set a custom path if yours is installed elsewhere."
+                    )
+                    HStack(spacing: 8) {
+                        TextField("", text: $viewModel.ffmpegUserPath)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.callout.monospaced())
+                            .multilineTextAlignment(.leading)
+                            .labelsHidden()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Button("Choose\u{2026}") { showingFilePicker = true }
+                        if !viewModel.ffmpegUserPath.isEmpty {
+                            Button("Clear") { viewModel.ffmpegUserPath = "" }
+                        }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             } header: {
                 Text("FFmpeg")
-            } footer: {
-                Text("FFmpeg is used to repair videos that won\u{2019}t play in Skagway\u{2019}s built-in player (\u{201C}Fix for Built-in Player\u{201D} in the video context menu). Skagway auto-discovers ffmpeg at standard Homebrew and system paths. Set a custom path if your ffmpeg is installed elsewhere.")
             }
         }
         .formStyle(.grouped)
-        .padding()
         .fileImporter(
             isPresented: $showingFilePicker,
             allowedContentTypes: [.unixExecutable, .item],
@@ -337,6 +403,35 @@ struct ToolsSettingsView: View {
         ) { result in
             if case .success(let urls) = result, let url = urls.first {
                 viewModel.ffmpegUserPath = url.path
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var ffmpegStatusLabel: some View {
+        if let resolved = viewModel.resolvedFFmpegPath {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text(resolved)
+                    .font(.callout.monospaced())
+                    .foregroundStyle(Color.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(resolved)
+                if viewModel.ffmpegUserPath.isEmpty {
+                    Text("Auto")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        } else {
+            HStack(spacing: 6) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.red)
+                Text(viewModel.ffmpegUserPath.isEmpty ? "Not found at standard paths" : "Not found at configured path")
+                    .font(.callout)
+                    .foregroundStyle(Color.secondary)
             }
         }
     }
