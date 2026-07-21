@@ -2,6 +2,14 @@ import GRDB
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// Settings window chrome (sampled from System Settings).
+enum SettingsChrome {
+    /// Sidebar background — RGB 21, 24, 26.
+    static let sidebar = Color(red: 21 / 255, green: 24 / 255, blue: 26 / 255)
+    /// Detail sheet background behind grouped sections — RGB 34, 39, 40.
+    static let detail = Color(red: 34 / 255, green: 39 / 255, blue: 40 / 255)
+}
+
 // MARK: - Categories
 
 enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
@@ -19,7 +27,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         case .library: return "Library"
         case .video: return "Video"
         case .dataSources: return "Data Sources"
-        case .fileExt: return "File Ext"
+        case .fileExt: return "Extensions"
         case .tools: return "Tools"
         case .customMetadata: return "Custom Metadata"
         }
@@ -117,7 +125,7 @@ struct SettingsView: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
-        .background(Color(red: 21 / 255, green: 24 / 255, blue: 26 / 255))
+        .background(SettingsChrome.sidebar)
         .navigationTitle("Settings")
         .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
         .overlay {
@@ -152,6 +160,7 @@ struct SettingsView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(SettingsChrome.detail)
         .navigationTitle(selectedCategory?.title ?? "Settings")
     }
 }
@@ -229,6 +238,7 @@ struct LibrarySettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
     }
 
     private func smartLibraryToggle<C: View>(
@@ -362,6 +372,7 @@ struct VideoSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
     }
 }
 
@@ -407,6 +418,7 @@ struct ToolsSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .fileImporter(
             isPresented: $showingFilePicker,
             allowedContentTypes: [.unixExecutable, .item],

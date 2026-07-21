@@ -32,6 +32,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 ## Unreleased
 
 - **Settings** — ~1 rem gap under sidebar Search; sidebar charcoal background (RGB 21, 24, 26) matching System Settings.
+- **Settings** — Detail sheet background RGB 34, 39, 40 (behind grouped sections).
+- **Settings** — Data Sources / Extensions / Custom Metadata use the same grouped Form list treatment; hover Remove on rows; sidebar “File Ext” renamed to “Extensions”.
 
 ## 0.67.0 (build 850) - 2026-07-20
 

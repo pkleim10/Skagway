@@ -6,7 +6,7 @@ struct DataSourcesSettingsView: View {
     let dbPool: DatabasePool
 
     @State private var dataSources: [DataSource] = []
-    @State private var selectedId: Int64?
+    @State private var hoveredId: Int64?
     @State private var isLoading = false
 
     private var repository: DataSourceRepository {
@@ -14,80 +14,97 @@ struct DataSourcesSettingsView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Folders that Skagway will scan when you import.")
-                .font(.callout)
-                .foregroundStyle(Color.appTextSecondary)
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                .padding(.bottom, 12)
-
-            List(dataSources, selection: $selectedId) { source in
-                HStack(spacing: 10) {
-                    Image(systemName: "folder.fill")
-                        .foregroundStyle(Color.appTextSecondary)
-                        .font(.title3)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(source.name)
-                            .fontWeight(.medium)
-                        Text(source.folderPath)
-                            .font(.caption)
-                            .foregroundStyle(Color.appTextSecondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    Spacer()
-                    Text(source.dateAdded, style: .date)
-                        .font(.caption)
-                        .foregroundStyle(Color.appTextTertiary)
-                }
-                .padding(.vertical, 2)
-            }
-            .listStyle(.bordered)
-            .overlay {
+        Form {
+            Section {
                 if dataSources.isEmpty && !isLoading {
-                    VStack(spacing: 8) {
+                    VStack(spacing: 6) {
                         Image(systemName: "folder.badge.questionmark")
-                            .font(.title)
-                            .foregroundStyle(Color.appTextSecondary)
+                            .font(.title2)
+                            .foregroundStyle(Color.secondary)
                         Text("No data sources")
-                            .foregroundStyle(Color.appTextSecondary)
+                            .foregroundStyle(Color.secondary)
                         Text("Add folders to watch for video files")
                             .font(.caption)
-                            .foregroundStyle(Color.appTextTertiary)
+                            .foregroundStyle(Color.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                } else {
+                    ForEach(dataSources) { source in
+                        dataSourceRow(source)
                     }
                 }
+            } header: {
+                Text("Folders")
             }
 
-            HStack(spacing: 8) {
-                Button(action: addFolder) {
-                    Image(systemName: "plus")
+            Section {
+                LabeledContent {
+                    Button("Add Folder…", action: addFolder)
+                } label: {
+                    SettingsLabel(
+                        "Folders",
+                        description: "Folders that Skagway will scan when you import. Hover a folder and click Remove to drop it from the list (files on disk are not deleted)."
+                    )
                 }
-                .help("Add a folder")
-
-                Button(action: removeSelected) {
-                    Image(systemName: "minus")
-                }
-                .disabled(selectedId == nil)
-                .help("Remove selected folder")
-
-                Spacer()
-
-                Button("Show in Finder") {
-                    if let id = selectedId,
-                       let source = dataSources.first(where: { $0.id == id })
-                    {
-                        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: source.folderPath)
-                    }
-                }
-                .disabled(selectedId == nil)
-                .controlSize(.small)
+            } header: {
+                Text("Manage")
             }
-            .padding(10)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .task {
             await loadDataSources()
+        }
+    }
+
+    private func dataSourceRow(_ source: DataSource) -> some View {
+        let isHovered = hoveredId == source.id
+        return HStack(spacing: 10) {
+            Image(systemName: "folder.fill")
+                .foregroundStyle(Color.secondary)
+                .font(.title3)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(source.name)
+                    .fontWeight(.medium)
+                Text(source.folderPath)
+                    .font(.caption)
+                    .foregroundStyle(Color.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 8)
+
+            if isHovered {
+                Button("Show in Finder") {
+                    NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: source.folderPath)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Color.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+                Button("Remove") {
+                    remove(source)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Color.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            } else {
+                Text(source.dateAdded, style: .date)
+                    .font(.caption)
+                    .foregroundStyle(Color.secondary)
+            }
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            if hovering {
+                hoveredId = source.id
+            } else if hoveredId == source.id {
+                hoveredId = nil
+            }
         }
     }
 
@@ -118,14 +135,12 @@ struct DataSourcesSettingsView: View {
         }
     }
 
-    private func removeSelected() {
-        guard let id = selectedId,
-              let source = dataSources.first(where: { $0.id == id })
-        else { return }
-
+    private func remove(_ source: DataSource) {
         Task {
             try? await repository.delete(source)
-            selectedId = nil
+            if hoveredId == source.id {
+                hoveredId = nil
+            }
             await loadDataSources()
         }
     }

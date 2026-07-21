@@ -22,7 +22,7 @@ enum SettingsSearchCatalog {
         .init(id: "sheet.library", title: "Library", category: .library, keywords: ["settings"]),
         .init(id: "sheet.video", title: "Video", category: .video, keywords: ["settings"]),
         .init(id: "sheet.dataSources", title: "Data Sources", category: .dataSources, keywords: ["folders", "scan", "import", "watch"]),
-        .init(id: "sheet.fileExt", title: "File Ext", category: .fileExt, keywords: ["extensions", "formats", "mp4", "mov", "mkv"]),
+        .init(id: "sheet.fileExt", title: "Extensions", category: .fileExt, keywords: ["file ext", "formats", "mp4", "mov", "mkv"]),
         .init(id: "sheet.tools", title: "Tools", category: .tools, keywords: ["ffmpeg"]),
         .init(id: "sheet.customMetadata", title: "Custom Metadata", category: .customMetadata, keywords: ["fields", "inspector"]),
 
@@ -158,19 +158,19 @@ enum SettingsSearchCatalog {
             id: "fileExt.extensions",
             title: "Extensions",
             category: .fileExt,
-            keywords: ["video formats", "mp4", "mov", "mkv", "file ext"]
+            keywords: ["extensions", "video formats", "mp4", "mov", "mkv", "file ext"]
         ),
         .init(
             id: "fileExt.add",
             title: "Add Extension",
             category: .fileExt,
-            keywords: ["new extension"]
+            keywords: ["new extension", "file ext"]
         ),
         .init(
             id: "fileExt.reset",
             title: "Reset to Defaults",
             category: .fileExt,
-            keywords: ["extensions"]
+            keywords: ["extensions", "file ext"]
         ),
 
         // Tools
