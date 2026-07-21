@@ -4,6 +4,9 @@ import SwiftUI
 @main
 struct SkagwayApp: App {
     @State private var appState = AppState()
+    @Environment(\.openWindow) private var openWindow
+
+    private static let settingsWindowID = "settings"
 
     var body: some Scene {
         WindowGroup {
@@ -16,6 +19,13 @@ struct SkagwayApp: App {
         }
         .defaultSize(width: 1200, height: 800)
         .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") {
+                    openWindow(id: Self.settingsWindowID)
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
+
             CommandGroup(after: .sidebar) {
                 Button("Grid View") {
                     appState.libraryViewModel?.scrollToSelectedOnViewSwitch = true
@@ -381,8 +391,12 @@ struct SkagwayApp: App {
             }
         }
 
-        Settings {
+        // Custom Settings window (not the system `Settings` scene) so chrome is fully ours.
+        Window("Settings", id: Self.settingsWindowID) {
             SettingsView(appState: appState)
         }
+        .defaultSize(width: 780, height: 560)
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
     }
 }

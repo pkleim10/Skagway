@@ -6,8 +6,11 @@ import UniformTypeIdentifiers
 enum SettingsChrome {
     /// Sidebar background — RGB 21, 24, 26.
     static let sidebar = Color(red: 21 / 255, green: 24 / 255, blue: 26 / 255)
-    /// Detail sheet + heading strip — RGB 35, 39, 40.
+    /// Detail sheet background — RGB 35, 39, 40.
     static let detail = Color(red: 35 / 255, green: 39 / 255, blue: 40 / 255)
+    /// Matches grouped Form section inset so the sheet title lines up with cards.
+    static let sheetTitleInset: CGFloat = 22
+    static let sidebarWidth: CGFloat = 200
 }
 
 // MARK: - Categories
@@ -47,9 +50,9 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
 
 // MARK: - Shell
 
+/// Fully custom Settings UI (hosted in a normal `Window`, not the system `Settings` scene).
 struct SettingsView: View {
     @Bindable var appState: AppState
-    @Environment(\.pixelLength) private var pixelLength
 
     @State private var selectedCategory: SettingsCategory? = .library
     @State private var searchText = ""
@@ -63,114 +66,121 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        Group {
-            if let pool = appState.dbManager?.dbPool, let vm = appState.libraryViewModel {
-                NavigationSplitView {
-                    settingsSidebar
-                } detail: {
-                    settingsDetail(pool: pool, viewModel: vm)
-                }
-                .navigationSplitViewStyle(.balanced)
-                // Hide the system toolbar fill so each column’s background shows under
-                // the title strip (detail heading matches sheet; sidebar stays charcoal).
-                .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-                .searchable(text: $searchText, placement: .sidebar, prompt: "Search")
-                .onAppear {
-                    if selectedCategory == nil {
-                        selectedCategory = .library
-                    }
-                }
-            } else {
-                ContentUnavailableView(
-                    "Open a Library",
-                    systemImage: "books.vertical",
-                    description: Text("Library settings appear once a library is open.")
-                )
-            }
+        HStack(spacing: 0) {
+            settingsSidebar
+                .frame(width: SettingsChrome.sidebarWidth)
+                .frame(maxHeight: .infinity)
+
+            settingsDetail
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(minWidth: 720, minHeight: 520)
+        .onAppear {
+            if selectedCategory == nil {
+                selectedCategory = .library
+            }
+        }
     }
 
-    /// Single stable `List` — swapping Lists when search starts steals focus from the search field.
     private var settingsSidebar: some View {
-        List(selection: $selectedCategory) {
-            // Explicit spacer under Search (~1 rem). contentMargins does not sit between
-            // `.searchable` and the first row the way System Settings spacing does.
-            Color.clear
-                .frame(height: 16)
-                .listRowInsets(EdgeInsets())
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
-                .accessibilityHidden(true)
+        VStack(spacing: 0) {
+            // Search sits in-content (not a system toolbar field) so we own spacing.
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField("Search", text: $searchText)
+                    .textFieldStyle(.plain)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
 
-            if isSearching {
-                ForEach(searchResults) { item in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(item.title)
-                            .foregroundStyle(Color.primary)
-                            .multilineTextAlignment(.leading)
-                        Text(item.category.title)
-                            .font(.caption)
-                            .foregroundStyle(Color.secondary)
+            List(selection: $selectedCategory) {
+                if isSearching {
+                    ForEach(searchResults) { item in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.title)
+                                .foregroundStyle(Color.primary)
+                                .multilineTextAlignment(.leading)
+                            Text(item.category.title)
+                                .font(.caption)
+                                .foregroundStyle(Color.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .tag(item.category)
+                        .onTapGesture {
+                            selectedCategory = item.category
+                            searchText = ""
+                        }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        selectedCategory = item.category
-                        searchText = ""
+                } else {
+                    ForEach(SettingsCategory.allCases) { category in
+                        Label(category.title, systemImage: category.systemImage)
+                            .tag(category)
                     }
                 }
-            } else {
-                ForEach(SettingsCategory.allCases) { category in
-                    Label(category.title, systemImage: category.systemImage)
-                        .tag(category)
+            }
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .overlay {
+                if isSearching && searchResults.isEmpty {
+                    ContentUnavailableView.search(text: searchText)
                 }
             }
         }
-        .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
-        .padding(.top, pixelLength)
-        .background(SettingsChrome.sidebar)
-        .navigationTitle("Settings")
-        .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
-        .overlay {
-            if isSearching && searchResults.isEmpty {
-                ContentUnavailableView.search(text: searchText)
-            }
-        }
+        .background(SettingsChrome.sidebar.ignoresSafeArea(edges: .top))
     }
 
     @ViewBuilder
-    private func settingsDetail(pool: DatabasePool, viewModel: LibraryViewModel) -> some View {
-        Group {
-            switch selectedCategory {
-            case .library:
-                LibrarySettingsView(viewModel: viewModel)
-            case .video:
-                VideoSettingsView(viewModel: viewModel)
-            case .dataSources:
-                DataSourcesSettingsView(dbPool: pool)
-            case .fileExt:
-                FileExtSettingsView()
-            case .tools:
-                ToolsSettingsView(viewModel: viewModel)
-            case .customMetadata:
-                CustomMetadataSettingsView(viewModel: viewModel)
-            case .none:
-                ContentUnavailableView(
-                    "Select a Category",
-                    systemImage: "sidebar.left",
-                    description: Text("Choose a settings category from the sidebar.")
-                )
+    private var settingsDetail: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(selectedCategory?.title ?? "Settings")
+                .font(.title2.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, SettingsChrome.sheetTitleInset)
+                .padding(.top, 10)
+                .padding(.bottom, 8)
+
+            Group {
+                if let pool = appState.dbManager?.dbPool, let vm = appState.libraryViewModel {
+                    switch selectedCategory {
+                    case .library:
+                        LibrarySettingsView(viewModel: vm)
+                    case .video:
+                        VideoSettingsView(viewModel: vm)
+                    case .dataSources:
+                        DataSourcesSettingsView(dbPool: pool)
+                    case .fileExt:
+                        FileExtSettingsView()
+                    case .tools:
+                        ToolsSettingsView(viewModel: vm)
+                    case .customMetadata:
+                        CustomMetadataSettingsView(viewModel: vm)
+                    case .none:
+                        ContentUnavailableView(
+                            "Select a Category",
+                            systemImage: "sidebar.left",
+                            description: Text("Choose a settings category from the sidebar.")
+                        )
+                    }
+                } else {
+                    ContentUnavailableView(
+                        "Open a Library",
+                        systemImage: "books.vertical",
+                        description: Text("Library settings appear once a library is open.")
+                    )
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(.top, pixelLength)
-        .background(SettingsChrome.detail)
-        .navigationTitle(selectedCategory?.title ?? "Settings")
+        .background(SettingsChrome.detail.ignoresSafeArea(edges: .top))
     }
 }
-
 
 // MARK: - Library
 
