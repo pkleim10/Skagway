@@ -22,6 +22,9 @@ dist/
 *.dmg
 packaging/.venv/
 
+# Sparkle EdDSA private key — never commit (see docs/SPARKLE.md)
+secrets/
+
 # Local demo library downloads (use ~/Movies/Skagway-Demo-Library by default)
 demo-library/
 

@@ -35,5 +35,15 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 Mach II Labs. Skagway is free forever.</string>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
+	<key>SUFeedURL</key>
+	<string>https://downloads.machiilabs.com/Skagway.appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>IgBXr+5bwC2fwPBzZsim7vZEkVw5/oOgUbXk9Fjq1wY=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 </dict>
 </plist>

@@ -239,11 +239,17 @@ fi
 cp -f "$VERSIONED_DMG" "$STABLE_DMG"
 
 echo ""
+echo "Emitting Sparkle appcast…"
+bash scripts/emit_sparkle_appcast.sh "$STABLE_DMG" "$DIST_DIR"
+
+echo ""
 echo "✓ Packaged Skagway ${MARKETING} (${NEW_BUILD})"
 echo "  ${VERSIONED_DMG}"
 echo "  ${STABLE_DMG}"
+echo "  ${DIST_DIR}/Skagway.appcast.xml"
 if [[ $NOTARIZE -eq 1 ]]; then
   echo "  Notarized + stapled (Gatekeeper-ready)."
 else
   echo "  Signed DMG only — run without --skip-notarize for public distribution."
 fi
+echo "  Publish ${STABLE_DMG} and Skagway.appcast.xml to downloads.machiilabs.com (docs/SPARKLE.md)."

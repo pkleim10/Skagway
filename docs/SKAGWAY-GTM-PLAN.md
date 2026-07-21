@@ -21,7 +21,7 @@
 - [ ] Part F Track A: v1.0 readiness + organizer supremacy polish (perf, UX, reliability, docs)
 - [ ] Part F Track B: grid chrome MVP; later B2 posters/TMDB; B3 AI Hollywood covers (BYO API key)
 - [ ] Part F Track C: power gaps that win vs Cinematica (notes, richer search, auto-import, near-dupes)
-- [ ] **Check for updates** — in-app + site path for discovering new builds (Sparkle or equivalent for notarized DMG; About / menu item; appcast on machiilabs.com)
+- [ ] **Check for updates** — in-app Sparkle wired (`feature/sparkle-updates`); publish `Skagway.dmg` + `Skagway.appcast.xml` to `downloads.machiilabs.com` when that host is live (`docs/SPARKLE.md`)
 - [ ] **Bug reporting / ticketing / communication** — clear user → studio channel (e.g. support@, GitHub Issues, and/or light in-app “Report a Problem…”); triage workflow Mach II Labs can actually keep up with
 
 **Cancelled (superseded 2026-07-12):** Paddle / LicenseManager / founding Keychain / paid flip for newcomers / Buy CTAs for Skagway. Paid products (e.g. **Ketchikan**) are a separate Mach II Labs product — not Skagway.

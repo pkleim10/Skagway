@@ -71,7 +71,7 @@ Only after this pass should sandboxing/distribution (Phase 4 below) be seriously
 
 ### Phase 4 — Distribution & Longevity
 - **Locked launch path:** direct download via **Developer ID + notarized DMG** (`scripts/package_dmg.sh` → `dist/Skagway.dmg`). Not Mac App Store first; stay unsandboxed so arbitrary folders + optional ffmpeg work.
-- Host DMG on machiilabs.com (product page workstream); Sparkle/appcast later for check-for-updates.
+- Host DMG on downloads.machiilabs.com; Sparkle in-app is implemented — publish `Skagway.appcast.xml` alongside `Skagway.dmg` when downloads go live (`docs/SPARKLE.md`).
 - Long-term maintainability and documentation
 - Full user + developer documentation (web-based) when closer to public release
 
