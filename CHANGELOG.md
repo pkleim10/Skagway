@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.67.0 (build 850) - 2026-07-20
+
 - **Tahoe-style Settings** — Sidebar + detail shell with category search. Descriptions sit under control titles inside the same list row (System Settings style), not as section footers. Library “Exclude corrupt…” and “Confirm deletions” share one grouped list. Shared integer field+chevron stepper; Tools/File Ext Form rows. Data Sources and Custom Metadata list UIs deferred.
 - **Settings cleanup** — Removed unused Video settings “Maximum large preview thumbnail” and “Auto adjust video pane” (VideoMaster leftovers; prefs were never read by current UI).
 - **Context menu** — “Re-encode to MP4…” renamed to “Fix for Built-in Player…” (matches Tools settings copy).
