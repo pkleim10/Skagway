@@ -6,8 +6,8 @@ import UniformTypeIdentifiers
 enum SettingsChrome {
     /// Sidebar background — RGB 21, 24, 26.
     static let sidebar = Color(red: 21 / 255, green: 24 / 255, blue: 26 / 255)
-    /// Detail sheet background behind grouped sections — RGB 34, 39, 40.
-    static let detail = Color(red: 34 / 255, green: 39 / 255, blue: 40 / 255)
+    /// Detail sheet + heading strip — RGB 35, 39, 40.
+    static let detail = Color(red: 35 / 255, green: 39 / 255, blue: 40 / 255)
 }
 
 // MARK: - Categories
@@ -49,6 +49,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
 
 struct SettingsView: View {
     @Bindable var appState: AppState
+    @Environment(\.pixelLength) private var pixelLength
 
     @State private var selectedCategory: SettingsCategory? = .library
     @State private var searchText = ""
@@ -70,6 +71,9 @@ struct SettingsView: View {
                     settingsDetail(pool: pool, viewModel: vm)
                 }
                 .navigationSplitViewStyle(.balanced)
+                // Hide the system toolbar fill so each column’s background shows under
+                // the title strip (detail heading matches sheet; sidebar stays charcoal).
+                .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
                 .searchable(text: $searchText, placement: .sidebar, prompt: "Search")
                 .onAppear {
                     if selectedCategory == nil {
@@ -125,6 +129,7 @@ struct SettingsView: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
+        .padding(.top, pixelLength)
         .background(SettingsChrome.sidebar)
         .navigationTitle("Settings")
         .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
@@ -160,10 +165,12 @@ struct SettingsView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.top, pixelLength)
         .background(SettingsChrome.detail)
         .navigationTitle(selectedCategory?.title ?? "Settings")
     }
 }
+
 
 // MARK: - Library
 
