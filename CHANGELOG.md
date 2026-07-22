@@ -31,6 +31,10 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.70.0 (build 883) - 2026-07-21
+
+- **Sparkle update verification** — Minor bump to exercise Check for Updates against 0.69.0 installs (notarized DMG + appcast).
+
 ## 0.69.0 (build 882) - 2026-07-21
 
 - **Check for Updates (Sparkle)** — Skagway → Check for Updates…; Settings → Library → Automatically check for updates (default off). Feed URL `https://downloads.machiilabs.com/Skagway.appcast.xml`; packaging emits the appcast for publish (see `docs/SPARKLE.md`).

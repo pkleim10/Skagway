@@ -65,6 +65,11 @@ trap cleanup EXIT
 # Stable enclosure name matches the public download URL basename.
 cp -f "$DMG_PATH" "${WORK}/Skagway.dmg"
 
+# Stable URL strategy (Skagway.dmg overwritten each release): always emit a fresh
+# single-item feed. Merging into a prior appcast leaves old items pointing at the
+# same URL with stale signatures/lengths.
+rm -f "$APPCAST_OUT"
+
 GEN_ARGS=(
   --account "$KEY_ACCOUNT"
   --download-url-prefix "$DOWNLOAD_PREFIX"
