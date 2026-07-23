@@ -12,20 +12,43 @@ struct FunComponentView: View {
     /// Content pane fill — everything not occupied by the sidebar.
     var contentColor: Color = Color(red: 36 / 255, green: 40 / 255, blue: 42 / 255)
 
-    /// Inset between content edges and the yellow cards / title.
+    /// Inset between content edges and cards / title.
     private let contentPadding: CGFloat = 22
     /// Header strip above the first card (layout height below the safe area).
     private let titleBandHeight: CGFloat = 56
-    /// Empty placeholder cards — roughly two Settings-style rows.
-    private let emptyCardHeight: CGFloat = 96
     private let cardCornerRadius: CGFloat = 10
-    private let emptyCardCount = 2
 
     /// Card fill inside the content pane.
     var cardColor: Color = Color(red: 43 / 255, green: 47 / 255, blue: 48 / 255)
+    /// Inset row separator inside a card.
+    private let separatorColor = Color(red: 53 / 255, green: 56 / 255, blue: 58 / 255)
+
+    // MARK: Library playground state (not wired to the real Settings store yet)
 
     @State private var excludeCorrupt = false
     @State private var confirmDeletions = true
+    @State private var autoCheckUpdates = UpdateChecker.shared.automaticallyChecksForUpdates
+
+    @State private var showRecentlyAdded = true
+    @State private var recentlyAddedDays = 30
+    @State private var showRecentlyPlayed = true
+    @State private var recentlyPlayedDays = 30
+    @State private var showTopRated = true
+    @State private var topRatedMinRating = 4
+    @State private var showDuplicates = true
+    @State private var showCorrupt = true
+    @State private var showMissing = true
+    @State private var showRecentlyConverted = true
+
+    @State private var columnDuration = true
+    @State private var columnResolution = true
+    @State private var columnSize = true
+    @State private var columnRating = true
+    @State private var columnDateAdded = true
+    @State private var columnPlayCount = false
+    @State private var columnCreated = false
+    @State private var columnLastPlayed = false
+
     @State private var selectedCategory: SettingsCategory? = .library
     @State private var searchText = ""
 
@@ -50,7 +73,6 @@ struct FunComponentView: View {
 
             contentPane
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                // Background only under the title bar; title/cards stay clear of traffic lights.
                 .background(contentColor.ignoresSafeArea(edges: .top))
         }
         .frame(minWidth: 720, minHeight: 520)
@@ -58,11 +80,10 @@ struct FunComponentView: View {
         .background(backgroundColor.ignoresSafeArea())
     }
 
-    // MARK: - Sidebar (mirrors Settings chrome; does not modify Settings)
+    // MARK: - Sidebar
 
     private var sidebar: some View {
         VStack(spacing: 0) {
-            // Search — same structure/spacing as Settings (sits under traffic-light safe area).
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
@@ -116,7 +137,6 @@ struct FunComponentView: View {
 
     private var contentPane: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Center title in the *visible* content band (window top → first card).
             GeometryReader { geo in
                 let safeTop = geo.safeAreaInsets.top
                 let visualBandHeight = safeTop + titleBandHeight
@@ -129,45 +149,138 @@ struct FunComponentView: View {
             .frame(height: titleBandHeight)
 
             ScrollView {
-                VStack(spacing: 16) {
-                    sampleSettingsCard
-
-                    ForEach(0..<emptyCardCount, id: \.self) { _ in
-                        emptyCard
-                    }
-                }
-                .padding(.horizontal, contentPadding)
-                .padding(.bottom, contentPadding)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+                // Library settings only for now — sidebar selection comes later.
+                librarySettingsContent
+                    .padding(.horizontal, contentPadding)
+                    .padding(.bottom, contentPadding)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
             }
         }
     }
 
-    /// First card with two sample settings rows separated like Settings Form sections.
-    private var sampleSettingsCard: some View {
+    private var librarySettingsContent: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            settingsCard {
+                describedToggleRow(
+                    title: "Exclude corrupt files from filters",
+                    description: "Corrupt files (missing duration and resolution) will be hidden from Library, Collections, Rating, and Tag filters. They remain visible in the Corrupt filter and name search.",
+                    isOn: $excludeCorrupt
+                )
+                cardSeparator
+                describedToggleRow(
+                    title: "Confirm deletions",
+                    description: "When enabled, a confirmation dialog will appear before moving files to Trash.",
+                    isOn: $confirmDeletions
+                )
+            }
+
+            sectionBlock(title: "Updates") {
+                settingsCard {
+                    describedToggleRow(
+                        title: "Automatically check for updates",
+                        description: "Occasionally checks downloads.machiilabs.com for a newer Skagway build. Does not send usage analytics.",
+                        isOn: Binding(
+                            get: { autoCheckUpdates },
+                            set: { newValue in
+                                autoCheckUpdates = newValue
+                                UpdateChecker.shared.automaticallyChecksForUpdates = newValue
+                            }
+                        )
+                    )
+                }
+            }
+
+            sectionBlock(title: "Smart Libraries") {
+                settingsCard {
+                    smartLibraryRow("Recently Added", isOn: $showRecentlyAdded) {
+                        SettingsIntegerStepper(value: $recentlyAddedDays, range: 1...365, unit: "days")
+                            .disabled(!showRecentlyAdded)
+                            .opacity(showRecentlyAdded ? 1 : 0.45)
+                    }
+                    cardSeparator
+                    smartLibraryRow("Recently Played", isOn: $showRecentlyPlayed) {
+                        SettingsIntegerStepper(value: $recentlyPlayedDays, range: 1...365, unit: "days")
+                            .disabled(!showRecentlyPlayed)
+                            .opacity(showRecentlyPlayed ? 1 : 0.45)
+                    }
+                    cardSeparator
+                    smartLibraryRow("Top Rated", isOn: $showTopRated) {
+                        RatingView(rating: topRatedMinRating, size: 14) { newRating in
+                            topRatedMinRating = max(newRating, 1)
+                        }
+                        .disabled(!showTopRated)
+                        .opacity(showTopRated ? 1 : 0.4)
+                    }
+                    cardSeparator
+                    plainToggleRow("Duplicates", isOn: $showDuplicates)
+                    cardSeparator
+                    plainToggleRow("Corrupt", isOn: $showCorrupt)
+                    cardSeparator
+                    plainToggleRow("Missing", isOn: $showMissing)
+                    cardSeparator
+                    plainToggleRow("Recently Converted", isOn: $showRecentlyConverted)
+                }
+            }
+
+            sectionBlock(title: "List view columns") {
+                settingsCard {
+                    listColumnNameRow
+                    cardSeparator
+                    plainToggleRow("Duration", isOn: $columnDuration)
+                    cardSeparator
+                    plainToggleRow("Resolution", isOn: $columnResolution)
+                    cardSeparator
+                    plainToggleRow("File size", isOn: $columnSize)
+                    cardSeparator
+                    plainToggleRow("Rating", isOn: $columnRating)
+                    cardSeparator
+                    plainToggleRow("Date added", isOn: $columnDateAdded)
+                    cardSeparator
+                    plainToggleRow("Plays", isOn: $columnPlayCount)
+                    cardSeparator
+                    plainToggleRow("Created", isOn: $columnCreated)
+                    cardSeparator
+                    plainToggleRow("Last played", isOn: $columnLastPlayed)
+                    cardSeparator
+                    Text("No listable custom metadata fields (multiline “Text” fields are excluded). Add fields in Custom Metadata settings.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    // MARK: - Card / row helpers
+
+    private func sectionBlock<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+            content()
+        }
+    }
+
+    private func settingsCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         VStack(spacing: 0) {
-            settingsRow(
-                title: "Exclude corrupt files from filters",
-                description: "Corrupt files (missing duration and resolution) will be hidden from Library, Collections, Rating, and Tag filters. They remain visible in the Corrupt filter and name search.",
-                isOn: $excludeCorrupt
-            )
-
-            Rectangle()
-                .fill(Color(red: 53 / 255, green: 56 / 255, blue: 58 / 255))
-                .frame(height: 1)
-                .padding(.horizontal, 14)
-
-            settingsRow(
-                title: "Confirm deletions",
-                description: "When enabled, a confirmation dialog will appear before moving files to Trash.",
-                isOn: $confirmDeletions
-            )
+            content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(cardColor, in: RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
     }
 
-    private func settingsRow(title: String, description: String, isOn: Binding<Bool>) -> some View {
+    private var cardSeparator: some View {
+        Rectangle()
+            .fill(separatorColor)
+            .frame(height: 1)
+            .padding(.horizontal, 14)
+    }
+
+    private func describedToggleRow(title: String, description: String, isOn: Binding<Bool>) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .center, spacing: 12) {
                 Text(title)
@@ -191,10 +304,53 @@ struct FunComponentView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var emptyCard: some View {
-        RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
-            .fill(cardColor)
-            .frame(maxWidth: .infinity)
-            .frame(height: emptyCardHeight)
+    private func plainToggleRow(_ title: String, isOn: Binding<Bool>) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(title)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Toggle("", isOn: isOn)
+                .toggleStyle(.switch)
+                .labelsHidden()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func smartLibraryRow<Trailing: View>(
+        _ title: String,
+        isOn: Binding<Bool>,
+        @ViewBuilder trailing: () -> Trailing
+    ) -> some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Toggle("", isOn: isOn)
+                .toggleStyle(.switch)
+                .labelsHidden()
+
+            trailing()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var listColumnNameRow: some View {
+        HStack(alignment: .firstTextBaseline) {
+            SettingsLabel(
+                "Name",
+                description: "Always visible. Choose which metadata columns appear in list view. Up to 16 custom columns can be shown at once (alphabetically). Reorder and resize visible columns from the table header."
+            )
+            Spacer(minLength: 8)
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(Color.secondary)
+                .help("Always visible")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
