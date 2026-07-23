@@ -3,7 +3,7 @@ import GRDB
 import SwiftUI
 
 /// Playground window for experimenting with custom chrome (independent of Settings).
-/// Library / Video / Extensions / Data Sources sheets bind to the same stores as Settings.
+/// Library / Video / Extensions / Data Sources / Tools / Custom Metadata sheets bind to the same stores as Settings.
 struct FunComponentView: View {
     @Bindable var appState: AppState
 
@@ -39,6 +39,15 @@ struct FunComponentView: View {
     @State private var dataSources: [DataSource] = []
     @State private var hoveredDataSourceId: Int64?
     @State private var dataSourcesLoading = false
+
+    /// Tools sheet (FFmpeg path via `LibraryViewModel`).
+    @State private var showingFFmpegFilePicker = false
+
+    /// Custom Metadata sheet.
+    @State private var hoveredCustomFieldId: UUID?
+    @State private var showingAddCustomField = false
+    @State private var draftCustomFieldName = ""
+    @State private var draftCustomFieldType: CustomMetadataValueType = .string
 
     private var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -159,13 +168,35 @@ struct FunComponentView: View {
                         } else {
                             libraryRequiredPlaceholder
                         }
-                    case .tools, .customMetadata:
-                        EmptyView()
+                    case .tools:
+                        if let viewModel = appState.libraryViewModel {
+                            toolsSettingsContent(viewModel: viewModel)
+                        } else {
+                            libraryRequiredPlaceholder
+                        }
+                    case .customMetadata:
+                        if let viewModel = appState.libraryViewModel {
+                            customMetadataSettingsContent(viewModel: viewModel)
+                        } else {
+                            libraryRequiredPlaceholder
+                        }
                     }
                 }
                 .padding(.horizontal, contentPadding)
                 .padding(.bottom, contentPadding)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .fileImporter(
+                isPresented: $showingFFmpegFilePicker,
+                allowedContentTypes: [.unixExecutable, .item],
+                allowsMultipleSelection: false
+            ) { result in
+                if case .success(let urls) = result, let url = urls.first {
+                    appState.libraryViewModel?.ffmpegUserPath = url.path
+                }
+            }
+            .sheet(isPresented: $showingAddCustomField) {
+                addCustomFieldSheet
             }
         }
     }
@@ -660,6 +691,236 @@ struct FunComponentView: View {
         dataSourcesLoading = true
         dataSources = (try? await repository.fetchAll()) ?? []
         dataSourcesLoading = false
+    }
+
+    // MARK: - Tools
+
+    @ViewBuilder
+    private func toolsSettingsContent(viewModel: LibraryViewModel) -> some View {
+        @Bindable var viewModel = viewModel
+
+        VStack(alignment: .leading, spacing: 20) {
+            sectionBlock(title: "FFmpeg") {
+                settingsCard {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Status")
+                            .font(.body.weight(.semibold))
+                        Text("FFmpeg repairs videos that won’t play in Skagway’s built-in player (“Fix for Built-in Player” in the video context menu).")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        ffmpegStatusLabel(viewModel: viewModel)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    cardSeparator
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Path")
+                            .font(.body.weight(.semibold))
+                        Text("Skagway auto-discovers ffmpeg at standard Homebrew and system paths. Set a custom path if yours is installed elsewhere.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: 8) {
+                            TextField("", text: $viewModel.ffmpegUserPath)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.callout.monospaced())
+                                .multilineTextAlignment(.leading)
+                                .labelsHidden()
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Button("Choose…") { showingFFmpegFilePicker = true }
+                            if !viewModel.ffmpegUserPath.isEmpty {
+                                Button("Clear") { viewModel.ffmpegUserPath = "" }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func ffmpegStatusLabel(viewModel: LibraryViewModel) -> some View {
+        if let resolved = viewModel.resolvedFFmpegPath {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text(resolved)
+                    .font(.callout.monospaced())
+                    .foregroundStyle(Color.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(resolved)
+                if viewModel.ffmpegUserPath.isEmpty {
+                    Text("Auto")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        } else {
+            HStack(spacing: 6) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.red)
+                Text(viewModel.ffmpegUserPath.isEmpty ? "Not found at standard paths" : "Not found at configured path")
+                    .font(.callout)
+                    .foregroundStyle(Color.secondary)
+            }
+        }
+    }
+
+    // MARK: - Custom Metadata
+
+    @ViewBuilder
+    private func customMetadataSettingsContent(viewModel: LibraryViewModel) -> some View {
+        @Bindable var viewModel = viewModel
+
+        VStack(alignment: .leading, spacing: 20) {
+            sectionBlock(title: "Fields") {
+                Text("Define fields for custom metadata. Edit per-video values in the Inspector. Change a field’s type with the menu; hover a row and click Remove to delete it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 4)
+                    .padding(.bottom, 2)
+
+                settingsCard {
+                    if viewModel.customMetadataFieldDefinitions.isEmpty {
+                        VStack(spacing: 6) {
+                            Image(systemName: "square.grid.3x3.square.badge.ellipsis")
+                                .font(.title2)
+                                .foregroundStyle(Color.secondary)
+                            Text("No custom fields")
+                                .foregroundStyle(Color.secondary)
+                            Text("Add a field to use in the Inspector")
+                                .font(.caption)
+                                .foregroundStyle(Color.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 16)
+                    } else {
+                        ForEach(Array(viewModel.customMetadataFieldDefinitions.enumerated()), id: \.element.id) { index, field in
+                            if index > 0 { cardSeparator }
+                            customMetadataFieldRow(field, viewModel: viewModel)
+                        }
+                    }
+                }
+            }
+
+            sectionBlock(title: "Manage") {
+                settingsCard {
+                    describedTrailingRow(
+                        title: "New field",
+                        description: "Choose a name and type in the dialog. The field appears in the list above and in the Inspector."
+                    ) {
+                        Button("Add Field…") {
+                            draftCustomFieldName = ""
+                            draftCustomFieldType = .string
+                            showingAddCustomField = true
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func customMetadataFieldRow(
+        _ field: CustomMetadataFieldDefinition,
+        viewModel: LibraryViewModel
+    ) -> some View {
+        let isHovered = hoveredCustomFieldId == field.id
+        return HStack(spacing: 12) {
+            Text(field.name)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button("Remove") {
+                viewModel.removeCustomMetadataFields(ids: [field.id])
+                if hoveredCustomFieldId == field.id {
+                    hoveredCustomFieldId = nil
+                }
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(Color.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .help("Remove \(field.name)")
+            .opacity(isHovered ? 1 : 0)
+            .allowsHitTesting(isHovered)
+            .accessibilityHidden(!isHovered)
+
+            Picker(
+                "",
+                selection: Binding(
+                    get: { field.valueType },
+                    set: { viewModel.updateCustomMetadataFieldType(id: field.id, valueType: $0) }
+                )
+            ) {
+                ForEach(CustomMetadataValueType.allCases) { t in
+                    Text(t.displayName).tag(t)
+                }
+            }
+            .labelsHidden()
+            .buttonStyle(.borderless)
+            .fixedSize()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            if hovering {
+                hoveredCustomFieldId = field.id
+            } else if hoveredCustomFieldId == field.id {
+                hoveredCustomFieldId = nil
+            }
+        }
+    }
+
+    private var addCustomFieldSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Add Custom Field")
+                .font(.title2.weight(.semibold))
+
+            Form {
+                TextField("Name", text: $draftCustomFieldName)
+                Picker("Type", selection: $draftCustomFieldType) {
+                    ForEach(CustomMetadataValueType.allCases) { t in
+                        Text(t.displayName).tag(t)
+                    }
+                }
+            }
+            .formStyle(.grouped)
+            .frame(minWidth: 360)
+
+            HStack {
+                Spacer()
+                Button("Cancel") {
+                    showingAddCustomField = false
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Button("Add") {
+                    commitAddCustomField()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(draftCustomFieldName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 420)
+    }
+
+    private func commitAddCustomField() {
+        let trimmed = draftCustomFieldName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let viewModel = appState.libraryViewModel else { return }
+        _ = viewModel.addCustomMetadataField(name: trimmed, valueType: draftCustomFieldType)
+        showingAddCustomField = false
     }
 
     // MARK: - Card / row helpers
