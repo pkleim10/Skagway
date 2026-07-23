@@ -391,8 +391,8 @@ struct FunComponentView: View {
     private func sectionBlock<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .font(.headline.weight(.bold))
+                .foregroundStyle(.primary)
                 .padding(.horizontal, 4)
             content()
         }
