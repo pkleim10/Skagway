@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.71.0 (build 889) - 2026-07-22
+
 - **Bottom activity strip** — Long-running work (scan, fingerprint, metadata import/export, re-encode, move, bulk delete) and transient errors move to a bottom strip under the wall/inspector split. Header keeps the video count; conversion/move queues collapse to icon-only when the strip already shows that job.
 - **Install while running after DMG/Sparkle** — `build_and_install.sh` no longer bails when `com.apple.macl` blocks in-place rsync; it rename-asides and replaces even if Skagway is open (old binary stays mapped until relaunch).
 - **Cross-volume move progress + Abort** — Moves use Darwin `copyfile` with live % (queue + activity strip). Per-job Abort and **Abort All** stop the in-flight copy (latch + `COPYFILE_QUIT`), drop the `.moving` partial, and clear queued jobs; source files stay untouched.
