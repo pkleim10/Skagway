@@ -140,7 +140,7 @@ struct LibraryListView: View {
     let thumbnailService: ThumbnailService
     @Binding var scrollPositionRow: Int?
 
-    @State private var filmstripVideo: Video?
+    @State private var filmstripSession: FilmstripModifySession?
     @FocusState private var isRenameFocused: Bool
     @State private var scrollToRow: Int?
     @State private var thumbnailPopoverVideoId: String?
@@ -268,7 +268,8 @@ struct LibraryListView: View {
                 .help(isMoving ? "Move already in progress" : "")
                 Divider()
                 Button("Modify Filmstrip\u{2026}") {
-                    filmstripVideo = video
+                    let selected = viewModel.filteredVideos.filter { ids.contains($0.id) }
+                    filmstripSession = FilmstripModifySession(videos: selected)
                 }
                 Button("Regenerate Thumbnail") {
                     let selected = viewModel.filteredVideos.filter { ids.contains($0.id) }
@@ -339,13 +340,13 @@ struct LibraryListView: View {
                 Task { await viewModel.recordPlay(for: video) }
             }
         }
-        .sheet(item: $filmstripVideo) { video in
+        .sheet(item: $filmstripSession) { session in
             FilmstripConfigView(
-                video: video,
+                videos: session.videos,
                 thumbnailService: thumbnailService,
                 defaultRows: viewModel.defaultFilmstripRows,
                 defaultColumns: viewModel.defaultFilmstripColumns
-            ) { _ in
+            ) {
                 viewModel.filmstripRefreshId &+= 1
             }
         }

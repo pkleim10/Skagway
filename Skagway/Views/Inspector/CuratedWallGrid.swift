@@ -54,7 +54,7 @@ struct CuratedWallGrid: View {
     @State private var lastClickedId: String?
     @FocusState private var renameFocus: Bool
     @State private var selectionStore = CardSelectionStore()
-    @State private var filmstripVideo: Video?
+    @State private var filmstripSession: FilmstripModifySession?
 
     // Max from the full-window mock; live `columns` is the source of truth for ↑/↓ row steps
     // in ContentView and for scroll-to-row math below.
@@ -183,7 +183,10 @@ struct CuratedWallGrid: View {
                             .help(isMoving ? "Move already in progress" : "")
                             Divider()
                             Button("Modify Filmstrip\u{2026}") {
-                                filmstripVideo = video
+                                let ids = viewModel.selectedVideoIds.contains(video.id)
+                                    ? viewModel.selectedVideoIds : [video.id]
+                                let selected = viewModel.filteredVideos.filter { ids.contains($0.id) }
+                                filmstripSession = FilmstripModifySession(videos: selected)
                             }
                             Button("Regenerate Thumbnail") {
                                 let ids = viewModel.selectedVideoIds.contains(video.id)
@@ -303,13 +306,13 @@ struct CuratedWallGrid: View {
             .onChange(of: cols, initial: true) { _, n in
                 if Self.columns != n { Self.columns = n }
             }
-        .sheet(item: $filmstripVideo) { video in
+        .sheet(item: $filmstripSession) { session in
             FilmstripConfigView(
-                video: video,
+                videos: session.videos,
                 thumbnailService: thumbnailService,
                 defaultRows: viewModel.defaultFilmstripRows,
                 defaultColumns: viewModel.defaultFilmstripColumns
-            ) { _ in
+            ) {
                 viewModel.filmstripRefreshId &+= 1
             }
         }
