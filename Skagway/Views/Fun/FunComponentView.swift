@@ -28,7 +28,6 @@ struct FunComponentView: View {
     @State private var confirmDeletions = true
     @State private var selectedCategory: SettingsCategory? = .library
     @State private var searchText = ""
-    @State private var sidebarVisible = true
 
     private var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -44,12 +43,10 @@ struct FunComponentView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            if sidebarVisible {
-                sidebar
-                    .frame(width: sidebarWidth)
-                    .frame(maxHeight: .infinity)
-                    .background(sidebarColor.ignoresSafeArea(edges: .top))
-            }
+            sidebar
+                .frame(width: sidebarWidth)
+                .frame(maxHeight: .infinity)
+                .background(sidebarColor.ignoresSafeArea(edges: .top))
 
             contentPane
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -59,34 +56,13 @@ struct FunComponentView: View {
         .frame(minWidth: 720, minHeight: 520)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(backgroundColor.ignoresSafeArea())
-        .animation(.easeInOut(duration: 0.2), value: sidebarVisible)
     }
 
     // MARK: - Sidebar (mirrors Settings chrome; does not modify Settings)
 
     private var sidebar: some View {
         VStack(spacing: 0) {
-            // Sidebar “hide” control — sits under the traffic-light safe area.
-            HStack {
-                Button {
-                    sidebarVisible = false
-                } label: {
-                    Image(systemName: "sidebar.left")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Hide Sidebar")
-
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 10)
-            .padding(.top, 4)
-            .padding(.bottom, 4)
-
-            // Search — same structure/spacing as Settings.
+            // Search — same structure/spacing as Settings (sits under traffic-light safe area).
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
@@ -97,7 +73,7 @@ struct FunComponentView: View {
             .padding(.vertical, 6)
             .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .padding(.horizontal, 12)
-            .padding(.top, 4)
+            .padding(.top, 8)
             .padding(.bottom, 12)
 
             List(selection: $selectedCategory) {
@@ -140,26 +116,6 @@ struct FunComponentView: View {
 
     private var contentPane: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // When sidebar is hidden, offer a way to bring it back (top-leading of content).
-            if !sidebarVisible {
-                HStack {
-                    Button {
-                        sidebarVisible = true
-                    } label: {
-                        Image(systemName: "sidebar.left")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 28, height: 28)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("Show Sidebar")
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 10)
-                .padding(.top, 4)
-            }
-
             // Center title in the *visible* content band (window top → first card).
             GeometryReader { geo in
                 let safeTop = geo.safeAreaInsets.top
