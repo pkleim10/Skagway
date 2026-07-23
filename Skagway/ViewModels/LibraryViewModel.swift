@@ -1581,14 +1581,14 @@ final class LibraryViewModel {
         }
     }
 
-    var defaultFilmstripColumns: Int = 4 {
+    var defaultFilmstripColumns: Int = 5 {
         didSet {
             UserDefaults.standard.set(defaultFilmstripColumns, forKey: Self.filmstripColumnsKey)
         }
     }
 
     private(set) var lastAppliedFilmstripRows: Int = 2
-    private(set) var lastAppliedFilmstripColumns: Int = 4
+    private(set) var lastAppliedFilmstripColumns: Int = 5
 
     var filmstripLayoutChanged: Bool {
         defaultFilmstripRows != lastAppliedFilmstripRows || defaultFilmstripColumns != lastAppliedFilmstripColumns
@@ -4333,18 +4333,23 @@ final class LibraryViewModel {
     }
 
     func clearFilmstripCacheAndMarkApplied() async {
-        thumbnailService.deleteAllFilmstrips()
+        let rows = defaultFilmstripRows
+        let cols = defaultFilmstripColumns
+        // Epoch bump makes every prior on-disk/in-memory filmstrip a miss immediately.
+        thumbnailService.invalidateAllFilmstrips()
+
         if let selectedId = lastSelectedVideoId ?? selectedVideoIds.first,
            let video = videos.first(where: { $0.filePath == selectedId })
         {
-            _ = try? await thumbnailService.generateFilmstrip(
+            _ = try? await thumbnailService.regenerateFilmstrip(
                 for: video,
-                rows: defaultFilmstripRows,
-                columns: defaultFilmstripColumns
+                rows: rows,
+                columns: cols
             )
         }
-        lastAppliedFilmstripRows = defaultFilmstripRows
-        lastAppliedFilmstripColumns = defaultFilmstripColumns
+
+        lastAppliedFilmstripRows = rows
+        lastAppliedFilmstripColumns = cols
         UserDefaults.standard.set(lastAppliedFilmstripRows, forKey: Self.lastAppliedFilmstripRowsKey)
         UserDefaults.standard.set(lastAppliedFilmstripColumns, forKey: Self.lastAppliedFilmstripColumnsKey)
         filmstripRefreshId &+= 1

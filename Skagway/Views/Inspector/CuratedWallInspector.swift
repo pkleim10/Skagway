@@ -332,7 +332,11 @@ struct CuratedWallInspector: View {
         } else {
             if let img = thumbnailService.loadFilmstrip(for: v.filePath) {
                 await MainActor.run { filmstrip = img }
-            } else if let img = try? await thumbnailService.generateFilmstrip(for: v) {
+            } else if let img = try? await thumbnailService.generateFilmstrip(
+                for: v,
+                rows: viewModel.defaultFilmstripRows,
+                columns: viewModel.defaultFilmstripColumns
+            ) {
                 await MainActor.run { filmstrip = img }
             }
         }

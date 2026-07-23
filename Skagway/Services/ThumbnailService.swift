@@ -120,6 +120,11 @@ final class ThumbnailService: @unchecked Sendable {
 
     private static let filmstripCachePrefix = "_filmstrip"
     private static let detailPreviewCachePrefix = "_detailPreview"
+    private static let filmstripEpochKey = "Skagway.filmstripCacheEpoch"
+
+    /// Bumped by Settings → Regenerate filmstrips so prior on-disk composites become unreachable
+    /// without waiting on deleting thousands of cache files (see `invalidateAllFilmstrips()`).
+    private var filmstripEpoch: Int
 
     /// Fixed cell footprint (points) used by `buildFilmstrip` for every composite. This is the
     /// layout contract that lets `filmstripGrid(in:)` recover rows/columns from a cached image,
@@ -154,6 +159,7 @@ final class ThumbnailService: @unchecked Sendable {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         cacheDirectory = dir
         memoryCache.countLimit = 5000
+        filmstripEpoch = UserDefaults.standard.object(forKey: Self.filmstripEpochKey) as? Int ?? 0
     }
 
     private func pathHashString(for filePath: String) -> String {
@@ -166,7 +172,17 @@ final class ThumbnailService: @unchecked Sendable {
     }
 
     func filmstripURL(for filePath: String) -> URL {
-        cacheDirectory.appendingPathComponent("\(pathHashString(for: filePath))_filmstrip.jpg")
+        let hash = pathHashString(for: filePath)
+        // Epoch 0 keeps the legacy unversioned filename so existing caches keep working until
+        // the first Settings → Regenerate (which advances the epoch).
+        if filmstripEpoch == 0 {
+            return cacheDirectory.appendingPathComponent("\(hash)_filmstrip.jpg")
+        }
+        return cacheDirectory.appendingPathComponent("\(hash)_filmstrip_e\(filmstripEpoch).jpg")
+    }
+
+    private func filmstripMemoryKey(for filePath: String) -> NSString {
+        (filePath + Self.filmstripCachePrefix + "_e\(filmstripEpoch)") as NSString
     }
 
     /// Disk path for hi-res detail still: `<hash>_detail_<longEdge>.jpg`.
@@ -217,7 +233,7 @@ final class ThumbnailService: @unchecked Sendable {
     }
 
     func loadFilmstrip(for filePath: String) -> NSImage? {
-        let memKey = (filePath + Self.filmstripCachePrefix) as NSString
+        let memKey = filmstripMemoryKey(for: filePath)
         if let cached = memoryCache.object(forKey: memKey) {
             return cached
         }
@@ -461,10 +477,12 @@ final class ThumbnailService: @unchecked Sendable {
         return cacheURL
     }
 
-    func generateFilmstrip(for video: Video, rows: Int = 2, columns: Int = 4) async throws -> NSImage {
+    func generateFilmstrip(for video: Video, rows: Int = 2, columns: Int = 5) async throws -> NSImage {
         let cacheURL = filmstripURL(for: video.filePath)
-        let memKey = (video.filePath + Self.filmstripCachePrefix) as NSString
+        let memKey = filmstripMemoryKey(for: video.filePath)
 
+        // Any cached composite wins (including per-video Modify Filmstrip overrides whose
+        // grid may differ from the current Settings default).
         if let cached = memoryCache.object(forKey: memKey) {
             return cached
         }
@@ -479,11 +497,25 @@ final class ThumbnailService: @unchecked Sendable {
     }
 
     func regenerateFilmstrip(for video: Video, rows: Int, columns: Int) async throws -> NSImage {
+        cancelInflightFilmstrips(for: video.filePath)
         let cacheURL = filmstripURL(for: video.filePath)
-        let memKey = (video.filePath + Self.filmstripCachePrefix) as NSString
+        let memKey = filmstripMemoryKey(for: video.filePath)
         try? FileManager.default.removeItem(at: cacheURL)
         memoryCache.removeObject(forKey: memKey)
         return try await runFilmstripBuildWithGate(for: video, rows: rows, columns: columns)
+    }
+
+    /// Drop any in-flight filmstrip builds for this path so a slower older layout cannot
+    /// overwrite a newer `regenerateFilmstrip` / different-size generation.
+    private func cancelInflightFilmstrips(for filePath: String) {
+        let prefix = "\(filePath)\u{1e}fs\u{1e}"
+        inflightLock.lock()
+        let keys = inflightFilmstrips.keys.filter { $0.hasPrefix(prefix) }
+        let tasks = keys.compactMap { inflightFilmstrips.removeValue(forKey: $0) }
+        inflightLock.unlock()
+        for task in tasks {
+            task.cancel()
+        }
     }
 
     private func filmstripInflightKey(filePath: String, rows: Int, columns: Int) -> String {
@@ -532,9 +564,13 @@ final class ThumbnailService: @unchecked Sendable {
 
     private func buildFilmstrip(for video: Video, rows: Int, columns: Int) async throws -> NSImage {
         let cacheURL = filmstripURL(for: video.filePath)
-        let memKey = (video.filePath + Self.filmstripCachePrefix) as NSString
+        let memKey = filmstripMemoryKey(for: video.filePath)
         let totalFrames = rows * columns
         let url = video.url
+
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw ThumbnailError.fileNotFound
+        }
 
         let frames: [CGImage] = try await withTimeout(seconds: 30) {
             let asset = AVURLAsset(url: url)
@@ -603,6 +639,7 @@ final class ThumbnailService: @unchecked Sendable {
             throw ThumbnailError.encodingFailed
         }
 
+        try Task.checkCancellation()
         try jpegData.write(to: cacheURL)
         memoryCache.setObject(compositeImage, forKey: memKey)
         return compositeImage
@@ -861,15 +898,50 @@ final class ThumbnailService: @unchecked Sendable {
         memoryCache.setObject(nsImage, forKey: memoryKey)
     }
 
-    func deleteAllFilmstrips() {
+    /// Settings → Regenerate filmstrips: advance the cache epoch so every prior composite is
+    /// immediately a miss (including files that fail to delete while an `NSImage` still holds them).
+    /// Orphaned files are removed in the background.
+    func invalidateAllFilmstrips() {
+        cancelAllInflightFilmstrips()
         managementLock.lock()
-        defer { managementLock.unlock() }
-        let fm = FileManager.default
-        guard let contents = try? fm.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: nil) else { return }
-        for url in contents where url.lastPathComponent.hasSuffix("_filmstrip.jpg") {
-            try? fm.removeItem(at: url)
-        }
+        filmstripEpoch &+= 1
+        UserDefaults.standard.set(filmstripEpoch, forKey: Self.filmstripEpochKey)
+        managementLock.unlock()
         memoryCache.removeAllObjects()
+
+        let directory = cacheDirectory
+        Task.detached(priority: .utility) {
+            Self.deleteAllFilmstripFiles(in: directory)
+        }
+    }
+
+    /// Legacy name kept for call sites; now invalidates via epoch rather than relying solely on deletes.
+    func deleteAllFilmstrips() {
+        invalidateAllFilmstrips()
+    }
+
+    private static func deleteAllFilmstripFiles(in directory: URL) {
+        let fm = FileManager.default
+        guard let enumerator = fm.enumerator(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        while let item = enumerator.nextObject() as? URL {
+            let name = item.lastPathComponent
+            guard name.contains("_filmstrip") && name.hasSuffix(".jpg") else { continue }
+            try? fm.removeItem(at: item)
+        }
+    }
+
+    private func cancelAllInflightFilmstrips() {
+        inflightLock.lock()
+        let tasks = Array(inflightFilmstrips.values)
+        inflightFilmstrips.removeAll()
+        inflightLock.unlock()
+        for task in tasks {
+            task.cancel()
+        }
     }
 
     func migrateCacheKey(from oldFilePath: String, to newFilePath: String) {
@@ -912,8 +984,8 @@ final class ThumbnailService: @unchecked Sendable {
             memoryCache.setObject(image, forKey: newKey)
             memoryCache.removeObject(forKey: oldKey)
         }
-        let oldFsKey = (oldFilePath + Self.filmstripCachePrefix) as NSString
-        let newFsKey = (newFilePath + Self.filmstripCachePrefix) as NSString
+        let oldFsKey = filmstripMemoryKey(for: oldFilePath)
+        let newFsKey = filmstripMemoryKey(for: newFilePath)
         if let image = memoryCache.object(forKey: oldFsKey) {
             memoryCache.setObject(image, forKey: newFsKey)
             memoryCache.removeObject(forKey: oldFsKey)
@@ -946,11 +1018,13 @@ final class ThumbnailService: @unchecked Sendable {
 enum ThumbnailError: Error, LocalizedError {
     case encodingFailed
     case generationFailed
+    case fileNotFound
 
     var errorDescription: String? {
         switch self {
         case .encodingFailed: return "Failed to encode thumbnail image"
         case .generationFailed: return "Failed to generate thumbnail"
+        case .fileNotFound: return "File does not exist"
         }
     }
 }

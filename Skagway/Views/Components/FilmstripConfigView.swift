@@ -4,14 +4,15 @@ struct FilmstripConfigView: View {
     let video: Video
     let thumbnailService: ThumbnailService
     var defaultRows: Int = 2
-    var defaultColumns: Int = 4
+    var defaultColumns: Int = 5
     let onComplete: (NSImage) -> Void
 
     @Environment(\.dismiss) private var dismiss
 
     @State private var rows: Int = 2
-    @State private var columns: Int = 4
+    @State private var columns: Int = 5
     @State private var isGenerating = false
+    @State private var generateErrorMessage: String?
 
     private var totalFrames: Int { rows * columns }
 
@@ -34,6 +35,13 @@ struct FilmstripConfigView: View {
             Text("\(totalFrames) frames")
                 .font(.callout)
                 .foregroundStyle(Color.appTextSecondary)
+
+            if let generateErrorMessage {
+                Text(generateErrorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             HStack {
                 Button("Cancel") { dismiss() }
@@ -67,6 +75,7 @@ struct FilmstripConfigView: View {
         .onAppear {
             rows = defaultRows
             columns = defaultColumns
+            generateErrorMessage = nil
         }
     }
 
@@ -108,13 +117,24 @@ struct FilmstripConfigView: View {
 
     private func generate() {
         isGenerating = true
-        Task {
-            if let image = try? await thumbnailService.regenerateFilmstrip(
-                for: video, rows: rows, columns: columns
-            ) {
+        generateErrorMessage = nil
+        Task { @MainActor in
+            do {
+                let image = try await thumbnailService.regenerateFilmstrip(
+                    for: video, rows: rows, columns: columns
+                )
                 onComplete(image)
+                dismiss()
+            } catch {
+                isGenerating = false
+                if let thumbError = error as? ThumbnailError {
+                    generateErrorMessage = thumbError.errorDescription
+                        ?? "Couldn’t generate filmstrip."
+                } else {
+                    generateErrorMessage =
+                        "Couldn’t generate filmstrip. Try a shorter grid or a different video."
+                }
             }
-            dismiss()
         }
     }
 }

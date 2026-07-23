@@ -37,6 +37,7 @@ enum PrefsKeys {
     static let filmstripColumns = "Skagway.filmstripColumns"
     static let lastAppliedFilmstripRows = "Skagway.lastAppliedFilmstripRows"
     static let lastAppliedFilmstripColumns = "Skagway.lastAppliedFilmstripColumns"
+    static let filmstripCacheEpoch = "Skagway.filmstripCacheEpoch"
     static let surpriseMeAutoPlays = "Skagway.surpriseMeAutoPlays"
     static let playerFloatingWidth = "Skagway.playerFloatingWidth"
     static let playerFloatingHeight = "Skagway.playerFloatingHeight"
@@ -95,6 +96,7 @@ enum PrefsKeys {
         "filmstripColumns",
         "lastAppliedFilmstripRows",
         "lastAppliedFilmstripColumns",
+        "filmstripCacheEpoch",
         "surpriseMeAutoPlays",
         "gridHoverPreviewEnabled",
         "playerFloatingWidth",
