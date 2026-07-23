@@ -1,7 +1,10 @@
 import SwiftUI
 
 /// Playground window for experimenting with custom chrome (independent of Settings).
+/// Library / Video sheets bind to the same `LibraryViewModel` as Settings.
 struct FunComponentView: View {
+    @Bindable var appState: AppState
+
     /// Window fill (hidden once sidebar + content cover the window).
     var backgroundColor: Color = Color(red: 135 / 255, green: 206 / 255, blue: 235 / 255) // sky blue
 
@@ -22,44 +25,6 @@ struct FunComponentView: View {
     var cardColor: Color = Color(red: 43 / 255, green: 47 / 255, blue: 48 / 255)
     /// Inset row separator inside a card.
     private let separatorColor = Color(red: 53 / 255, green: 56 / 255, blue: 58 / 255)
-
-    // MARK: Library playground state (not wired to the real Settings store yet)
-
-    @State private var excludeCorrupt = false
-    @State private var confirmDeletions = true
-    @State private var autoCheckUpdates = UpdateChecker.shared.automaticallyChecksForUpdates
-
-    @State private var showRecentlyAdded = true
-    @State private var recentlyAddedDays = 30
-    @State private var showRecentlyPlayed = true
-    @State private var recentlyPlayedDays = 30
-    @State private var showTopRated = true
-    @State private var topRatedMinRating = 4
-    @State private var showDuplicates = true
-    @State private var showCorrupt = true
-    @State private var showMissing = true
-    @State private var showRecentlyConverted = true
-
-    @State private var columnDuration = true
-    @State private var columnResolution = true
-    @State private var columnSize = true
-    @State private var columnRating = true
-    @State private var columnDateAdded = true
-    @State private var columnPlayCount = false
-    @State private var columnCreated = false
-    @State private var columnLastPlayed = false
-
-    // MARK: Video playground state
-
-    @State private var filmstripRows = 2
-    @State private var filmstripColumns = 5
-    @State private var surpriseMeAutoPlays = true
-    @State private var gridHoverPreviewEnabled = true
-    @State private var tagBlindDefaultState: TagBlindDefaultState = .alwaysClosed
-    @State private var filterDrawerHeightMode: FilterDrawerHeightMode = .fitToContent
-    @State private var playerStartPreference: PlayerStartPreference = .lastSize
-    @State private var fadeResumeBannerAutomatically = true
-    @State private var resumeBannerFadeDelaySeconds = 5
 
     @State private var selectedCategory: SettingsCategory? = .library
     @State private var searchText = ""
@@ -162,13 +127,22 @@ struct FunComponentView: View {
 
             ScrollView {
                 Group {
-                    switch selectedCategory {
-                    case .library, .none:
-                        librarySettingsContent
-                    case .video:
-                        videoSettingsContent
-                    case .dataSources, .fileExt, .tools, .customMetadata:
-                        EmptyView()
+                    if let viewModel = appState.libraryViewModel {
+                        switch selectedCategory {
+                        case .library, .none:
+                            librarySettingsContent(viewModel: viewModel)
+                        case .video:
+                            videoSettingsContent(viewModel: viewModel)
+                        case .dataSources, .fileExt, .tools, .customMetadata:
+                            EmptyView()
+                        }
+                    } else {
+                        ContentUnavailableView(
+                            "Open a Library",
+                            systemImage: "books.vertical",
+                            description: Text("Library and Video settings appear once a library is open.")
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 280)
                     }
                 }
                 .padding(.horizontal, contentPadding)
@@ -178,19 +152,27 @@ struct FunComponentView: View {
         }
     }
 
-    private var librarySettingsContent: some View {
+    // MARK: - Library
+
+    @ViewBuilder
+    private func librarySettingsContent(viewModel: LibraryViewModel) -> some View {
+        @Bindable var viewModel = viewModel
+        let listableCustomDefinitions = viewModel.customMetadataFieldDefinitions
+            .filter { $0.valueType != .text }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
         VStack(alignment: .leading, spacing: 20) {
             settingsCard {
                 describedToggleRow(
                     title: "Exclude corrupt files from filters",
                     description: "Corrupt files (missing duration and resolution) will be hidden from Library, Collections, Rating, and Tag filters. They remain visible in the Corrupt filter and name search.",
-                    isOn: $excludeCorrupt
+                    isOn: $viewModel.excludeCorrupt
                 )
                 cardSeparator
                 describedToggleRow(
                     title: "Confirm deletions",
                     description: "When enabled, a confirmation dialog will appear before moving files to Trash.",
-                    isOn: $confirmDeletions
+                    isOn: $viewModel.confirmDeletions
                 )
             }
 
@@ -200,11 +182,8 @@ struct FunComponentView: View {
                         title: "Automatically check for updates",
                         description: "Occasionally checks downloads.machiilabs.com for a newer Skagway build. Does not send usage analytics.",
                         isOn: Binding(
-                            get: { autoCheckUpdates },
-                            set: { newValue in
-                                autoCheckUpdates = newValue
-                                UpdateChecker.shared.automaticallyChecksForUpdates = newValue
-                            }
+                            get: { UpdateChecker.shared.automaticallyChecksForUpdates },
+                            set: { UpdateChecker.shared.automaticallyChecksForUpdates = $0 }
                         )
                     )
                 }
@@ -212,33 +191,33 @@ struct FunComponentView: View {
 
             sectionBlock(title: "Smart Libraries") {
                 settingsCard {
-                    smartLibraryRow("Recently Added", isOn: $showRecentlyAdded) {
-                        SettingsIntegerStepper(value: $recentlyAddedDays, range: 1...365, unit: "days")
-                            .disabled(!showRecentlyAdded)
-                            .opacity(showRecentlyAdded ? 1 : 0.45)
+                    smartLibraryRow("Recently Added", isOn: $viewModel.showRecentlyAdded) {
+                        SettingsIntegerStepper(value: $viewModel.recentlyAddedDays, range: 1...365, unit: "days")
+                            .disabled(!viewModel.showRecentlyAdded)
+                            .opacity(viewModel.showRecentlyAdded ? 1 : 0.45)
                     }
                     cardSeparator
-                    smartLibraryRow("Recently Played", isOn: $showRecentlyPlayed) {
-                        SettingsIntegerStepper(value: $recentlyPlayedDays, range: 1...365, unit: "days")
-                            .disabled(!showRecentlyPlayed)
-                            .opacity(showRecentlyPlayed ? 1 : 0.45)
+                    smartLibraryRow("Recently Played", isOn: $viewModel.showRecentlyPlayed) {
+                        SettingsIntegerStepper(value: $viewModel.recentlyPlayedDays, range: 1...365, unit: "days")
+                            .disabled(!viewModel.showRecentlyPlayed)
+                            .opacity(viewModel.showRecentlyPlayed ? 1 : 0.45)
                     }
                     cardSeparator
-                    smartLibraryRow("Top Rated", isOn: $showTopRated) {
-                        RatingView(rating: topRatedMinRating, size: 14) { newRating in
-                            topRatedMinRating = max(newRating, 1)
+                    smartLibraryRow("Top Rated", isOn: $viewModel.showTopRated) {
+                        RatingView(rating: viewModel.topRatedMinRating, size: 14) { newRating in
+                            viewModel.topRatedMinRating = max(newRating, 1)
                         }
-                        .disabled(!showTopRated)
-                        .opacity(showTopRated ? 1 : 0.4)
+                        .disabled(!viewModel.showTopRated)
+                        .opacity(viewModel.showTopRated ? 1 : 0.4)
                     }
                     cardSeparator
-                    plainToggleRow("Duplicates", isOn: $showDuplicates)
+                    plainToggleRow("Duplicates", isOn: $viewModel.showDuplicates)
                     cardSeparator
-                    plainToggleRow("Corrupt", isOn: $showCorrupt)
+                    plainToggleRow("Corrupt", isOn: $viewModel.showCorrupt)
                     cardSeparator
-                    plainToggleRow("Missing", isOn: $showMissing)
+                    plainToggleRow("Missing", isOn: $viewModel.showMissing)
                     cardSeparator
-                    plainToggleRow("Recently Converted", isOn: $showRecentlyConverted)
+                    plainToggleRow("Recently Converted", isOn: $viewModel.showRecentlyConverted)
                 }
             }
 
@@ -246,34 +225,47 @@ struct FunComponentView: View {
                 settingsCard {
                     listColumnNameRow
                     cardSeparator
-                    plainToggleRow("Duration", isOn: $columnDuration)
+                    plainToggleRow("Duration", isOn: standardColumnBinding(viewModel, id: "duration"))
                     cardSeparator
-                    plainToggleRow("Resolution", isOn: $columnResolution)
+                    plainToggleRow("Resolution", isOn: standardColumnBinding(viewModel, id: "resolution"))
                     cardSeparator
-                    plainToggleRow("File size", isOn: $columnSize)
+                    plainToggleRow("File size", isOn: standardColumnBinding(viewModel, id: "size"))
                     cardSeparator
-                    plainToggleRow("Rating", isOn: $columnRating)
+                    plainToggleRow("Rating", isOn: standardColumnBinding(viewModel, id: "rating"))
                     cardSeparator
-                    plainToggleRow("Date added", isOn: $columnDateAdded)
+                    plainToggleRow("Date added", isOn: standardColumnBinding(viewModel, id: "dateAdded"))
                     cardSeparator
-                    plainToggleRow("Plays", isOn: $columnPlayCount)
+                    plainToggleRow("Plays", isOn: standardColumnBinding(viewModel, id: "playCount"))
                     cardSeparator
-                    plainToggleRow("Created", isOn: $columnCreated)
+                    plainToggleRow("Created", isOn: standardColumnBinding(viewModel, id: "created"))
                     cardSeparator
-                    plainToggleRow("Last played", isOn: $columnLastPlayed)
-                    cardSeparator
-                    Text("No listable custom metadata fields (multiline “Text” fields are excluded). Add fields in Custom Metadata settings.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    plainToggleRow("Last played", isOn: standardColumnBinding(viewModel, id: "lastPlayed"))
+
+                    if listableCustomDefinitions.isEmpty {
+                        cardSeparator
+                        Text("No listable custom metadata fields (multiline “Text” fields are excluded). Add fields in Custom Metadata settings.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        ForEach(listableCustomDefinitions) { field in
+                            cardSeparator
+                            plainToggleRow(field.name, isOn: customColumnBinding(viewModel, id: field.id))
+                        }
+                    }
                 }
             }
         }
     }
 
-    private var videoSettingsContent: some View {
+    // MARK: - Video
+
+    @ViewBuilder
+    private func videoSettingsContent(viewModel: LibraryViewModel) -> some View {
+        @Bindable var viewModel = viewModel
+
         VStack(alignment: .leading, spacing: 20) {
             sectionBlock(title: "Default Filmstrip Size") {
                 settingsCard {
@@ -281,24 +273,26 @@ struct FunComponentView: View {
                         title: "Rows",
                         description: "Default grid size when generating new filmstrips. Override per video with Modify Filmstrip."
                     ) {
-                        SettingsIntegerStepper(value: $filmstripRows, range: 1...6)
+                        SettingsIntegerStepper(value: $viewModel.defaultFilmstripRows, range: 1...6)
                     }
                     cardSeparator
                     plainTrailingRow("Columns") {
-                        SettingsIntegerStepper(value: $filmstripColumns, range: 1...8)
+                        SettingsIntegerStepper(value: $viewModel.defaultFilmstripColumns, range: 1...8)
                     }
                     cardSeparator
                     plainTrailingRow("Frames per filmstrip") {
-                        Text("\(filmstripRows * filmstripColumns)")
+                        Text("\(viewModel.defaultFilmstripRows * viewModel.defaultFilmstripColumns)")
                             .foregroundStyle(Color.secondary)
                             .monospacedDigit()
                     }
                     cardSeparator
-                    Button("Regenerate filmstrips") {}
-                        .disabled(true)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button("Regenerate filmstrips") {
+                        Task { await viewModel.clearFilmstripCacheAndMarkApplied() }
+                    }
+                    .disabled(!viewModel.filmstripLayoutChanged)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
 
@@ -306,13 +300,13 @@ struct FunComponentView: View {
                 describedToggleRow(
                     title: "Surprise Me! auto-plays selected video",
                     description: "Updates selection immediately, loads or generates the filmstrip for the detail pane, starts auto-play if enabled, then scrolls the grid or list to the selection.",
-                    isOn: $surpriseMeAutoPlays
+                    isOn: $viewModel.surpriseMeAutoPlays
                 )
                 cardSeparator
                 describedToggleRow(
                     title: "Hover preview on Grid cards",
                     description: "Plays a muted cycling scrub when the pointer rests on a Grid card (disabled automatically while the floating player is open).",
-                    isOn: $gridHoverPreviewEnabled
+                    isOn: $viewModel.gridHoverPreviewEnabled
                 )
             }
 
@@ -321,7 +315,7 @@ struct FunComponentView: View {
                     describedPickerRow(
                         title: "Tag blind default state",
                         description: "Controls the Inspector’s “Add tags” blind (the unassigned-tags list) each time you select a different video: always start closed, always start open, or leave it exactly as you last set it.",
-                        selection: $tagBlindDefaultState
+                        selection: $viewModel.tagBlindDefaultState
                     ) {
                         ForEach(TagBlindDefaultState.allCases) { state in
                             Text(state.label).tag(state)
@@ -335,7 +329,7 @@ struct FunComponentView: View {
                     describedPickerRow(
                         title: "Filter drawer height",
                         description: "How the filters drawer sizes itself when opened. Fit to content sizes it to just show all the filter cards (no scrollbar) and hides the resize handle; Last used reopens it at whatever height you last dragged it to.",
-                        selection: $filterDrawerHeightMode
+                        selection: $viewModel.filterDrawerHeightMode
                     ) {
                         ForEach(FilterDrawerHeightMode.allCases) { mode in
                             Text(mode.label).tag(mode)
@@ -348,7 +342,7 @@ struct FunComponentView: View {
                 describedPickerRow(
                     title: "Player opens at",
                     description: "When you start inline playback, the resizable player opens at this size. Compact fits the inspector still/filmstrip area; Full screen opens borderless edge-to-edge; Last used size reopens the player at whatever size you last left it. You can always resize, snap, or go full-screen from the player's own controls.",
-                    selection: $playerStartPreference
+                    selection: $viewModel.playerStartPreference
                 ) {
                     ForEach(PlayerStartPreference.allCases) { pref in
                         Text(pref.label).tag(pref)
@@ -361,21 +355,35 @@ struct FunComponentView: View {
                     describedToggleRow(
                         title: "Fade resume banner after delay",
                         description: "After resuming inline playback from a remembered position, Skagway shows a banner with Start at beginning. When fade is enabled, that banner fades out after the delay; playback keeps going from the resumed time.",
-                        isOn: $fadeResumeBannerAutomatically
+                        isOn: $viewModel.fadeResumeBannerAutomatically
                     )
                     cardSeparator
                     plainTrailingRow("Seconds before fade") {
                         SettingsIntegerStepper(
-                            value: $resumeBannerFadeDelaySeconds,
+                            value: $viewModel.resumeBannerFadeDelaySeconds,
                             range: 1...120,
                             unit: "sec"
                         )
                     }
-                    .disabled(!fadeResumeBannerAutomatically)
-                    .opacity(fadeResumeBannerAutomatically ? 1 : 0.45)
+                    .disabled(!viewModel.fadeResumeBannerAutomatically)
+                    .opacity(viewModel.fadeResumeBannerAutomatically ? 1 : 0.45)
                 }
             }
         }
+    }
+
+    private func standardColumnBinding(_ viewModel: LibraryViewModel, id: String) -> Binding<Bool> {
+        Binding(
+            get: { viewModel.isStandardListColumnVisible(id) },
+            set: { viewModel.setStandardListColumnVisible(id, visible: $0) }
+        )
+    }
+
+    private func customColumnBinding(_ viewModel: LibraryViewModel, id: UUID) -> Binding<Bool> {
+        Binding(
+            get: { viewModel.isCustomListFieldVisible(id) },
+            set: { viewModel.setCustomListFieldVisible(fieldId: id, visible: $0) }
+        )
     }
 
     // MARK: - Card / row helpers

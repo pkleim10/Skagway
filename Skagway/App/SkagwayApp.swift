@@ -429,7 +429,7 @@ struct SkagwayApp: App {
 
         // Experimental playground — intentionally separate from Settings.
         Window("Fun Component", id: Self.funComponentWindowID) {
-            FunComponentView()
+            FunComponentView(appState: appState)
         }
         .defaultSize(width: 780, height: 560)
         .windowStyle(.hiddenTitleBar)
