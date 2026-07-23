@@ -31,7 +31,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
-- **Filmstrip defaults & regenerate** — Default layout is 2×5 (was hardcoded 2×4 in generation). Inspector generates missing filmstrips using Settings rows/columns. Modify Filmstrip cancels in-flight builds and shows specific errors (e.g. “File does not exist”). **Regenerate filmstrips** advances a cache epoch so old composites are ignored immediately (background cleanup deletes orphans), then rebuilds the selected video at the new grid.
+- **Filmstrip defaults & regenerate** — Default layout is 2×5 (was hardcoded 2×4 in generation). Inspector generates missing filmstrips using Settings rows/columns. Modify Filmstrip uses the Settings-style integer stepper, cancels in-flight builds, and shows specific errors (e.g. “File does not exist”). **Regenerate filmstrips** advances a cache epoch so old composites are ignored immediately (background cleanup deletes orphans), then rebuilds the selected video at the new grid.
 - **Fun Component** — Experimental Settings-like chrome playground (sidebar with Search and categories; Library and Video sheets filled with matching section cards wired to live `LibraryViewModel` settings; Settings-style borderless pickers; other categories empty for now) opened from the Fun Component menu item; separate from Settings.
 - **Help → Skagway Help** — Opens the online manual at `https://machiilabs.com/skagway/manual` (replaces the unused system Help placeholder).
 

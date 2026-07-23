@@ -28,8 +28,8 @@ struct FilmstripConfigView: View {
                 .lineLimit(1)
 
             HStack(spacing: AppSpacing.xxl) {
-                compactStepper("Rows", value: $rows, range: 1...6)
-                compactStepper("Columns", value: $columns, range: 1...8)
+                labeledSettingsStepper("Rows", value: $rows, range: 1...6)
+                labeledSettingsStepper("Columns", value: $columns, range: 1...8)
             }
 
             Text("\(totalFrames) frames")
@@ -79,39 +79,16 @@ struct FilmstripConfigView: View {
         }
     }
 
-    private func compactStepper(_ label: String, value: Binding<Int>, range: ClosedRange<Int>) -> some View {
+    private func labeledSettingsStepper(
+        _ title: String,
+        value: Binding<Int>,
+        range: ClosedRange<Int>
+    ) -> some View {
         VStack(spacing: AppSpacing.xs) {
-            Text(label)
+            Text(title)
                 .font(.caption)
                 .foregroundStyle(Color.appTextSecondary)
-            HStack(spacing: 0) {
-                Button {
-                    if value.wrappedValue > range.lowerBound { value.wrappedValue -= 1 }
-                } label: {
-                    Image(systemName: "minus")
-                        .frame(width: 24, height: 24)
-                        .foregroundStyle(Color.appTextPrimary)
-                }
-                .buttonStyle(.borderless)
-                .disabled(value.wrappedValue <= range.lowerBound)
-
-                Text("\(value.wrappedValue)")
-                    .font(.title3)
-                    .fontWeight(.medium)
-                    .monospacedDigit()
-                    .foregroundStyle(Color.appTextPrimary)
-                    .frame(width: 30, alignment: .center)
-
-                Button {
-                    if value.wrappedValue < range.upperBound { value.wrappedValue += 1 }
-                } label: {
-                    Image(systemName: "plus")
-                        .frame(width: 24, height: 24)
-                        .foregroundStyle(Color.appTextPrimary)
-                }
-                .buttonStyle(.borderless)
-                .disabled(value.wrappedValue >= range.upperBound)
-            }
+            SettingsIntegerStepper(value: value, range: range)
         }
     }
 
