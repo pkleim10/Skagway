@@ -25,6 +25,7 @@ struct FunComponentView: View {
     var cardColor: Color = Color(red: 43 / 255, green: 47 / 255, blue: 48 / 255)
 
     @State private var excludeCorrupt = false
+    @State private var confirmDeletions = true
     @State private var selectedCategory: SettingsCategory? = .library
     @State private var searchText = ""
     @State private var sidebarVisible = true
@@ -186,31 +187,52 @@ struct FunComponentView: View {
         }
     }
 
-    /// First card with a sample title / description / toggle row.
+    /// First card with two sample settings rows separated like Settings Form sections.
     private var sampleSettingsCard: some View {
+        VStack(spacing: 0) {
+            settingsRow(
+                title: "Exclude corrupt files from filters",
+                description: "Corrupt files (missing duration and resolution) will be hidden from Library, Collections, Rating, and Tag filters. They remain visible in the Corrupt filter and name search.",
+                isOn: $excludeCorrupt
+            )
+
+            Rectangle()
+                .fill(Color(red: 53 / 255, green: 56 / 255, blue: 58 / 255))
+                .frame(height: 1)
+                .padding(.horizontal, 14)
+
+            settingsRow(
+                title: "Confirm deletions",
+                description: "When enabled, a confirmation dialog will appear before moving files to Trash.",
+                isOn: $confirmDeletions
+            )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardColor, in: RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
+    }
+
+    private func settingsRow(title: String, description: String, isOn: Binding<Bool>) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .center, spacing: 12) {
-                Text("Exclude corrupt files from filters")
+                Text(title)
                     .font(.body.weight(.semibold))
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                Toggle("", isOn: $excludeCorrupt)
+                Toggle("", isOn: isOn)
                     .toggleStyle(.switch)
                     .labelsHidden()
             }
 
-            Text("Corrupt files (missing duration and resolution) will be hidden from Library, Collections, Rating, and Tag filters. They remain visible in the Corrupt filter and name search.")
+            Text(description)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                // Keep description clear of the toggle column on the trailing edge.
                 .padding(.trailing, 52)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardColor, in: RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
     }
 
     private var emptyCard: some View {
