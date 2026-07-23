@@ -1,7 +1,9 @@
+import AppKit
+import GRDB
 import SwiftUI
 
 /// Playground window for experimenting with custom chrome (independent of Settings).
-/// Library / Video sheets bind to the same `LibraryViewModel` as Settings.
+/// Library / Video / Extensions / Data Sources sheets bind to the same stores as Settings.
 struct FunComponentView: View {
     @Bindable var appState: AppState
 
@@ -32,6 +34,11 @@ struct FunComponentView: View {
     /// Extensions sheet (wired to `VideoExtensionManager.shared`).
     @State private var newExtensionText = ""
     @State private var hoveredExtension: String?
+
+    /// Data Sources sheet (wired to the open library’s `DatabasePool`).
+    @State private var dataSources: [DataSource] = []
+    @State private var hoveredDataSourceId: Int64?
+    @State private var dataSourcesLoading = false
 
     private var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -146,7 +153,13 @@ struct FunComponentView: View {
                         }
                     case .fileExt:
                         extensionsSettingsContent
-                    case .dataSources, .tools, .customMetadata:
+                    case .dataSources:
+                        if let pool = appState.dbManager?.dbPool {
+                            dataSourcesSettingsContent(dbPool: pool)
+                        } else {
+                            libraryRequiredPlaceholder
+                        }
+                    case .tools, .customMetadata:
                         EmptyView()
                     }
                 }
@@ -161,7 +174,7 @@ struct FunComponentView: View {
         ContentUnavailableView(
             "Open a Library",
             systemImage: "books.vertical",
-            description: Text("Library and Video settings appear once a library is open.")
+            description: Text("These settings appear once a library is open.")
         )
         .frame(maxWidth: .infinity, minHeight: 280)
     }
@@ -502,6 +515,151 @@ struct FunComponentView: View {
         guard !trimmed.isEmpty else { return }
         manager.add(trimmed)
         newExtensionText = ""
+    }
+
+    // MARK: - Data Sources
+
+    private func dataSourcesSettingsContent(dbPool: DatabasePool) -> some View {
+        let repository = DataSourceRepository(dbPool: dbPool)
+
+        return VStack(alignment: .leading, spacing: 20) {
+            sectionBlock(title: "Folders") {
+                settingsCard {
+                    if dataSources.isEmpty && !dataSourcesLoading {
+                        VStack(spacing: 6) {
+                            Image(systemName: "folder.badge.questionmark")
+                                .font(.title2)
+                                .foregroundStyle(Color.secondary)
+                            Text("No data sources")
+                                .foregroundStyle(Color.secondary)
+                            Text("Add folders to watch for video files")
+                                .font(.caption)
+                                .foregroundStyle(Color.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 16)
+                    } else {
+                        ForEach(Array(dataSources.enumerated()), id: \.element.id) { index, source in
+                            if index > 0 { cardSeparator }
+                            dataSourceRow(source, repository: repository)
+                        }
+                    }
+                }
+            }
+
+            sectionBlock(title: "Manage") {
+                settingsCard {
+                    describedTrailingRow(
+                        title: "Folders",
+                        description: "Folders that Skagway will scan when you import. Hover a folder and click Remove to drop it from the list (files on disk are not deleted)."
+                    ) {
+                        Button("Add Folder…") {
+                            addDataSourceFolder(repository: repository)
+                        }
+                    }
+                }
+            }
+        }
+        .task {
+            await loadDataSources(repository: repository)
+        }
+    }
+
+    private func dataSourceRow(_ source: DataSource, repository: DataSourceRepository) -> some View {
+        let isHovered = hoveredDataSourceId == source.id
+        return HStack(spacing: 10) {
+            Image(systemName: "folder.fill")
+                .foregroundStyle(Color.secondary)
+                .font(.title3)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(source.name)
+                    .fontWeight(.medium)
+                Text(source.folderPath)
+                    .font(.caption)
+                    .foregroundStyle(Color.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if isHovered {
+                Button("Show in Finder") {
+                    NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: source.folderPath)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Color.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+                Button("Remove") {
+                    removeDataSource(source, repository: repository)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Color.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            } else {
+                Text(source.dateAdded, style: .date)
+                    .font(.caption)
+                    .foregroundStyle(Color.secondary)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            if hovering {
+                hoveredDataSourceId = source.id
+            } else if hoveredDataSourceId == source.id {
+                hoveredDataSourceId = nil
+            }
+        }
+    }
+
+    private func addDataSourceFolder(repository: DataSourceRepository) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.message = "Select folders to watch for video files"
+        panel.prompt = "Add"
+
+        if panel.runModal() == .OK {
+            Task {
+                for url in panel.urls {
+                    let path = url.path
+                    let exists = (try? await repository.exists(folderPath: path)) ?? false
+                    if !exists {
+                        let source = DataSource(
+                            folderPath: path,
+                            name: url.lastPathComponent,
+                            dateAdded: Date()
+                        )
+                        try? await repository.insert(source)
+                    }
+                }
+                await loadDataSources(repository: repository)
+            }
+        }
+    }
+
+    private func removeDataSource(_ source: DataSource, repository: DataSourceRepository) {
+        Task {
+            try? await repository.delete(source)
+            if hoveredDataSourceId == source.id {
+                hoveredDataSourceId = nil
+            }
+            await loadDataSources(repository: repository)
+        }
+    }
+
+    private func loadDataSources(repository: DataSourceRepository) async {
+        dataSourcesLoading = true
+        dataSources = (try? await repository.fetchAll()) ?? []
+        dataSourcesLoading = false
     }
 
     // MARK: - Card / row helpers
