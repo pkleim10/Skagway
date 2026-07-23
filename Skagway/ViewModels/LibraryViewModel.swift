@@ -451,8 +451,8 @@ final class LibraryViewModel {
     var scanCurrent: Int = 0
     var scanTotal: Int = 0
 
-    /// Surfaces a transient failure in the header status text (same channel scan progress/errors
-    /// use), auto-clearing after a few seconds unless a newer message has since replaced it.
+    /// Surfaces a transient failure in the activity strip (same channel as scan progress/errors),
+    /// auto-clearing after a few seconds unless a newer message has since replaced it.
     func reportTransientError(_ message: String) {
         let text = "Error: \(message)"
         scanProgress = text
@@ -1103,11 +1103,169 @@ final class LibraryViewModel {
     private var isBackfillingFingerprints = false
     /// Ensures the backfill is kicked off only once per session (see `kickOffFingerprintBackfillIfNeeded`).
     private var didKickOffFingerprintBackfill = false
-    /// Live progress of the fingerprint backfill, surfaced in the header status while it runs.
+    /// Live progress of the fingerprint backfill, surfaced in the activity strip while it runs.
     /// `total == 0` means not currently running.
     private(set) var fingerprintBackfillTotal: Int = 0
     private(set) var fingerprintBackfillDone: Int = 0
     var isFingerprintingInProgress: Bool { fingerprintBackfillTotal > 0 }
+
+    /// Bulk delete / remove-from-library progress for the activity strip.
+    private(set) var isDeleting = false
+    private(set) var deleteCurrent = 0
+    private(set) var deleteTotal = 0
+    private(set) var deleteKindLabel = "Deleting"
+
+    /// Bottom activity strip snapshot (Option B). Priority: errors → queues → scans/import-export → fingerprint → messages.
+    var activityStripState: ActivityStripState {
+        var candidates: [AppActivity] = []
+
+        if isDeleting, deleteTotal > 0 {
+            let fraction = Double(deleteCurrent) / Double(max(deleteTotal, 1))
+            candidates.append(AppActivity(
+                id: "delete",
+                kind: .deleting,
+                title: "\(deleteKindLabel) \(deleteCurrent)/\(deleteTotal)",
+                fraction: fraction
+            ))
+        }
+
+        if isScanning {
+            let title: String = {
+                if scanTotal > 0 { return "Scanning \(scanCurrent)/\(scanTotal)" }
+                return scanProgress.isEmpty ? "Scanning…" : scanProgress
+            }()
+            let fraction = scanTotal > 0 ? Double(scanCurrent) / Double(scanTotal) : nil
+            candidates.append(AppActivity(
+                id: "scan",
+                kind: .scanning,
+                title: title,
+                fraction: fraction
+            ))
+        } else if !scanProgress.isEmpty {
+            let isError = scanProgress.hasPrefix("Error:")
+            candidates.append(AppActivity(
+                id: "scan-message",
+                kind: isError ? .error : .message,
+                title: isError ? String(scanProgress.dropFirst("Error:".count)).trimmingCharacters(in: .whitespaces) : scanProgress,
+                isError: isError
+            ))
+        }
+
+        if let apply = metadataApplyProgress, apply.total > 0 {
+            candidates.append(AppActivity(
+                id: "metadata-apply",
+                kind: .importingMetadata,
+                title: "Importing metadata \(apply.current)/\(apply.total)",
+                fraction: Double(apply.current) / Double(apply.total)
+            ))
+        }
+
+        if let export = metadataExportProgress, export.total > 0 {
+            candidates.append(AppActivity(
+                id: "metadata-export",
+                kind: .exportingMetadata,
+                title: "Exporting metadata \(export.current)/\(export.total)",
+                fraction: Double(export.current) / Double(export.total)
+            ))
+        }
+
+        if isFingerprintingInProgress {
+            candidates.append(AppActivity(
+                id: "fingerprint",
+                kind: .fingerprinting,
+                title: "Fingerprinting for duplicates \(fingerprintBackfillDone)/\(fingerprintBackfillTotal)",
+                fraction: Double(fingerprintBackfillDone) / Double(max(fingerprintBackfillTotal, 1))
+            ))
+        }
+
+        let conversionActive = conversionJobs.contains { $0.isActive }
+        let conversionFailed = !conversionActive && conversionJobs.contains { if case .failed = $0.status { return true }; return false }
+        let conversionQueued = conversionJobs.contains { $0.status == .queued }
+        if conversionActive || conversionFailed || conversionQueued {
+            let fraction: Double? = {
+                guard let running = conversionJobs.first(where: { if case .converting = $0.status { return true }; return false }),
+                      case .converting(let pct) = running.status else { return nil }
+                return Double(pct) / 100.0
+            }()
+            let shortTitle: String = {
+                if conversionFailed {
+                    let n = conversionJobs.filter { if case .failed = $0.status { return true }; return false }.count
+                    return n == 1 ? "Re-encode failed" : "\(n) re-encodes failed"
+                }
+                if let running = conversionJobs.first(where: { if case .converting = $0.status { return true }; return false }),
+                   case .converting(let pct) = running.status {
+                    let queued = conversionJobs.filter { $0.status == .queued }.count
+                    let base = "Re-encode \(pct)%"
+                    return queued > 0 ? "\(base) · +\(queued)" : base
+                }
+                let queued = conversionJobs.filter { $0.status == .queued }.count
+                return queued == 1 ? "1 queued to re-encode" : "\(queued) queued to re-encode"
+            }()
+            candidates.append(AppActivity(
+                id: "reencode",
+                kind: .reencoding,
+                title: shortTitle,
+                fraction: fraction,
+                isError: conversionFailed,
+                action: .openConversionQueue
+            ))
+        }
+
+        let moveActive = moveJobs.contains { $0.isActive }
+        let moveFailed = !moveActive && moveJobs.contains { if case .failed = $0.status { return true }; return false }
+        let moveQueued = moveJobs.contains { $0.status == .queued }
+        if moveActive || moveFailed || moveQueued {
+            let fraction: Double? = {
+                guard let running = moveJobs.first(where: { if case .moving = $0.status { return true }; return false }),
+                      case .moving(let f) = running.status else { return nil }
+                return f
+            }()
+            let shortTitle: String = {
+                if moveFailed {
+                    let n = moveJobs.filter { if case .failed = $0.status { return true }; return false }.count
+                    return n == 1 ? "Move failed" : "\(n) moves failed"
+                }
+                if let running = moveJobs.first(where: { if case .moving = $0.status { return true }; return false }),
+                   case .moving(let f) = running.status {
+                    let pct = Int(f * 100)
+                    let queued = moveJobs.filter { $0.status == .queued }.count
+                    let base = "Moving \(pct)%"
+                    return queued > 0 ? "\(base) · +\(queued)" : base
+                }
+                let queued = moveJobs.filter { $0.status == .queued }.count
+                return queued == 1 ? "1 queued to move" : "\(queued) queued to move"
+            }()
+            candidates.append(AppActivity(
+                id: "move",
+                kind: .moving,
+                title: shortTitle,
+                fraction: fraction,
+                isError: moveFailed,
+                action: .openMoveQueue
+            ))
+        }
+
+        guard !candidates.isEmpty else { return .empty }
+
+        func priority(_ a: AppActivity) -> Int {
+            if a.isError { return 0 }
+            switch a.kind {
+            case .moving: return 1
+            case .reencoding: return 2
+            case .deleting: return 3
+            case .scanning: return 4
+            case .importingMetadata, .exportingMetadata: return 5
+            case .fingerprinting: return 6
+            case .message: return 7
+            case .error: return 0
+            }
+        }
+
+        let sorted = candidates.sorted { priority($0) < priority($1) }
+        let primary = sorted.first
+        let secondaries = Array(sorted.dropFirst().prefix(2))
+        return ActivityStripState(primary: primary, secondaries: secondaries)
+    }
 
     let dbPool: DatabasePool
     let videoRepo: VideoRepository
@@ -1289,9 +1447,9 @@ final class LibraryViewModel {
     private(set) var moveJobs: [MoveJob] = []
     /// True while `drainMoveQueue()` is running so we never start a second drain loop.
     private var isDrainingMoves = false
-    /// The currently running copy task, held so an in-progress job can be aborted.
+    /// In-flight copy task + abort latch (cooperative; `Task.cancel` alone is not enough).
     private var currentMoveTask: Task<Void, Error>?
-
+    private var currentMoveAbortLatch: MoveAbortLatch?
     private func resetFilterIfHidden() {
         switch sidebarFilter {
         case .recentlyAdded where !showRecentlyAdded,
@@ -3955,33 +4113,45 @@ final class LibraryViewModel {
         }
         try? fm.removeItem(at: tempURL) // clear any stale partial from an interrupted prior run
 
-        let progress = Progress(totalUnitCount: 1)
-        let observation = progress.observe(\.fractionCompleted, options: [.new]) { [weak self] prog, _ in
-            Task { @MainActor in
-                self?.updateMoveJobStatus(jobId, .moving(fractionComplete: prog.fractionCompleted), persist: false)
+        let abortLatch = MoveAbortLatch()
+        currentMoveAbortLatch = abortLatch
+        let copyTask = Task.detached(priority: .utility) { [weak self] in
+            try ProgressiveFileCopy.copy(
+                from: sourceURL,
+                to: tempURL,
+                isCancelled: { abortLatch.isAborted }
+            ) { fraction in
+                Task { @MainActor in
+                    guard self?.moveJobs.contains(where: { $0.id == jobId }) == true else { return }
+                    self?.updateMoveJobStatus(jobId, .moving(fractionComplete: fraction), persist: false)
+                }
             }
-        }
-        let copyTask = Task.detached(priority: .utility) {
-            progress.becomeCurrent(withPendingUnitCount: 1)
-            defer { progress.resignCurrent() }
-            try fm.copyItem(at: sourceURL, to: tempURL)
         }
         currentMoveTask = copyTask
         do {
             try await copyTask.value
-        } catch {
-            observation.invalidate()
+        } catch is CancellationError {
             currentMoveTask = nil
+            currentMoveAbortLatch = nil
             try? fm.removeItem(at: tempURL)
-            // If the job was aborted it's already been removed from moveJobs; only report a
-            // failure for jobs still tracked (a genuine copy error, not a user-initiated abort).
+            return
+        } catch {
+            currentMoveTask = nil
+            currentMoveAbortLatch = nil
+            try? fm.removeItem(at: tempURL)
             if moveJobs.contains(where: { $0.id == jobId }) {
                 updateMoveJobStatus(jobId, .failed(reason: "Copy failed: \(error.localizedDescription)"))
             }
             return
         }
-        observation.invalidate()
         currentMoveTask = nil
+
+        guard !abortLatch.isAborted, moveJobs.contains(where: { $0.id == jobId }) else {
+            currentMoveAbortLatch = nil
+            try? fm.removeItem(at: tempURL)
+            return
+        }
+        currentMoveAbortLatch = nil
 
         let srcSize = (try? fm.attributesOfItem(atPath: sourceURL.path)[.size] as? Int64) ?? nil
         let tmpSize = (try? fm.attributesOfItem(atPath: tempURL.path)[.size] as? Int64) ?? nil
@@ -3991,11 +4161,21 @@ final class LibraryViewModel {
             return
         }
 
+        guard moveJobs.contains(where: { $0.id == jobId }) else {
+            try? fm.removeItem(at: tempURL)
+            return
+        }
+
         do {
             try fm.moveItem(at: tempURL, to: finalURL) // same-volume rename of the temp — instant
         } catch {
             try? fm.removeItem(at: tempURL)
             updateMoveJobStatus(jobId, .failed(reason: "Couldn't finalize destination file: \(error.localizedDescription)"))
+            return
+        }
+
+        guard moveJobs.contains(where: { $0.id == jobId }) else {
+            try? fm.removeItem(at: finalURL)
             return
         }
 
@@ -4047,14 +4227,29 @@ final class LibraryViewModel {
         }
     }
 
-    /// Abort a queued job (remove it) or the running one (cancel the copy, discard the partial).
+    /// Abort one queued or in-flight move. Removes it from the queue; in-flight copies stop via
+    /// the abort latch and discard the `.moving` partial (source untouched).
     func abortMove(_ id: UUID) {
         guard let idx = moveJobs.firstIndex(where: { $0.id == id }) else { return }
         let wasRunning: Bool = { if case .moving = moveJobs[idx].status { return true }; return false }()
         moveJobs.remove(at: idx)
         persistMoveJobs()
         if wasRunning {
-            currentMoveTask?.cancel() // performMove will discard the partial
+            currentMoveAbortLatch?.abort()
+            currentMoveTask?.cancel()
+        }
+    }
+
+    /// Abort every queued and in-flight move at once. Completed / failed history is left alone.
+    func abortAllMoves() {
+        let hadRunning = moveJobs.contains { if case .moving = $0.status { return true }; return false }
+        let before = moveJobs.count
+        moveJobs.removeAll { $0.isActive }
+        guard moveJobs.count != before || hadRunning else { return }
+        persistMoveJobs()
+        if hadRunning {
+            currentMoveAbortLatch?.abort()
+            currentMoveTask?.cancel()
         }
     }
 
@@ -4177,10 +4372,20 @@ final class LibraryViewModel {
     func deleteVideos(_ ids: Set<String>) async {
         let orderedIds = filteredVideos.map(\.id)
         let targets = videos.filter { ids.contains($0.filePath) }
+        isDeleting = true
+        deleteKindLabel = "Deleting"
+        deleteTotal = targets.count
+        deleteCurrent = 0
+        defer {
+            isDeleting = false
+            deleteCurrent = 0
+            deleteTotal = 0
+        }
         for video in targets {
             try? await videoRepo.delete(video)
             var resultingURL: NSURL?
             try? FileManager.default.trashItem(at: video.url, resultingItemURL: &resultingURL)
+            deleteCurrent += 1
         }
         selectedVideoIds.subtract(ids)
         applySelectionAfterDeletionIfNeeded(orderedIdsBeforeDeletion: orderedIds, removedIds: ids)
@@ -4192,8 +4397,18 @@ final class LibraryViewModel {
         let orderedIds = filteredVideos.map(\.id)
         stopObserving()
         let targets = videos.filter { ids.contains($0.filePath) }
+        isDeleting = true
+        deleteKindLabel = "Removing"
+        deleteTotal = targets.count
+        deleteCurrent = 0
+        defer {
+            isDeleting = false
+            deleteCurrent = 0
+            deleteTotal = 0
+        }
         for video in targets {
             try? await videoRepo.delete(video)
+            deleteCurrent += 1
         }
         selectedVideoIds.subtract(ids)
         applySelectionAfterDeletionIfNeeded(orderedIdsBeforeDeletion: orderedIds, removedIds: ids)

@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// The "Move Queue" manager, opened from the header status pill. Lists every cross-volume
-/// `MoveJob` and offers per-status actions: abort, move to top, retry, dismiss.
-/// Same-volume moves (atomic rename) never appear here — see `LibraryViewModel.moveVideos`.
+/// The "Move Queue" manager. Lists every cross-volume `MoveJob` with abort / move-to-top /
+/// retry / dismiss. Same-volume moves (atomic rename) never appear here.
 struct MoveQueueView: View {
     @Bindable var vm: LibraryViewModel
     @Environment(\.dismiss) private var dismiss
@@ -13,6 +12,10 @@ struct MoveQueueView: View {
 
     private var hasCompleted: Bool {
         vm.moveJobs.contains { $0.isCompleted }
+    }
+
+    private var hasActiveMoves: Bool {
+        vm.moveJobs.contains { $0.isActive }
     }
 
     var body: some View {
@@ -45,6 +48,13 @@ struct MoveQueueView: View {
                 .font(.headline)
                 .foregroundStyle(Color.appTextPrimary)
             Spacer()
+            if hasActiveMoves {
+                Button("Abort All") { vm.abortAllMoves() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color.red)
+                    .help("Cancel the in-progress copy and remove every queued move")
+            }
             if hasCompleted {
                 Button("Clear") { vm.clearCompletedMoves() }
                     .buttonStyle(.plain)

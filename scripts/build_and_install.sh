@@ -99,10 +99,10 @@ if [[ $INSTALL -eq 1 ]]; then
   # Normal day-to-day: in-place rsync (works while the app is running; the
   # process keeps the old binary mapped until relaunch).
   #
-  # After a browser/DMG install, macOS often stamps com.apple.macl on the bundle.
-  # That label blocks *in-place* writes (rsync mkstemp → "Operation not permitted")
-  # even when the app is quit — but renaming the bundle aside still works.
-  # Rename-aside requires the app to be quit (can't move a running bundle).
+  # After a browser/DMG/Sparkle install, macOS often stamps com.apple.macl on the
+  # bundle. That label blocks *in-place* writes (rsync mkstemp → "Operation not
+  # permitted"). Rename-aside + ditto still works — including while Skagway is
+  # running (the process keeps the old binary mapped from the aside path).
 
   install_ok=0
   if [[ -d "$DEST" ]]; then
@@ -118,12 +118,6 @@ if [[ $INSTALL -eq 1 ]]; then
   fi
 
   if [[ $install_ok -eq 0 ]]; then
-    if pgrep -qx "Skagway" 2>/dev/null || pgrep -f "Skagway.app/Contents/MacOS/Skagway" >/dev/null 2>&1; then
-      echo "In-place update blocked (likely TCC macl on /Applications/Skagway.app)." >&2
-      echo "Quit Skagway, then re-run so we can replace the bundle via rename:" >&2
-      echo "  bash scripts/build_and_install.sh --no-bump" >&2
-      exit 1
-    fi
     ASIDE="${DEST}.pre-update.$$"
     rm -rf "$ASIDE"
     echo "In-place update blocked (likely TCC macl on the existing app) — replacing via rename…"

@@ -4,10 +4,10 @@ import Foundation
 /// and can take real wall-clock time). Same-volume moves are an atomic `FileManager.moveItem`
 /// rename and never enter the queue — see `LibraryViewModel.moveVideos(_:to:)`.
 ///
-/// Safety mirrors the re-encode queue: the destination copy lands at a temp name
-/// (`<name>.moving`) first. Only once the copy is verified complete is it promoted to the
-/// final name, and only *then* is the source deleted — a crash mid-copy leaves at worst an
-/// orphaned `.moving` temp at the destination, with the original file untouched.
+/// Safety: the destination copy lands at a temp name (`<name>.moving`) first via progressive
+/// `copyfile`. Only once the copy is size-verified is it promoted to the final name, and only
+/// *then* is the source deleted — a crash mid-copy leaves at worst an orphaned `.moving` temp
+/// at the destination, with the original file untouched.
 struct MoveJob: Codable, Identifiable, Equatable {
     enum Status: Codable, Equatable {
         case queued

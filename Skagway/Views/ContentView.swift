@@ -122,128 +122,79 @@ private struct LibraryContentView: View {
         .frame(minWidth: 160, idealWidth: 220)
     }
 
-    /// Thin header bar for Curated Wall: List/Grid toggle + inline search + count + Filters toggle.
-    /// Matches the layout in the wireframe mock (search is inline in the same row as the mode selector and filter button).
-    /// The same button opens *and* closes the top drawer. Icon and help update with state.
-    /// Header status: video count normally, live import progress while scanning, or a transient
-    /// scan message (e.g. "No new files found" / "No data sources — add a folder first").
+    /// Idle header count (busy progress lives in the bottom activity strip).
     private var headerStatusText: String {
-        if vm.isScanning {
-            if vm.scanTotal > 0 { return "Scanning \(vm.scanCurrent)/\(vm.scanTotal)" }
-            return vm.scanProgress.isEmpty ? "Scanning…" : vm.scanProgress
-        }
-        if !vm.scanProgress.isEmpty { return vm.scanProgress }
-        if vm.isFingerprintingInProgress {
-            return "Fingerprinting for duplicates \(vm.fingerprintBackfillDone)/\(vm.fingerprintBackfillTotal)"
-        }
         let total = "\(vm.filteredVideos.count) videos"
         let sel = vm.selectedVideoIds.count
         return sel > 1 ? "\(total), \(sel) selected" : total
     }
 
-    /// True while the header status is showing a failure (`reportTransientError`/scan `.error`),
-    /// so it can be styled to actually draw the eye instead of blending in with normal status text.
-    private var isHeaderStatusError: Bool {
-        headerStatusText.hasPrefix("Error:")
-    }
-
-    /// True while any re-encode job is queued or running (drives the spinner in the pill).
     private var isConversionActive: Bool {
         vm.conversionJobs.contains { $0.isActive }
     }
 
-    /// True when nothing's currently running but at least one job ended in `.failed` — draws the
-    /// eye the same way the header status error pill does, instead of blending in with a plain
-    /// success summary that happens to have different text.
     private var hasConversionFailure: Bool {
         !isConversionActive && vm.conversionJobs.contains { if case .failed = $0.status { return true }; return false }
     }
 
-    /// True when there's something timely to say (active / queued / failed). The passive "N
-    /// re-encoded" completed-only summary is suppressed otherwise, so the pill doesn't linger
-    /// with text forever once everything's done — it collapses to an icon-only button that still
-    /// opens the queue, until the jobs are actually cleared and the pill disappears entirely.
-    private var hasTimelyConversionStatus: Bool {
-        isConversionActive || hasConversionFailure || vm.conversionJobs.contains { $0.status == .queued }
+    /// Timely conversion work is shown in the activity strip; header keeps icon-only access to history.
+    private var showsHeaderConversionIconOnly: Bool {
+        vm.hasConversionActivity
+            && vm.activityStripState.primary?.kind != .reencoding
+            && !vm.activityStripState.secondaries.contains(where: { $0.kind == .reencoding })
     }
 
-    /// Clickable status pill that opens the re-encode queue manager.
     private var conversionPill: some View {
         Button {
             showConversionQueue = true
         } label: {
-            HStack(spacing: 5) {
-                if isConversionActive {
-                    ProgressView().controlSize(.mini)
-                } else {
-                    Image(systemName: hasConversionFailure ? "exclamationmark.triangle.fill" : "arrow.triangle.2.circlepath")
-                        .font(.system(size: 9, weight: .semibold))
-                }
-                if hasTimelyConversionStatus {
-                    Text(vm.conversionStatusText)
-                        .font(.system(size: 10, weight: hasConversionFailure ? .semibold : .regular))
-                        .monospacedDigit()
-                }
-            }
-            .foregroundStyle(hasConversionFailure ? .white : (isConversionActive ? Color.appAccent : Color.appTextSecondary))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(
-                Capsule().fill(
-                    hasConversionFailure ? Color.red.opacity(0.75) : Color.appAccent.opacity(isConversionActive ? 0.14 : 0.08)
+            Image(systemName: hasConversionFailure ? "exclamationmark.triangle.fill" : "arrow.triangle.2.circlepath")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(hasConversionFailure ? .white : Color.appTextSecondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(
+                    Capsule().fill(
+                        hasConversionFailure ? Color.red.opacity(0.75) : Color.appAccent.opacity(0.08)
+                    )
                 )
-            )
-            // Without this, .plain hit-tests against rendered content (icon/text glyphs) only —
-            // the gap between the icon and status text would be a dead click zone.
-            .contentShape(Rectangle())
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .padding(.trailing, 4)
         .help("Re-encode queue — click to manage")
     }
 
-    /// True while any cross-volume move is queued or running (drives the spinner in the pill).
     private var isMoveActive: Bool {
         vm.moveJobs.contains { $0.isActive }
     }
 
-    /// Same failure-highlighting rationale as `hasConversionFailure`.
     private var hasMoveFailure: Bool {
         !isMoveActive && vm.moveJobs.contains { if case .failed = $0.status { return true }; return false }
     }
 
-    /// Same rationale as `hasTimelyConversionStatus`.
-    private var hasTimelyMoveStatus: Bool {
-        isMoveActive || hasMoveFailure || vm.moveJobs.contains { $0.status == .queued }
+    private var showsHeaderMoveIconOnly: Bool {
+        vm.hasMoveActivity
+            && vm.activityStripState.primary?.kind != .moving
+            && !vm.activityStripState.secondaries.contains(where: { $0.kind == .moving })
     }
 
-    /// Clickable status pill that opens the move queue manager.
+    /// Icon-only access to move history when the strip owns the busy text.
     private var movePill: some View {
         Button {
             showMoveQueue = true
         } label: {
-            HStack(spacing: 5) {
-                if isMoveActive {
-                    ProgressView().controlSize(.mini)
-                } else {
-                    Image(systemName: hasMoveFailure ? "exclamationmark.triangle.fill" : "arrow.right.doc.on.clipboard")
-                        .font(.system(size: 9, weight: .semibold))
-                }
-                if hasTimelyMoveStatus {
-                    Text(vm.moveStatusText)
-                        .font(.system(size: 10, weight: hasMoveFailure ? .semibold : .regular))
-                        .monospacedDigit()
-                }
-            }
-            .foregroundStyle(hasMoveFailure ? .white : (isMoveActive ? Color.appAccent : Color.appTextSecondary))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(
-                Capsule().fill(
-                    hasMoveFailure ? Color.red.opacity(0.75) : Color.appAccent.opacity(isMoveActive ? 0.14 : 0.08)
+            Image(systemName: hasMoveFailure ? "exclamationmark.triangle.fill" : "folder")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(hasMoveFailure ? .white : Color.appTextSecondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(
+                    Capsule().fill(
+                        hasMoveFailure ? Color.red.opacity(0.75) : Color.appAccent.opacity(0.08)
+                    )
                 )
-            )
-            .contentShape(Rectangle())
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .padding(.trailing, 4)
@@ -394,30 +345,18 @@ private struct LibraryContentView: View {
 
             Spacer()
 
-            // Video count (light) — replaced by scan progress while importing, or a red error pill
-            // (reportTransientError / scan .error) so a failure actually draws the eye.
+            // Video count — busy progress / errors live in the bottom activity strip.
             Text(headerStatusText)
-                .font(.system(size: 10, weight: isHeaderStatusError ? .semibold : .regular))
-                .foregroundStyle(isHeaderStatusError ? .white : Color.appTextTertiary)
+                .font(.system(size: 10))
+                .foregroundStyle(Color.appTextTertiary)
                 .monospacedDigit()
-                .padding(.horizontal, isHeaderStatusError ? 8 : 0)
-                .padding(.vertical, isHeaderStatusError ? 3 : 0)
-                .background(
-                    Capsule().fill(isHeaderStatusError ? Color.red.opacity(0.75) : Color.clear)
-                )
+                .lineLimit(1)
+                .help(headerStatusText)
                 .padding(.trailing, 4)
-                .animation(.easeInOut(duration: 0.15), value: isHeaderStatusError)
 
-            // Re-encode queue pill — click to open the queue manager.
-            if vm.hasConversionActivity {
-                conversionPill
-            }
-
-            // Move queue pill — click to open the move manager. Same-volume moves are instant
-            // and never appear here; only cross-volume (copy + delete) moves show up.
-            if vm.hasMoveActivity {
-                movePill
-            }
+            // Icon-only queue access when the strip is not already showing that job.
+            if showsHeaderConversionIconOnly { conversionPill }
+            if showsHeaderMoveIconOnly { movePill }
 
             // Quick Filter drawer (⌘⇧F) — exclusive with Advanced Filter.
             Button {
@@ -755,9 +694,18 @@ private struct LibraryContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
                 vm.playback.persistPosition()
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .layoutPriority(1)
 
-            // Hidden for Curated Wall to keep the gallery + inspector clean (per mock aesthetic)
-            // statusBar(vm: vm)
+            ActivityStripView(state: vm.activityStripState) { action in
+                switch action {
+                case .openConversionQueue:
+                    showConversionQueue = true
+                case .openMoveQueue:
+                    showMoveQueue = true
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: vm.activityStripState.isVisible)
         }
         .task {
             vm.startObserving()
