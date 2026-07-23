@@ -71,6 +71,36 @@ struct MetadataExportColumn: Identifiable, Equatable, Sendable {
     }
 }
 
+/// How an export column relates to Import Metadata (round-trip).
+enum MetadataExportColumnKind: Int, CaseIterable, Comparable, Sendable {
+    /// Path / Content Fingerprint — used to find videos; not written.
+    case matchKey = 0
+    /// Rating, Tags, custom fields — written by Import Metadata.
+    case importable = 1
+    /// Size, duration, codec, … — informational; Import Metadata ignores.
+    case exportOnly = 2
+
+    var title: String {
+        switch self {
+        case .matchKey: return "Match keys"
+        case .importable: return "Importable"
+        case .exportOnly: return "Export only"
+        }
+    }
+
+    var caption: String {
+        switch self {
+        case .matchKey: return "Used to find videos when applying this file."
+        case .importable: return "Written back by Import Metadata."
+        case .exportOnly: return "Informational; Import Metadata ignores these columns."
+        }
+    }
+
+    static func < (lhs: MetadataExportColumnKind, rhs: MetadataExportColumnKind) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+}
+
 enum MetadataExportColumnRegistry {
     /// Built-in columns in catalog order (not necessarily export order).
     static let builtins: [MetadataExportColumn] = [
@@ -106,20 +136,59 @@ enum MetadataExportColumnRegistry {
 
     static var builtinIDs: Set<String> { Set(builtins.map(\.id)) }
 
+    /// Columns Apply can write in v1.
+    static let writableColumnIDs: Set<String> = ["rating", "tags"]
+
+    static func isWritableColumnID(_ id: String) -> Bool {
+        if writableColumnIDs.contains(id) { return true }
+        return MetadataExportColumn.customFieldUUID(fromColumnId: id) != nil
+    }
+
+    static func isMatchKeyColumnID(_ id: String) -> Bool {
+        id == "filePath" || id == "contentFingerprint"
+    }
+
+    static func kind(forColumnID id: String) -> MetadataExportColumnKind {
+        if isMatchKeyColumnID(id) { return .matchKey }
+        if isWritableColumnID(id) { return .importable }
+        return .exportOnly
+    }
+
+    /// Reorder `ids` into Match keys → Importable → Export only, preserving relative order within each.
+    static func rebucketByKind(_ ids: [String]) -> [String] {
+        var buckets: [MetadataExportColumnKind: [String]] = [
+            .matchKey: [], .importable: [], .exportOnly: []
+        ]
+        for id in ids {
+            buckets[kind(forColumnID: id), default: []].append(id)
+        }
+        return MetadataExportColumnKind.allCases.flatMap { buckets[$0] ?? [] }
+    }
+
+    /// Within each kind section, put included ids first (relative order preserved).
+    static func pinCheckedWithinSections(order: [String], includedIDs: Set<String>) -> [String] {
+        MetadataExportColumnKind.allCases.flatMap { sectionKind in
+            let section = order.filter { kind(forColumnID: $0) == sectionKind }
+            let checked = section.filter { includedIDs.contains($0) }
+            let unchecked = section.filter { !includedIDs.contains($0) }
+            return checked + unchecked
+        }
+    }
+
     static func defaultOrderedColumnIDs(customFields: [CustomMetadataFieldDefinition]) -> [String] {
         let builtinDefaults = builtins.filter(\.defaultIncluded).map(\.id)
         let custom = customFields
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             .map { MetadataExportColumn.customFieldId($0.id) }
-        return builtinDefaults + custom
+        return rebucketByKind(builtinDefaults + custom)
     }
 
-    /// Full list order for the picker: default-included fields first, then the rest (unchecked initially).
+    /// Full list order for the picker: sectioned by kind; within each section, default-included first.
     static func defaultFullListOrder(customFields: [CustomMetadataFieldDefinition]) -> [String] {
-        let all = allColumns(customFields: customFields)
-        let included = all.filter(\.defaultIncluded).map(\.id)
-        let excluded = all.filter { !$0.defaultIncluded }.map(\.id)
-        return included + excluded
+        let all = allColumns(customFields: customFields).map(\.id)
+        let includedDefaults = Set(allColumns(customFields: customFields).filter(\.defaultIncluded).map(\.id))
+        let sectioned = rebucketByKind(all)
+        return pinCheckedWithinSections(order: sectioned, includedIDs: includedDefaults)
     }
 
     static func defaultIncludedIDs(customFields: [CustomMetadataFieldDefinition]) -> Set<String> {
@@ -140,7 +209,8 @@ enum MetadataExportColumnRegistry {
         return builtins + customCols
     }
 
-    /// Sanitize a persisted ordered id list against the current catalog; append any new columns at the end.
+    /// Sanitize a persisted ordered id list against the current catalog; append any new columns;
+    /// re-bucket into Match keys → Importable → Export only.
     static func sanitizeFullListOrder(_ ids: [String], customFields: [CustomMetadataFieldDefinition]) -> [String] {
         let known = allColumns(customFields: customFields).map(\.id)
         let knownSet = Set(known)
@@ -153,7 +223,7 @@ enum MetadataExportColumnRegistry {
         for id in known where !seen.contains(id) {
             result.append(id)
         }
-        return result
+        return rebucketByKind(result)
     }
 
     static func sanitizeIncludedIDs(_ ids: [String], customFields: [CustomMetadataFieldDefinition]) -> Set<String> {
@@ -170,7 +240,7 @@ enum MetadataExportColumnRegistry {
             seen.insert(id)
             result.append(id)
         }
-        return result
+        return rebucketByKind(result)
     }
 
     /// JSONL object key for a column.
@@ -209,18 +279,6 @@ enum MetadataExportColumnRegistry {
         columnsByID: [String: MetadataExportColumn]
     ) -> [String] {
         ids.map { jsonlKey(forColumnId: $0, columnsByID: columnsByID) }
-    }
-
-    /// Columns Apply can write in v1.
-    static let writableColumnIDs: Set<String> = ["rating", "tags"]
-
-    static func isWritableColumnID(_ id: String) -> Bool {
-        if writableColumnIDs.contains(id) { return true }
-        return MetadataExportColumn.customFieldUUID(fromColumnId: id) != nil
-    }
-
-    static func isMatchKeyColumnID(_ id: String) -> Bool {
-        id == "filePath" || id == "contentFingerprint"
     }
 
     /// Resolve a CSV header or JSONL object key to an internal column id.

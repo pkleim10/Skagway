@@ -11,7 +11,7 @@ struct ExportMetadataSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var format: MetadataExportFormat = .csv
-    /// Full field list order (checked and unchecked).
+    /// Full field list order (checked and unchecked), sectioned Match keys → Importable → Export only.
     @State private var listOrder: [String] = []
     /// Currently checked field ids.
     @State private var includedIDs: Set<String> = []
@@ -19,7 +19,11 @@ struct ExportMetadataSheet: View {
 
     private var isExporting: Bool { viewModel.metadataExportProgress != nil }
 
-    /// Checked fields in list order — what actually gets written.
+    private var columnsByID: [String: MetadataExportColumn] {
+        Dictionary(uniqueKeysWithValues: availableColumns.map { ($0.id, $0) })
+    }
+
+    /// Checked fields in list order — section-then-checked order for the writers.
     private var exportColumnIDs: [String] {
         listOrder.filter { includedIDs.contains($0) }
     }
@@ -43,21 +47,41 @@ struct ExportMetadataSheet: View {
             Text("Fields")
                 .font(.headline)
 
-            Text("Check fields to include. Checked fields stay at the top; drag to reorder within each group.")
+            Text("Check fields to include. Checked fields stay at the top of each section; drag to reorder within a section.")
                 .font(.caption)
                 .foregroundStyle(Color.appTextSecondary)
 
             List {
-                ForEach(listOrder, id: \.self) { id in
-                    if let col = availableColumns.first(where: { $0.id == id }) {
-                        Toggle(isOn: inclusionBinding(for: id)) {
-                            Text(col.label)
-                                .foregroundStyle(includedIDs.contains(id) ? Color.primary : Color.appTextSecondary)
+                ForEach(MetadataExportColumnKind.allCases, id: \.self) { kind in
+                    let ids = sectionIDs(kind)
+                    if !ids.isEmpty {
+                        Section {
+                            ForEach(ids, id: \.self) { id in
+                                if let col = columnsByID[id] {
+                                    Toggle(isOn: inclusionBinding(for: id)) {
+                                        Text(col.label)
+                                            .foregroundStyle(
+                                                includedIDs.contains(id) ? Color.primary : Color.appTextSecondary
+                                            )
+                                    }
+                                    .disabled(isExporting)
+                                }
+                            }
+                            .onMove(perform: isExporting ? { _, _ in } : { from, to in
+                                moveColumns(in: kind, from: from, to: to)
+                            })
+                        } header: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(kind.title)
+                                Text(kind.caption)
+                                    .font(.caption)
+                                    .foregroundStyle(Color.appTextSecondary)
+                                    .textCase(nil)
+                            }
+                            .padding(.bottom, 2)
                         }
-                        .disabled(isExporting)
                     }
                 }
-                .onMove(perform: isExporting ? { _, _ in } : moveColumns)
             }
             .listStyle(.bordered(alternatesRowBackgrounds: true))
             .frame(minHeight: 320)
@@ -93,7 +117,7 @@ struct ExportMetadataSheet: View {
             }
         }
         .padding(20)
-        .frame(width: 480, height: 560)
+        .frame(width: 520, height: 600)
         .onAppear {
             format = viewModel.loadMetadataExportFormat()
             availableColumns = MetadataExportColumnRegistry.allColumns(
@@ -115,6 +139,10 @@ struct ExportMetadataSheet: View {
         return "Exporting \(videoCount) \(noun) \(unit)"
     }
 
+    private func sectionIDs(_ kind: MetadataExportColumnKind) -> [String] {
+        listOrder.filter { MetadataExportColumnRegistry.kind(forColumnID: $0) == kind }
+    }
+
     private func inclusionBinding(for id: String) -> Binding<Bool> {
         Binding(
             get: { includedIDs.contains(id) },
@@ -129,16 +157,21 @@ struct ExportMetadataSheet: View {
         )
     }
 
-    private func moveColumns(from source: IndexSet, to destination: Int) {
-        listOrder.move(fromOffsets: source, toOffset: destination)
+    private func moveColumns(in kind: MetadataExportColumnKind, from source: IndexSet, to destination: Int) {
+        var section = sectionIDs(kind)
+        section.move(fromOffsets: source, toOffset: destination)
+        listOrder = MetadataExportColumnKind.allCases.flatMap { sectionKind in
+            sectionKind == kind ? section : sectionIDs(sectionKind)
+        }
         pinCheckedColumnsToTop()
     }
 
-    /// Keep checked fields above unchecked; preserve relative order within each group.
+    /// Keep checked fields above unchecked within each kind section.
     private func pinCheckedColumnsToTop() {
-        let checked = listOrder.filter { includedIDs.contains($0) }
-        let unchecked = listOrder.filter { !includedIDs.contains($0) }
-        let pinned = checked + unchecked
+        let pinned = MetadataExportColumnRegistry.pinCheckedWithinSections(
+            order: listOrder,
+            includedIDs: includedIDs
+        )
         if pinned != listOrder {
             listOrder = pinned
         }
