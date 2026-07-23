@@ -49,6 +49,18 @@ struct FunComponentView: View {
     @State private var columnCreated = false
     @State private var columnLastPlayed = false
 
+    // MARK: Video playground state
+
+    @State private var filmstripRows = 2
+    @State private var filmstripColumns = 5
+    @State private var surpriseMeAutoPlays = true
+    @State private var gridHoverPreviewEnabled = true
+    @State private var tagBlindDefaultState: TagBlindDefaultState = .alwaysClosed
+    @State private var filterDrawerHeightMode: FilterDrawerHeightMode = .fitToContent
+    @State private var playerStartPreference: PlayerStartPreference = .lastSize
+    @State private var fadeResumeBannerAutomatically = true
+    @State private var resumeBannerFadeDelaySeconds = 5
+
     @State private var selectedCategory: SettingsCategory? = .library
     @State private var searchText = ""
 
@@ -149,11 +161,19 @@ struct FunComponentView: View {
             .frame(height: titleBandHeight)
 
             ScrollView {
-                // Library settings only for now — sidebar selection comes later.
-                librarySettingsContent
-                    .padding(.horizontal, contentPadding)
-                    .padding(.bottom, contentPadding)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                Group {
+                    switch selectedCategory {
+                    case .library, .none:
+                        librarySettingsContent
+                    case .video:
+                        videoSettingsContent
+                    case .dataSources, .fileExt, .tools, .customMetadata:
+                        EmptyView()
+                    }
+                }
+                .padding(.horizontal, contentPadding)
+                .padding(.bottom, contentPadding)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
         }
     }
@@ -253,6 +273,111 @@ struct FunComponentView: View {
         }
     }
 
+    private var videoSettingsContent: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            sectionBlock(title: "Default Filmstrip Size") {
+                settingsCard {
+                    describedTrailingRow(
+                        title: "Rows",
+                        description: "Default grid size when generating new filmstrips. Override per video with Modify Filmstrip."
+                    ) {
+                        SettingsIntegerStepper(value: $filmstripRows, range: 1...6)
+                    }
+                    cardSeparator
+                    plainTrailingRow("Columns") {
+                        SettingsIntegerStepper(value: $filmstripColumns, range: 1...8)
+                    }
+                    cardSeparator
+                    plainTrailingRow("Frames per filmstrip") {
+                        Text("\(filmstripRows * filmstripColumns)")
+                            .foregroundStyle(Color.secondary)
+                            .monospacedDigit()
+                    }
+                    cardSeparator
+                    Button("Regenerate filmstrips") {}
+                        .disabled(true)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+
+            settingsCard {
+                describedToggleRow(
+                    title: "Surprise Me! auto-plays selected video",
+                    description: "Updates selection immediately, loads or generates the filmstrip for the detail pane, starts auto-play if enabled, then scrolls the grid or list to the selection.",
+                    isOn: $surpriseMeAutoPlays
+                )
+                cardSeparator
+                describedToggleRow(
+                    title: "Hover preview on Grid cards",
+                    description: "Plays a muted cycling scrub when the pointer rests on a Grid card (disabled automatically while the floating player is open).",
+                    isOn: $gridHoverPreviewEnabled
+                )
+            }
+
+            sectionBlock(title: "Tags") {
+                settingsCard {
+                    describedPickerRow(
+                        title: "Tag blind default state",
+                        description: "Controls the Inspector’s “Add tags” blind (the unassigned-tags list) each time you select a different video: always start closed, always start open, or leave it exactly as you last set it.",
+                        selection: $tagBlindDefaultState
+                    ) {
+                        ForEach(TagBlindDefaultState.allCases) { state in
+                            Text(state.label).tag(state)
+                        }
+                    }
+                }
+            }
+
+            sectionBlock(title: "Filters") {
+                settingsCard {
+                    describedPickerRow(
+                        title: "Filter drawer height",
+                        description: "How the filters drawer sizes itself when opened. Fit to content sizes it to just show all the filter cards (no scrollbar) and hides the resize handle; Last used reopens it at whatever height you last dragged it to.",
+                        selection: $filterDrawerHeightMode
+                    ) {
+                        ForEach(FilterDrawerHeightMode.allCases) { mode in
+                            Text(mode.label).tag(mode)
+                        }
+                    }
+                }
+            }
+
+            settingsCard {
+                describedPickerRow(
+                    title: "Player opens at",
+                    description: "When you start inline playback, the resizable player opens at this size. Compact fits the inspector still/filmstrip area; Full screen opens borderless edge-to-edge; Last used size reopens the player at whatever size you last left it. You can always resize, snap, or go full-screen from the player's own controls.",
+                    selection: $playerStartPreference
+                ) {
+                    ForEach(PlayerStartPreference.allCases) { pref in
+                        Text(pref.label).tag(pref)
+                    }
+                }
+            }
+
+            sectionBlock(title: "Playback") {
+                settingsCard {
+                    describedToggleRow(
+                        title: "Fade resume banner after delay",
+                        description: "After resuming inline playback from a remembered position, Skagway shows a banner with Start at beginning. When fade is enabled, that banner fades out after the delay; playback keeps going from the resumed time.",
+                        isOn: $fadeResumeBannerAutomatically
+                    )
+                    cardSeparator
+                    plainTrailingRow("Seconds before fade") {
+                        SettingsIntegerStepper(
+                            value: $resumeBannerFadeDelaySeconds,
+                            range: 1...120,
+                            unit: "sec"
+                        )
+                    }
+                    .disabled(!fadeResumeBannerAutomatically)
+                    .opacity(fadeResumeBannerAutomatically ? 1 : 0.45)
+                }
+            }
+        }
+    }
+
     // MARK: - Card / row helpers
 
     private func sectionBlock<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -281,23 +406,20 @@ struct FunComponentView: View {
     }
 
     private func describedToggleRow(title: String, description: String, isOn: Binding<Bool>) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.body.weight(.semibold))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                Toggle("", isOn: isOn)
-                    .toggleStyle(.switch)
-                    .labelsHidden()
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text(description)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.trailing, 52)
+            Toggle("", isOn: isOn)
+                .toggleStyle(.switch)
+                .labelsHidden()
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -348,6 +470,73 @@ struct FunComponentView: View {
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(Color.secondary)
                 .help("Always visible")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func plainTrailingRow<Trailing: View>(
+        _ title: String,
+        @ViewBuilder trailing: () -> Trailing
+    ) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(title)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            trailing()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func describedTrailingRow<Trailing: View>(
+        title: String,
+        description: String,
+        @ViewBuilder trailing: () -> Trailing
+    ) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.body.weight(.semibold))
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            trailing()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func describedPickerRow<Selection: Hashable, Options: View>(
+        title: String,
+        description: String,
+        selection: Binding<Selection>,
+        @ViewBuilder options: () -> Options
+    ) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.body.weight(.semibold))
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Same chrome Settings Form uses for pickers (borderless popup).
+            Picker("", selection: selection) {
+                options()
+            }
+            .labelsHidden()
+            .buttonStyle(.borderless)
+            .fixedSize()
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)

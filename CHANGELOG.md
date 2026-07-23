@@ -31,7 +31,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
-- **Fun Component** — Experimental Settings-like chrome playground (sidebar with Search and categories; Library content filled with matching section cards) opened from the Fun Component menu item; separate from Settings.
+- **Fun Component** — Experimental Settings-like chrome playground (sidebar with Search and categories; Library and Video sheets filled with matching section cards; Settings-style borderless pickers; other categories empty for now) opened from the Fun Component menu item; separate from Settings.
 - **Help → Skagway Help** — Opens the online manual at `https://machiilabs.com/skagway/manual` (replaces the unused system Help placeholder).
 
 ## 0.72.0 (build 892) - 2026-07-22
