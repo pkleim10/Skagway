@@ -398,7 +398,12 @@ struct SkagwayApp: App {
                 .disabled(!appState.hasLibrary)
             }
 
-            CommandGroup(after: .help) {
+            CommandGroup(replacing: .help) {
+                Button("Skagway Help") {
+                    if let url = URL(string: "https://machiilabs.com/skagway/manual") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
                 Button("Contact Support…") {
                     if let url = URL(string: "mailto:support@machiilabs.com?subject=Skagway%20support%20request") {
                         NSWorkspace.shared.open(url)

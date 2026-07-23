@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Help → Skagway Help** — Opens the online manual at `https://machiilabs.com/skagway/manual` (replaces the unused system Help placeholder).
+
 ## 0.72.0 (build 892) - 2026-07-22
 
 - **Export Metadata field groups** — Fields list is sectioned into Match keys (Path / Content Fingerprint), Importable (Rating, Tags, custom fields), and Export only (size, duration, codec, …), so round-trip vs informational columns are obvious before export.
