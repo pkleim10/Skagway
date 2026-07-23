@@ -29,6 +29,10 @@ struct FunComponentView: View {
     @State private var selectedCategory: SettingsCategory? = .library
     @State private var searchText = ""
 
+    /// Extensions sheet (wired to `VideoExtensionManager.shared`).
+    @State private var newExtensionText = ""
+    @State private var hoveredExtension: String?
+
     private var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -127,22 +131,23 @@ struct FunComponentView: View {
 
             ScrollView {
                 Group {
-                    if let viewModel = appState.libraryViewModel {
-                        switch selectedCategory {
-                        case .library, .none:
+                    switch selectedCategory {
+                    case .library, .none:
+                        if let viewModel = appState.libraryViewModel {
                             librarySettingsContent(viewModel: viewModel)
-                        case .video:
-                            videoSettingsContent(viewModel: viewModel)
-                        case .dataSources, .fileExt, .tools, .customMetadata:
-                            EmptyView()
+                        } else {
+                            libraryRequiredPlaceholder
                         }
-                    } else {
-                        ContentUnavailableView(
-                            "Open a Library",
-                            systemImage: "books.vertical",
-                            description: Text("Library and Video settings appear once a library is open.")
-                        )
-                        .frame(maxWidth: .infinity, minHeight: 280)
+                    case .video:
+                        if let viewModel = appState.libraryViewModel {
+                            videoSettingsContent(viewModel: viewModel)
+                        } else {
+                            libraryRequiredPlaceholder
+                        }
+                    case .fileExt:
+                        extensionsSettingsContent
+                    case .dataSources, .tools, .customMetadata:
+                        EmptyView()
                     }
                 }
                 .padding(.horizontal, contentPadding)
@@ -150,6 +155,15 @@ struct FunComponentView: View {
                 .frame(maxWidth: .infinity, alignment: .topLeading)
             }
         }
+    }
+
+    private var libraryRequiredPlaceholder: some View {
+        ContentUnavailableView(
+            "Open a Library",
+            systemImage: "books.vertical",
+            description: Text("Library and Video settings appear once a library is open.")
+        )
+        .frame(maxWidth: .infinity, minHeight: 280)
     }
 
     // MARK: - Library
@@ -384,6 +398,110 @@ struct FunComponentView: View {
             get: { viewModel.isCustomListFieldVisible(id) },
             set: { viewModel.setCustomListFieldVisible(fieldId: id, visible: $0) }
         )
+    }
+
+    // MARK: - Extensions
+
+    private var extensionsSettingsContent: some View {
+        @Bindable var manager = VideoExtensionManager.shared
+
+        return VStack(alignment: .leading, spacing: 20) {
+            sectionBlock(title: "Extensions") {
+                Text("Turn the toggle off to temporarily exclude an extension from folder scans. Hover a row and click Remove to delete it from the list.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 4)
+                    .padding(.bottom, 2)
+
+                settingsCard {
+                    ForEach(Array(manager.entries.enumerated()), id: \.element.id) { index, entry in
+                        if index > 0 { cardSeparator }
+                        extensionRow(entry, manager: manager)
+                    }
+                }
+            }
+
+            sectionBlock(title: "Add Extension") {
+                settingsCard {
+                    describedTrailingRow(
+                        title: "Extension",
+                        description: "Add a file extension Skagway should treat as video when scanning folders."
+                    ) {
+                        HStack(spacing: 8) {
+                            TextField("e.g. mp4", text: $newExtensionText)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 100)
+                                .onSubmit { addExtension(to: manager) }
+                            Button("Add") { addExtension(to: manager) }
+                                .disabled(newExtensionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+                    }
+                }
+            }
+
+            settingsCard {
+                Button("Reset to Defaults") {
+                    manager.resetToDefaults()
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private func extensionRow(_ entry: VideoExtensionEntry, manager: VideoExtensionManager) -> some View {
+        let isHovered = hoveredExtension == entry.ext
+        return HStack(spacing: 12) {
+            Text(".\(entry.ext)")
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(entry.enabled ? Color.primary : Color.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button("Remove") {
+                manager.remove(entry.ext)
+                if hoveredExtension == entry.ext {
+                    hoveredExtension = nil
+                }
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(Color.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .help("Remove .\(entry.ext)")
+            .opacity(isHovered ? 1 : 0)
+            .allowsHitTesting(isHovered)
+            .accessibilityHidden(!isHovered)
+
+            Toggle(
+                "",
+                isOn: Binding(
+                    get: { entry.enabled },
+                    set: { manager.setEnabled(entry.ext, $0) }
+                )
+            )
+            .labelsHidden()
+            .toggleStyle(.switch)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            if hovering {
+                hoveredExtension = entry.ext
+            } else if hoveredExtension == entry.ext {
+                hoveredExtension = nil
+            }
+        }
+    }
+
+    private func addExtension(to manager: VideoExtensionManager) {
+        let trimmed = newExtensionText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        manager.add(trimmed)
+        newExtensionText = ""
     }
 
     // MARK: - Card / row helpers
