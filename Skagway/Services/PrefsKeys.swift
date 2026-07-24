@@ -7,12 +7,20 @@ enum PrefsKeys {
     static let didCompleteLegacyRename = "Skagway.didCompleteLegacyRename"
 
     // Library bookmarks / paths
-    // Paths are the durable source of truth (bookmarks can fail to resolve after re-signing/rebuilds).
+    // Standard / in-session askEachLaunch may use plain paths. rememberBookmark is bookmark-only
+    // (no activeLibraryPath / thumbnailCachePath on disk).
     static let activeLibraryBookmark = "Skagway.activeLibraryBookmark"
     static let activeLibraryPath = "Skagway.activeLibraryPath"
     static let recentLibraryBookmarks = "Skagway.recentLibraryBookmarks"
     static let recentLibraryPaths = "Skagway.recentLibraryPaths"
     static let userClosedLibrary = "Skagway.userClosedLibrary"
+    /// One-time privacy / library-home chooser completed (Standard vs custom folder).
+    static let didCompleteLibraryHomeSetup = "Skagway.didCompleteLibraryHomeSetup"
+    /// `LibraryHomeAccessMode.rawValue`: standard | rememberBookmark | askEachLaunch
+    static let libraryHomeAccessMode = "Skagway.libraryHomeAccessMode"
+    /// Custom thumbnail/filmstrip cache directory (co-located with a chosen library home). Nil → system Caches.
+    static let thumbnailCachePath = "Skagway.thumbnailCachePath"
+    static let thumbnailCacheBookmark = "Skagway.thumbnailCacheBookmark"
 
     // Extensions / playback positions / split dividers
     static let videoExtensions = "Skagway.videoExtensions"

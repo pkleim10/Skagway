@@ -6,7 +6,11 @@ struct ContentView: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
-        if !appState.hasLibrary {
+        if !DatabaseExportImport.hasCompletedLibraryHomeSetup {
+            LibraryHomeSetupView()
+                .frame(minWidth: 900, minHeight: 600)
+                .appDesignSystem()
+        } else if !appState.hasLibrary {
             LandingView()
                 .frame(minWidth: 900, minHeight: 600)
                 .appDesignSystem()

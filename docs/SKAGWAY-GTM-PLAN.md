@@ -1,7 +1,7 @@
 # Skagway go-to-market plan (Mach II Labs)
 
 **Saved:** 2026-07-11  
-**Updated:** 2026-07-14 — Developer ID + notarized DMG pipeline (`scripts/package_dmg.sh`)  
+**Updated:** 2026-07-23 — Library Lock superseded by user-chosen library/cache location on encrypted volumes  
 **Status:** Planning / not executed  
 **Canonical Cursor plan:** `~/.cursor/plans/licensing_trial_purchase_5b99b9a9.plan.md` (historical; **superseded** on Skagway pricing by this doc)  
 **This copy:** [`docs/SKAGWAY-GTM-PLAN.md`](SKAGWAY-GTM-PLAN.md) in the Skagway repo — revisit here or in Cursor Plans.
@@ -16,7 +16,7 @@
 - [ ] machiilabs.com owned (Cloudflare). Add to Vercel; grey-cloud DNS; support@ Email Routing
 - [ ] Screenshots, demo, Cinematica compare; category SEO; free-forever story
 - [ ] Free-launch checklist (MacStories, Reddit, PH); clear free-forever promise on site
-- [ ] Optional library lock: password + Touch ID, Keychain-backed DEK, encrypt GRDB + thumbnails; auto-lock; honest FileVault note
+- [x] ~~Optional library lock~~ — **cancelled 2026-07-23** (superseded by library/cache home on encrypted volume; see Part D)
 - [ ] Post-launch: iOS companion player (LAN stream + pair auth); Skagway Player
 - [ ] Part F Track A: v1.0 readiness + organizer supremacy polish (perf, UX, reliability, docs)
 - [ ] Part F Track B: grid chrome MVP; later B2 posters/TMDB; B3 AI Hollywood covers (BYO API key)
@@ -25,6 +25,8 @@
 - [ ] **Bug reporting / ticketing / communication** — clear user → studio channel (e.g. support@, GitHub Issues, and/or light in-app “Report a Problem…”); triage workflow Mach II Labs can actually keep up with
 
 **Cancelled (superseded 2026-07-12):** Paddle / LicenseManager / founding Keychain / paid flip for newcomers / Buy CTAs for Skagway. Paid products (e.g. **Ketchikan**) are a separate Mach II Labs product — not Skagway.
+
+**Cancelled (superseded 2026-07-23):** In-app Library Lock (password / Touch ID / encrypted GRDB). Privacy for catalog + cache = put them on the same encrypted volume as media via startup **Choose Folder…** (see Part D).
 
 ---
 
@@ -178,11 +180,11 @@ Hero (first viewport only):
 
 Below the fold (one job per section):
 - **Why it’s different** — fast with thousands of videos (confirmed vs Cinematica)
-- **What you get** — grid, tags, smart collections, albums, player, metadata I/O, optional library lock (tight bullets)
+- **What you get** — grid, tags, smart collections, albums, player, metadata I/O; library + cache location you control (tight bullets)
 - **How it works** — indexes folders; files stay put
 - **Pricing** — **Free forever.** Full app, no trial, no paid tier. (Optional: Mach II Labs may sell other products later; Skagway stays free.)
 - **Compare** — short honest table vs Cinematica (performance + modern UX) and vs Infuse (organization depth)
-- **FAQ** — free forever, why not App Store, system requirements (macOS 26+), ffmpeg for re-encode, library lock vs FileVault
+- **FAQ** — free forever, why not App Store, system requirements (macOS 26+), ffmpeg for re-encode, no data sent to Mach II Labs, library/cache on encrypted volumes vs FileVault
 - **Footer** — support email, guide, GitHub releases optional
 
 ### Technical
@@ -271,7 +273,7 @@ Public free software still needs a **trustworthy update path** and a **reachable
 4. Screenshots / demo / OG / FAQ (show jazzed grid cards)  
 5. Soft free launch → press / PH  
 6. **Check for updates** (Sparkle/appcast) + **support / bug channel** live on site and in-app  
-7. Optional library lock (Part D)  
+7. ~~Optional library lock (Part D)~~ — **cancelled**; document Choose Folder / encrypted-volume guidance on site FAQ instead  
 8. Track C power/AI as post-launch differentiators  
 9. Update ROADMAP  
 
@@ -283,73 +285,34 @@ Public free software still needs a **trustworthy update path** and a **reachable
 | Professional site + assets | ~1–2 weeks |
 | Check for updates (Sparkle + appcast) | ~2–5 days |
 | Bug/support channel (email + optional Issues/in-app) | ~1–3 days |
-| Library privacy lock (Part D) | ~3–7 days |
+| ~~Library privacy lock (Part D)~~ | cancelled — library/cache home on encrypted volume |
 | Launch marketing push | ~2–5 days around ship |
 | **Total to credible public launch** | **~2–5 weeks** (no licensing workstream) |
 | iOS companion player | separate project after Mac GTM |
 
-## Part D — Library privacy lock (optional, real security)
+## Part D — Library / cache location (replaces Library Lock)
 
-**Goal:** Users who want it can keep others from browsing their library on a shared Mac — with more than a cosmetic lock screen.
+**Status:** **Shipped approach** (startup chooser + Change Library & Cache Location…). In-app password/Touch ID Library Lock is **cancelled**.
 
-**Locked approach (v1):** App lock + **encrypted catalog** (not full video-file vault).
+**Decision (2026-07-23):** Skagway is not a vault and will not encrypt the catalog in-app. Users who keep media on an encrypted volume already have the right primitive: put the **`.machii` library and `Skagway-cache`** on that same volume via **Choose Folder…**. When the volume is locked or offline, the catalog and previews are unavailable too — without SQLCipher, unlock gates, or performance cost on every browse.
 
-**Explicitly rejected:** Encrypting video files at rest, or ingesting media into a giant DB blob store. Libraries are multi‑TB; files must stay as normal files on disk (index + organize in place). Privacy for media = OS FileVault + folder permissions, not app-owned ciphertext copies.
+**What we tell users (startup + FAQ):**
 
-```mermaid
-flowchart TD
-  launch[App launch] --> locked{Library lock enabled?}
-  locked -->|no| app[Normal app]
-  locked -->|yes| gate[Unlock gate]
-  gate --> bio[Touch ID / password]
-  bio --> dek[Unwrap DEK from Keychain]
-  dek --> openDb[Open encrypted GRDB + thumbs]
-  openDb --> app
-  app --> idle[Auto-lock on sleep / timeout]
-  idle --> gate
-```
+- None of your data is ever sent to Mach II Labs or anywhere else (no account, no cloud sync, no usage analytics). Optional update checks do not upload library or media.
+- Skagway does not modify or protect source media.
+- You control where the library catalog and thumbnail cache live.
+- Media on an encrypted volume → Choose Folder… and co-locate library + `Skagway-cache` on that volume.
+- Then choose **Remember this location** (opaque bookmark on this Mac) or **Ask every time** (no location stored on the boot disk; open the library each launch).
+- Media on a normal volume → standard location (Application Support + Caches) is fine.
+- The cache location is app-wide (shared by every library).
 
-### What “real” means here
+**Explicitly still rejected:** Encrypting video files at rest, or ingesting media into a giant DB blob store. Privacy for the files themselves remains OS FileVault / volume encryption + folder permissions.
 
-| Protected | Not protected (v1) |
-|-----------|-------------------|
-| SQLite library DB (paths, tags, ratings, collections, play history) | Video files on disk (still normal files) |
-| Thumbnail / filmstrip cache | Finder browsing of source folders |
-| In-app UI until unlock | A determined attacker with your unlocked Mac + disk access to media |
-
-**Honest Settings copy (required):** Protects library metadata and thumbnails. Video files stay on disk as usual — enable **FileVault** (and keep folders private) for full-disk protection. Full media vault is a later product if demand exists.
-
-### Product behavior
-
-- **Opt-in** in Settings → Privacy / Security (off by default)
-- Set password → confirm → enable Touch ID unlock via `LocalAuthentication`
-- **Unlock gate** before any library UI, search, or thumbnail decode
-- **Auto-lock:** on Mac sleep, app deactivate (configurable), and after idle timeout
-- **Change / disable password** requires current password (or recovery — see below)
-- **Export / backup** of DB only when unlocked; exported copies remain user’s responsibility
-
-### Crypto / storage (implementation sketch)
-
-1. Generate random **DEK** (data encryption key); wrap with key derived from password (CryptoKit); store wrapped DEK + salt + verifier in **Keychain**
-2. Open GRDB with encryption (SQLCipher / passphrase configuration) using DEK after unlock; never persist DEK in UserDefaults
-3. Encrypt or gate thumbnail cache the same way (or wipe memory cache on lock)
-4. Biometric unlock: Keychain item accessible after `LocalAuthentication` success (same pattern as password managers — see SafeHaven/Ketchikan `BiometricGate` as reference, different repo)
-5. **Recovery:** if password forgotten, library metadata cannot be recovered without a recovery key shown once at enable-time (user must save it). Do not offer a backdoor.
-
-### Threat model (short)
-
-- Stops family / roommate / casual snoop on an unlocked session and hides catalog when locked
-- Does **not** claim NSA-grade protection of media files
-
-### Marketing
-
-- Landing / FAQ bullet: “Optional library lock with password and Touch ID”
-- Do not overclaim (“military-grade encrypted videos”)
+**Historical note:** An earlier plan sketched App Lock + encrypted GRDB/thumbnails (password, Touch ID, Keychain DEK, auto-lock). That is superseded; do not implement unless product direction changes.
 
 ### Sequencing vs GTM
 
-- **Can ship after** site + DMG if needed; strong trust feature for public launch
-- Prefer implement before Product Hunt if schedule allows (~several days to a week for solid v1)
+- Library/cache home chooser is already in-app; site FAQ should mirror the startup copy
 - **Full video-file vault** and **iOS companion player** stay out of this GTM pass
 
 ---
@@ -360,7 +323,7 @@ flowchart TD
 
 - Mac app runs local library server (Bonjour discover, pair PIN/token, stream)
 - iOS app **Skagway Player**: browse + play on LAN first
-- Reuse library-lock pairing: companion only works when Mac library is unlocked / server allowed
+- Pairing / server allowlist — do **not** depend on a cancelled in-app library lock; gate on explicit user allow + volume availability
 - Format reality: compatible files direct-stream; incompatible need later transcode story
 - AirPlay from Mac remains the zero-app shortcut until companion ships
 
@@ -389,7 +352,7 @@ Priority polish that makes “best” believable:
 4. **Notes field** — searchable, filterable, exportable
 5. **Richer search** — beyond filename FTS5: tags, notes, custom fields, path (even before full semantic AI)
 6. **Batch power** — multi-select operations feel inevitable, not bolted on
-7. **Library lock** (Part D) — differentiator Infuse doesn’t own for personal libraries
+7. **Library/cache on encrypted volumes** — document Choose Folder… (Part D); no in-app Library Lock
 8. **Real user guide** — stub [`docs/USER_GUIDE.md`](USER_GUIDE.md) → product-grade guide on site
 
 ### Track B — Pretty library look (revised 2026-07-11)

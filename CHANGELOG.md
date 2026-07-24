@@ -31,6 +31,11 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Library home setup** — First-launch screen: nothing leaves your Mac (no data sent to Mach II Labs; no analytics); Skagway is not a vault (does not modify or protect source media); user chooses where the catalog + thumbnail cache live — Choose Folder when media is on an encrypted volume, Standard when it is not. After Choose Folder: **Remember this location** (bookmark-only in prefs — no plain paths) or **Ask every time** (no location on the boot disk; open library each launch). Cache folder is named **Skagway-cache**. **Change Library & Cache Location…** re-runs the chooser. **Library Lock** cancelled — encrypted-volume placement is the privacy model.
+- **Home library** — File / landing “Open Home Library” opens the startup location you chose and shows that path in the tooltip. If you chose a folder at setup, there is no Application Support “default” library — launch never falls back to it.
+- **Save Copy** — Panel explains that a single `.machii` is a complete library; `-wal` / `-shm` are temporary and do not need to be copied. Finder Tags field hidden on Save Copy / New Library panels (not Skagway tags).
+- **Fix: Open Recent → Clear Menu** — Clears the list immediately in the File menu (and landing), and no longer re-adds the default library to recents on every launch.
+
 ## 0.73.0 (build 915) - 2026-07-23
 
 - **Settings** — Replaced the Form-based Settings window with the fully custom chrome proven in Fun Component (Settings… / ⌘,). Removed the Fun Component menu item and the old Form category views. Search field includes a clear control when non-empty; Custom Metadata Manage / New field are searchable; search results no longer multi-highlight by shared category.

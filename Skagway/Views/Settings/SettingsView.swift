@@ -252,6 +252,26 @@ struct SettingsView: View {
                 )
             }
 
+            sectionBlock(title: "Storage") {
+                settingsCard {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Library & thumbnail cache")
+                            .font(.body)
+                        Text("The thumbnail cache location is shared by every library. Changing it quits Skagway and shows the storage chooser again; files on disk are not deleted.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("Change Library & Cache Location…") {
+                            DatabaseExportImport.changeLibraryAndCacheLocation()
+                        }
+                        .padding(.top, 4)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+
             sectionBlock(title: "Updates") {
                 settingsCard {
                     describedToggleRow(

@@ -153,9 +153,127 @@ final class ThumbnailService: @unchecked Sendable {
         return 1080
     }
 
-    init() {
+    /// Default cache under `~/Library/Caches/Skagway/Skagway-cache` (Standard library home).
+    /// Still accepts a legacy `thumbnails` folder if that is what exists on disk.
+    static let cacheFolderName = "Skagway-cache"
+    static let legacyCacheFolderName = "thumbnails"
+
+    static var standardCacheDirectory: URL {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        let dir = caches.appendingPathComponent("Skagway/thumbnails", isDirectory: true)
+        let skagway = caches.appendingPathComponent("Skagway", isDirectory: true)
+        return resolveCacheDirectory(inParent: skagway)
+    }
+
+    /// Co-located cache folder next to a custom library home (`…/Skagway-cache`).
+    static func coLocatedCacheDirectory(inLibraryHome folder: URL) -> URL {
+        resolveCacheDirectory(inParent: folder)
+    }
+
+    /// Prefer `Skagway-cache`; if only legacy `thumbnails` exists, keep using it until renamed.
+    static func resolveCacheDirectory(inParent parent: URL) -> URL {
+        let fm = FileManager.default
+        let preferred = parent.appendingPathComponent(cacheFolderName, isDirectory: true)
+        let legacy = parent.appendingPathComponent(legacyCacheFolderName, isDirectory: true)
+        if fm.fileExists(atPath: preferred.path) { return preferred }
+        if fm.fileExists(atPath: legacy.path) { return legacy }
+        return preferred
+    }
+
+    /// Resolves the active on-disk cache root from prefs (custom path/bookmark) or the standard location.
+    static func resolvedCacheDirectory() -> URL {
+        let fm = FileManager.default
+        let bookmarkOnly = UserDefaults.standard.string(forKey: PrefsKeys.libraryHomeAccessMode)
+            == DatabaseExportImport.LibraryHomeAccessMode.rememberBookmark.rawValue
+
+        if bookmarkOnly {
+            UserDefaults.standard.removeObject(forKey: PrefsKeys.thumbnailCachePath)
+            if let bookmark = UserDefaults.standard.data(forKey: PrefsKeys.thumbnailCacheBookmark) {
+                var isStale = false
+                if let url = try? URL(
+                    resolvingBookmarkData: bookmark,
+                    options: [],
+                    relativeTo: nil,
+                    bookmarkDataIsStale: &isStale
+                ) {
+                    var resolved = url
+                    if !fm.fileExists(atPath: resolved.path),
+                       resolved.lastPathComponent == legacyCacheFolderName {
+                        let renamed = resolved.deletingLastPathComponent()
+                            .appendingPathComponent(cacheFolderName, isDirectory: true)
+                        if fm.fileExists(atPath: renamed.path) {
+                            resolved = renamed
+                        }
+                    }
+                    try? fm.createDirectory(at: resolved, withIntermediateDirectories: true)
+                    if isStale || resolved.path != url.path,
+                       let fresh = try? resolved.bookmarkData(
+                        options: [],
+                        includingResourceValuesForKeys: nil,
+                        relativeTo: nil
+                       ) {
+                        UserDefaults.standard.set(fresh, forKey: PrefsKeys.thumbnailCacheBookmark)
+                    }
+                    return resolved
+                }
+            }
+            let dir = standardCacheDirectory
+            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            return dir
+        }
+
+        if let path = UserDefaults.standard.string(forKey: PrefsKeys.thumbnailCachePath) {
+            var url = URL(fileURLWithPath: path, isDirectory: true)
+            if !fm.fileExists(atPath: url.path),
+               url.lastPathComponent == legacyCacheFolderName {
+                let renamed = url.deletingLastPathComponent()
+                    .appendingPathComponent(cacheFolderName, isDirectory: true)
+                if fm.fileExists(atPath: renamed.path) {
+                    url = renamed
+                    let standardized = (renamed.path as NSString).standardizingPath
+                    UserDefaults.standard.set(standardized, forKey: PrefsKeys.thumbnailCachePath)
+                }
+            }
+            try? fm.createDirectory(at: url, withIntermediateDirectories: true)
+            return url
+        }
+        if let bookmark = UserDefaults.standard.data(forKey: PrefsKeys.thumbnailCacheBookmark) {
+            var isStale = false
+            if let url = try? URL(
+                resolvingBookmarkData: bookmark,
+                options: [],
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            ) {
+                var resolved = url
+                if !fm.fileExists(atPath: resolved.path),
+                   resolved.lastPathComponent == legacyCacheFolderName {
+                    let renamed = resolved.deletingLastPathComponent()
+                        .appendingPathComponent(cacheFolderName, isDirectory: true)
+                    if fm.fileExists(atPath: renamed.path) {
+                        resolved = renamed
+                    }
+                }
+                try? fm.createDirectory(at: resolved, withIntermediateDirectories: true)
+                if isStale || resolved.path != url.path,
+                   let fresh = try? resolved.bookmarkData(
+                    options: [],
+                    includingResourceValuesForKeys: nil,
+                    relativeTo: nil
+                   ) {
+                    UserDefaults.standard.set(fresh, forKey: PrefsKeys.thumbnailCacheBookmark)
+                }
+                let path = (resolved.path as NSString).standardizingPath
+                UserDefaults.standard.set(path, forKey: PrefsKeys.thumbnailCachePath)
+                return resolved
+            }
+        }
+        let dir = standardCacheDirectory
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    init(cacheDirectory override: URL? = nil) {
+        let dir = override ?? Self.resolvedCacheDirectory()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         cacheDirectory = dir
         memoryCache.countLimit = 5000
@@ -357,7 +475,7 @@ final class ThumbnailService: @unchecked Sendable {
 
     // MARK: - Detail preview (disk + memory; long edge from settings)
 
-    /// Loads cached detail JPEG from disk/memory, or generates once and persists under `~/Library/Caches/.../Skagway/thumbnails/`.
+    /// Loads cached detail JPEG from disk/memory, or generates once and persists under the active Skagway-cache directory.
     func detailPreviewImage(for video: Video, longEdge: Int) async -> NSImage? {
         let path = video.filePath
         let edge = Self.normalizedDetailLongEdge(longEdge)

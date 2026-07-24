@@ -40,6 +40,18 @@ enum SettingsSearchCatalog {
             keywords: ["delete", "trash", "confirmation"]
         ),
         .init(
+            id: "library.storage",
+            title: "Library & thumbnail cache",
+            category: .library,
+            keywords: ["storage", "location", "cache", "folder", "encrypted", "home"]
+        ),
+        .init(
+            id: "library.storage.change",
+            title: "Change Library & Cache Location…",
+            category: .library,
+            keywords: ["storage", "location", "cache", "folder", "setup", "startup"]
+        ),
+        .init(
             id: "library.autoUpdates",
             title: "Automatically check for updates",
             category: .library,

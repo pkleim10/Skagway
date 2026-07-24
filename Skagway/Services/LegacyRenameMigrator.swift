@@ -124,7 +124,7 @@ enum LegacyRenameMigrator {
     private static func copyThumbnailCacheIfNeeded() {
         let fm = FileManager.default
         guard let caches = fm.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
-        let dest = caches.appendingPathComponent("\(newAppSupportFolder)/thumbnails", isDirectory: true)
+        let dest = caches.appendingPathComponent("\(newAppSupportFolder)/\(ThumbnailService.cacheFolderName)", isDirectory: true)
         let source = caches.appendingPathComponent("\(oldAppSupportFolder)/thumbnails", isDirectory: true)
         guard !fm.fileExists(atPath: dest.path), fm.fileExists(atPath: source.path) else { return }
         try? fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)

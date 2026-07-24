@@ -15,6 +15,7 @@ struct SkagwayApp: App {
                 .frame(minWidth: 900, minHeight: 600)
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
                     DatabaseExportImport.checkpointAndCleanWAL()
+                    DatabaseExportImport.clearSessionLocationPreferencesIfNeeded()
                 }
         }
         .defaultSize(width: 1200, height: 800)
@@ -319,18 +320,23 @@ struct SkagwayApp: App {
 
                 Divider()
 
-                if !DatabaseExportImport.defaultLibraryExists {
-                    Button("Create library in default location") {
-                        DatabaseExportImport.createLibraryInDefaultLocation()
+                if DatabaseExportImport.promptsForLibraryEachLaunch {
+                    Button("Open Library\u{2026}") {
+                        DatabaseExportImport.openLibraryFromUserSelection()
+                    }
+                    .help("You chose to pick the library each launch — no location is remembered on this Mac.")
+                } else if !DatabaseExportImport.homeLibraryExists {
+                    Button("Create Home Library") {
+                        DatabaseExportImport.createHomeLibraryIfNeeded()
                     }
                     .disabled(appState.hasLibrary)
-                    .help("Creates \(DatabaseExportImport.defaultLibraryPathForDisplay)")
+                    .help("Creates \(DatabaseExportImport.homeLibraryPathForDisplay)")
                 } else {
-                    Button("Open Default Library") {
-                        DatabaseExportImport.openDefaultLibrary()
+                    Button("Open Home Library") {
+                        DatabaseExportImport.openHomeLibrary()
                     }
-                    .disabled(DatabaseExportImport.isDefaultLibraryActive)
-                    .help(DatabaseExportImport.defaultLibraryPathForDisplay)
+                    .disabled(DatabaseExportImport.isHomeLibraryActive)
+                    .help(DatabaseExportImport.homeLibraryPathForDisplay)
                 }
                 Button("New Library\u{2026}") {
                     DatabaseExportImport.createNewLibrary()
@@ -339,18 +345,18 @@ struct SkagwayApp: App {
                     DatabaseExportImport.openLibraryFromUserSelection()
                 }
                 Menu("Open Recent") {
-                    ForEach(DatabaseExportImport.recentLibraryItems()) { item in
+                    ForEach(appState.recentLibraryItems()) { item in
                         Button(item.displayName) {
                             DatabaseExportImport.switchToLibrary(item)
                         }
                     }
                     Divider()
                     Button("Clear Menu") {
-                        DatabaseExportImport.clearRecentLibraries()
+                        appState.clearRecentLibraries()
                     }
-                    .disabled(DatabaseExportImport.recentLibraryItems().isEmpty)
+                    .disabled(appState.recentLibraryItems().isEmpty)
                 }
-                .disabled(DatabaseExportImport.recentLibraryItems().isEmpty)
+                .disabled(appState.recentLibraryItems().isEmpty)
                 Divider()
                 Button("Save Copy\u{2026}") {
                     if let pool = appState.dbManager?.dbPool {
@@ -379,6 +385,10 @@ struct SkagwayApp: App {
                 .disabled(!appState.hasLibrary)
                 .help("Import metadata from a CSV or JSON Lines file (updates matched videos)")
                 Divider()
+                Button("Change Library & Cache Location\u{2026}") {
+                    DatabaseExportImport.changeLibraryAndCacheLocation()
+                }
+                .help("Quit and choose again where the library and app-wide thumbnail cache are stored. Files on disk are not deleted.")
                 Button("Close Library\u{2026}") {
                     DatabaseExportImport.closeLibrary()
                 }

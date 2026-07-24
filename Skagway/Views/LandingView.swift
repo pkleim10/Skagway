@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct LandingView: View {
+    @Environment(AppState.self) private var appState
+
     var body: some View {
         VStack(spacing: AppSpacing.xxxl) {
             // App icon
@@ -14,55 +16,95 @@ struct LandingView: View {
                     .font(.largeTitle.weight(.semibold))
                     .foregroundStyle(Color.appTextPrimary)
 
-                Text("Create or open a library to get started")
+                Text(
+                    DatabaseExportImport.promptsForLibraryEachLaunch
+                        ? "Open your library to continue — its location is not remembered on this Mac"
+                        : "Create or open a library to get started"
+                )
                     .font(.title3)
                     .foregroundStyle(Color.appTextSecondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
             }
 
             // Main action card
             VStack(spacing: AppSpacing.lg) {
                 // Primary create actions
                 VStack(spacing: AppSpacing.md) {
-                    if DatabaseExportImport.defaultLibraryExists {
-                        Button(action: { DatabaseExportImport.openDefaultLibrary() }) {
-                            Label("Open default library", systemImage: "building.columns.fill")
+                    if DatabaseExportImport.promptsForLibraryEachLaunch {
+                        Button(action: { DatabaseExportImport.openLibraryFromUserSelection() }) {
+                            Label("Open library…", systemImage: "folder")
                                 .frame(maxWidth: 260)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(Color.appAccent)
                         .controlSize(.large)
-                        .help(DatabaseExportImport.defaultLibraryPathForDisplay)
-                        .disabled(DatabaseExportImport.isDefaultLibraryActive)
+                        .help("Choose your .machii on the volume where you keep the library and Skagway-cache.")
+
+                        Button(action: { DatabaseExportImport.createNewLibrary() }) {
+                            Label("Create library…", systemImage: "folder.badge.plus")
+                                .frame(maxWidth: 260)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(Color.appAccent)
+                        .controlSize(.large)
+                    } else if DatabaseExportImport.homeLibraryExists {
+                        Button(action: { DatabaseExportImport.openHomeLibrary() }) {
+                            Label("Open home library", systemImage: "building.columns.fill")
+                                .frame(maxWidth: 260)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.appAccent)
+                        .controlSize(.large)
+                        .help(DatabaseExportImport.homeLibraryPathForDisplay)
+                        .disabled(DatabaseExportImport.isHomeLibraryActive)
+
+                        Button(action: { DatabaseExportImport.createNewLibrary() }) {
+                            Label("Create library…", systemImage: "folder.badge.plus")
+                                .frame(maxWidth: 260)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(Color.appAccent)
+                        .controlSize(.large)
+
+                        Button(action: { DatabaseExportImport.openLibraryFromUserSelection() }) {
+                            Label("Open library…", systemImage: "folder")
+                                .frame(maxWidth: 260)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(Color.appAccent)
+                        .controlSize(.large)
                     } else {
-                        Button(action: { DatabaseExportImport.createLibraryInDefaultLocation() }) {
-                            Label("Create library in default location", systemImage: "plus.circle.fill")
+                        Button(action: { DatabaseExportImport.createHomeLibraryIfNeeded() }) {
+                            Label("Create home library", systemImage: "plus.circle.fill")
                                 .frame(maxWidth: 260)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(Color.appAccent)
                         .controlSize(.large)
-                        .help("Creates \(DatabaseExportImport.defaultLibraryPathForDisplay)")
-                    }
+                        .help("Creates \(DatabaseExportImport.homeLibraryPathForDisplay)")
 
-                    Button(action: { DatabaseExportImport.createNewLibrary() }) {
-                        Label("Create library…", systemImage: "folder.badge.plus")
-                            .frame(maxWidth: 260)
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(Color.appAccent)
-                    .controlSize(.large)
+                        Button(action: { DatabaseExportImport.createNewLibrary() }) {
+                            Label("Create library…", systemImage: "folder.badge.plus")
+                                .frame(maxWidth: 260)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(Color.appAccent)
+                        .controlSize(.large)
 
-                    Button(action: { DatabaseExportImport.openLibraryFromUserSelection() }) {
-                        Label("Open library…", systemImage: "folder")
-                            .frame(maxWidth: 260)
+                        Button(action: { DatabaseExportImport.openLibraryFromUserSelection() }) {
+                            Label("Open library…", systemImage: "folder")
+                                .frame(maxWidth: 260)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(Color.appAccent)
+                        .controlSize(.large)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(Color.appAccent)
-                    .controlSize(.large)
                 }
 
-                // Recents
-                if !DatabaseExportImport.recentLibraryItems().isEmpty {
+                // Recents (not used when ask-each-launch — no location list on the boot disk)
+                if !DatabaseExportImport.promptsForLibraryEachLaunch,
+                   !appState.recentLibraryItems().isEmpty {
                     Rectangle()
                         .fill(Color.appDivider)
                         .frame(height: 1)
@@ -73,7 +115,7 @@ struct LandingView: View {
                         .foregroundStyle(Color.appTextSecondary)
 
                     VStack(spacing: AppSpacing.xs) {
-                        ForEach(DatabaseExportImport.recentLibraryItems()) { item in
+                        ForEach(appState.recentLibraryItems()) { item in
                             Button(action: { DatabaseExportImport.switchToLibrary(item) }) {
                                 HStack {
                                     Label(item.displayName, systemImage: "clock.arrow.circlepath")
