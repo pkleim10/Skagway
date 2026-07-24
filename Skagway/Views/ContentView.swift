@@ -26,7 +26,6 @@ private struct LibraryContentView: View {
     /// Must remove when the view goes away; repeated `onAppear` without removal stacks monitors and breaks handling.
     @State private var keyDownMonitor: Any?
     @State private var fullScreenController: FullscreenInlinePlayerWindowController?
-    @State private var showListColumnsSheet = false
     @State private var showConversionQueue = false
     @State private var showMoveQueue = false
     @FocusState private var isSearchFocused: Bool

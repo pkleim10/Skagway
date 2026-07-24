@@ -7,7 +7,6 @@ struct SkagwayApp: App {
     @Environment(\.openWindow) private var openWindow
 
     private static let settingsWindowID = "settings"
-    private static let funComponentWindowID = "fun-component"
 
     var body: some Scene {
         WindowGroup {
@@ -25,12 +24,6 @@ struct SkagwayApp: App {
                     openWindow(id: Self.settingsWindowID)
                 }
                 .keyboardShortcut(",", modifiers: .command)
-            }
-
-            CommandGroup(after: .appSettings) {
-                Button("Fun Component") {
-                    openWindow(id: Self.funComponentWindowID)
-                }
             }
 
             CommandGroup(after: .sidebar) {
@@ -422,14 +415,6 @@ struct SkagwayApp: App {
         // Custom Settings window (not the system `Settings` scene) so chrome is fully ours.
         Window("Settings", id: Self.settingsWindowID) {
             SettingsView(appState: appState)
-        }
-        .defaultSize(width: 780, height: 560)
-        .windowStyle(.hiddenTitleBar)
-        .windowResizability(.contentSize)
-
-        // Experimental playground — intentionally separate from Settings.
-        Window("Fun Component", id: Self.funComponentWindowID) {
-            FunComponentView(appState: appState)
         }
         .defaultSize(width: 780, height: 560)
         .windowStyle(.hiddenTitleBar)

@@ -202,9 +202,21 @@ enum SettingsSearchCatalog {
         // Custom Metadata
         .init(
             id: "customMetadata.fields",
-            title: "Custom metadata fields",
+            title: "Fields",
             category: .customMetadata,
-            keywords: ["fields", "name", "type", "inspector"]
+            keywords: ["custom metadata", "fields", "name", "type", "inspector"]
+        ),
+        .init(
+            id: "customMetadata.manage",
+            title: "Manage",
+            category: .customMetadata,
+            keywords: ["custom metadata", "fields", "add"]
+        ),
+        .init(
+            id: "customMetadata.newField",
+            title: "New field",
+            category: .customMetadata,
+            keywords: ["custom metadata", "add field", "manage", "name", "type"]
         ),
     ]
 

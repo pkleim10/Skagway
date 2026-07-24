@@ -31,8 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Settings** — Replaced the Form-based Settings window with the fully custom chrome proven in Fun Component (Settings… / ⌘,). Removed the Fun Component menu item and the old Form category views. Search field includes a clear control when non-empty; Custom Metadata Manage / New field are searchable; search results no longer multi-highlight by shared category.
 - **Filmstrip defaults & regenerate** — Default layout is 2×5 (was hardcoded 2×4 in generation). Inspector generates missing filmstrips using Settings rows/columns. Modify Filmstrip supports multi-select with progress/Stop, seeds steppers from the cached grid for a single video (Settings default for multi), uses the Settings-style integer stepper, cancels in-flight builds, and shows specific errors (e.g. “File does not exist”). **Regenerate filmstrips** advances a cache epoch so old composites are ignored immediately (background cleanup deletes orphans), then rebuilds the selected video at the new grid.
-- **Fun Component** — Experimental Settings-like chrome playground (sidebar with Search and categories; all Settings category sheets filled and wired to live settings; Settings-style borderless pickers) opened from the Fun Component menu item; separate from Settings.
 - **Help → Skagway Help** — Opens the online manual at `https://machiilabs.com/skagway/manual` (replaces the unused system Help placeholder).
 
 ## 0.72.0 (build 892) - 2026-07-22
