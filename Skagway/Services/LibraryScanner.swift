@@ -87,6 +87,7 @@ actor LibraryScanner {
             let videoInput = Video(
                 filePath: fileURL.path,
                 fileName: fileURL.lastPathComponent,
+                title: fileURL.lastPathComponent,
                 fileSize: metadata.fileSize,
                 duration: metadata.duration,
                 width: metadata.width,
@@ -254,6 +255,7 @@ actor LibraryScanner {
             let videoInput = Video(
                 filePath: fileURL.path,
                 fileName: fileURL.lastPathComponent,
+                title: fileURL.lastPathComponent,
                 fileSize: metadata.fileSize,
                 duration: metadata.duration,
                 width: metadata.width,

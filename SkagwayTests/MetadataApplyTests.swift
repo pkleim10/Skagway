@@ -281,6 +281,31 @@ final class MetadataApplyTests: XCTestCase {
         XCTAssertTrue(resolved.contains(MetadataExportColumn.customFieldId(directorID)))
     }
 
+    func testPass1_titleUpdate() throws {
+        var video = sampleVideo(id: 1, path: "/a.mp4", fp: nil, rating: 0)
+        video.title = "a.mp4"
+        let index = MetadataApplier.buildIndex(
+            videos: [video],
+            tagsByVideoId: [:],
+            customByVideoId: [:],
+            customFieldDefinitions: []
+        )
+        let rows = [
+            MetadataApplyRow(lineNumber: 2, values: [
+                "filePath": "/a.mp4",
+                "title": "My Custom Title",
+            ]),
+        ]
+        let result = try MetadataApplier.pass1(
+            rows: rows,
+            resolvedColumnIDs: ["filePath", "title"],
+            skippedUnknownColumns: [],
+            index: index
+        )
+        XCTAssertEqual(result.titleUpdates[1], "My Custom Title")
+        XCTAssertEqual(result.updatedVideoCount, 1)
+    }
+
     func testPass2_collectsUnmatchedOnly() {
         let video = sampleVideo(id: 1, path: "/a.mp4", fp: nil, rating: 0)
         let index = MetadataApplier.buildIndex(

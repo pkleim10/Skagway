@@ -21,9 +21,12 @@ struct VideoRepository {
             guard !terms.isEmpty else { return try Video.fetchAll(db) }
             // Contains (*term*), AND logic, case-insensitive — "coop" matches "Cooper"/"acoop", "bear coop" matches "Dale Cooper fights a bear"
             let conditions = terms.map { _ in
-                "LOWER(fileName) LIKE ? ESCAPE '\\'"
+                "(LOWER(title) LIKE ? ESCAPE '\\' OR LOWER(fileName) LIKE ? ESCAPE '\\')"
             }.joined(separator: " AND ")
-            let args = terms.map { "%\(Self.escapeLike($0))%".lowercased() }
+            let args = terms.flatMap { term -> [String] in
+                let pattern = "%\(Self.escapeLike(term))%".lowercased()
+                return [pattern, pattern]
+            }
             let sql = """
                 SELECT * FROM video
                 WHERE \(conditions)
@@ -190,11 +193,27 @@ struct VideoRepository {
         }
     }
 
-    func renameVideo(videoId: Int64, newFilePath: String, newFileName: String) async throws {
+    func renameVideo(videoId: Int64, newFilePath: String, newFileName: String, previousFileName: String) async throws {
+        try await dbPool.write { db in
+            // Keep title in sync when it still matched the old on-disk name (default after import).
+            try db.execute(
+                sql: """
+                    UPDATE video SET
+                        filePath = ?,
+                        fileName = ?,
+                        title = CASE WHEN title = ? OR title = '' THEN ? ELSE title END
+                    WHERE id = ?
+                    """,
+                arguments: [newFilePath, newFileName, previousFileName, newFileName, videoId]
+            )
+        }
+    }
+
+    func updateTitle(videoId: Int64, title: String) async throws {
         try await dbPool.write { db in
             try db.execute(
-                sql: "UPDATE video SET filePath = ?, fileName = ? WHERE id = ?",
-                arguments: [newFilePath, newFileName, videoId]
+                sql: "UPDATE video SET title = ? WHERE id = ?",
+                arguments: [title, videoId]
             )
         }
     }

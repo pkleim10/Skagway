@@ -13,7 +13,7 @@ enum VideoSort: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .name: return "Name"
+        case .name: return "Title"
         case .dateAdded: return "Date Added"
         case .duration: return "Duration"
         case .fileSize: return "File Size"
@@ -26,7 +26,7 @@ enum VideoSort: String, CaseIterable, Identifiable {
     func comparators(ascending: Bool) -> [KeyPathComparator<Video>] {
         let order: SortOrder = ascending ? .forward : .reverse
         switch self {
-        case .name: return [KeyPathComparator(\Video.fileName, order: order)]
+        case .name: return [KeyPathComparator(\Video.displayTitle, order: order)]
         case .duration: return [KeyPathComparator(\Video.sortableDuration, order: order)]
         case .fileSize: return [KeyPathComparator(\Video.fileSize, order: order)]
         case .rating: return [KeyPathComparator(\Video.rating, order: order)]
@@ -40,6 +40,7 @@ enum VideoSort: String, CaseIterable, Identifiable {
     }
 
     static func from(keyPath: PartialKeyPath<Video>) -> VideoSort {
+        if keyPath == \Video.displayTitle as PartialKeyPath<Video> { return .name }
         if keyPath == \Video.fileName as PartialKeyPath<Video> { return .name }
         if keyPath == \Video.sortableDuration as PartialKeyPath<Video> { return .duration }
         if keyPath == \Video.fileSize as PartialKeyPath<Video> { return .fileSize }

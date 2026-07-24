@@ -63,7 +63,7 @@ struct FilterMatcher {
     private static func compileBuiltin(_ attr: RuleAttribute, _ cmp: RuleComparison, _ raw: String, _ raw2: String?) -> (Video, [Tag]) -> Bool {
         switch attr {
         case .name:
-            let m = StringMatcher(cmp, raw); return { v, _ in m.matches(v.fileName) }
+            let m = StringMatcher(cmp, raw); return { v, _ in m.matches(v.displayTitle) || m.matches(v.fileName) }
         case .path:
             let m = StringMatcher(cmp, raw); return { v, _ in m.matches(v.filePath) }
         case .fileExtension:

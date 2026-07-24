@@ -80,7 +80,7 @@ struct OverlayInlinePlayerView: View {
     // Escape already stops playback (see the Space/Escape key handler in ContentView).
     private var overlayHeader: some View {
         HStack(spacing: 6) {
-            Text(video.fileName)
+            Text(video.displayTitle)
                 // 14pt / 30pt bar — 25% larger than the original 11pt / 24pt, matching the
                 // size-control buttons in FloatingPlayerPanel.
                 .font(.system(size: 14, weight: .medium))

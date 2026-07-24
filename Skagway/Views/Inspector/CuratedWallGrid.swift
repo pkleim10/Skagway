@@ -93,12 +93,15 @@ struct CuratedWallGrid: View {
                 ) {
                     ForEach(viewModel.filteredVideos) { video in
                         let isRenamingRow = viewModel.renamingVideoId == video.id
+                        let isEditingTitleRow = viewModel.editingTitleVideoId == video.id
                         let isMoving = viewModel.activeMoveVideoIds.contains(video.id)
                         CuratedWallCard(
                             video: video,
                             selectionState: selectionStore.state(for: video.id),
                             isRenaming: isRenamingRow,
+                            isEditingTitle: isEditingTitleRow,
                             renameText: isRenamingRow ? $viewModel.renameText : .constant(""),
+                            titleEditText: isEditingTitleRow ? $viewModel.titleEditText : .constant(""),
                             thumbnailService: thumbnailService,
                             isMoving: isMoving,
                             resumeFraction: resumeFraction(for: video),
@@ -106,6 +109,8 @@ struct CuratedWallGrid: View {
                             renameFocus: $renameFocus,
                             onCommitRename: { commitRename(video) },
                             onCancelRename: cancelRename,
+                            onCommitTitle: { commitTitleEdit(video) },
+                            onCancelTitle: cancelTitleEdit,
                             onRenameEditingChanged: { viewModel.isEditingText = $0 }
                         )
                         .id(video.id)
@@ -121,9 +126,11 @@ struct CuratedWallGrid: View {
                             Button("Show in Finder") {
                                 NSWorkspace.shared.selectFile(video.filePath, inFileViewerRootedAtPath: "")
                             }
-                            Button("Rename") {
-                                viewModel.renameText = video.fileName
-                                viewModel.renamingVideoId = video.id
+                            Button("Edit Title\u{2026}") {
+                                viewModel.beginEditingTitle(for: video)
+                            }
+                            Button("Rename File\u{2026}") {
+                                viewModel.beginRenamingFile(for: video)
                             }
                             .disabled(isMoving)
                             .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "")
@@ -290,6 +297,11 @@ struct CuratedWallGrid: View {
                     DispatchQueue.main.async { renameFocus = true }
                 }
             }
+            .onChange(of: viewModel.editingTitleVideoId) { _, id in
+                if id != nil {
+                    DispatchQueue.main.async { renameFocus = true }
+                }
+            }
             .onChange(of: viewModel.scrollToVideoId) { _, targetId in
                 guard let id = targetId else { return }
                 viewModel.scrollToVideoId = nil
@@ -364,20 +376,28 @@ struct CuratedWallGrid: View {
 
     private func commitRename(_ video: Video) {
         let newName = viewModel.renameText.trimmingCharacters(in: .whitespaces)
-        viewModel.renamingVideoId = nil
-        guard !newName.isEmpty, newName != video.fileName else {
-            viewModel.renameText = ""
-            return
-        }
+        viewModel.cancelFileRename()
+        guard !newName.isEmpty, newName != video.fileName else { return }
         Task {
             _ = await viewModel.renameVideo(video, to: newName)
-            viewModel.renameText = ""
         }
     }
 
     private func cancelRename() {
-        viewModel.renamingVideoId = nil
-        viewModel.renameText = ""
+        viewModel.cancelFileRename()
+    }
+
+    private func commitTitleEdit(_ video: Video) {
+        let newTitle = viewModel.titleEditText.trimmingCharacters(in: .whitespacesAndNewlines)
+        viewModel.cancelTitleEdit()
+        guard newTitle != video.displayTitle else { return }
+        Task {
+            await viewModel.updateVideoTitle(video, to: newTitle)
+        }
+    }
+
+    private func cancelTitleEdit() {
+        viewModel.cancelTitleEdit()
     }
 
     /// Fraction (0...1) of the video already watched, per its saved resume position — drives the

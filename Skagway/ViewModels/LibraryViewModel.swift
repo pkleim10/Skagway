@@ -512,6 +512,9 @@ final class LibraryViewModel {
     var isEditingText: Bool = false
     var renamingVideoId: String?
     var renameText: String = ""
+    /// Inline edit of library title (does not rename the file on disk).
+    var editingTitleVideoId: String?
+    var titleEditText: String = ""
     var renamingTagId: Int64?
     var tagRenameText: String = ""
     var scrollToVideoId: String?
@@ -864,6 +867,9 @@ final class LibraryViewModel {
                 for (dbId, rating) in pass1.ratingUpdates {
                     try? await videoRepo.updateRating(videoId: dbId, rating: rating)
                 }
+                for (dbId, title) in pass1.titleUpdates {
+                    try? await videoRepo.updateTitle(videoId: dbId, title: title)
+                }
                 for (fieldId, byVideo) in pass1.customUpdates {
                     for (dbId, value) in byVideo {
                         try? await videoRepo.upsertCustomMetadata(videoId: dbId, fieldId: fieldId, value: value)
@@ -879,12 +885,16 @@ final class LibraryViewModel {
 
                 await MainActor.run {
                     guard let self else { return }
-                    // Reflect rating updates in memory
-                    if !pass1.ratingUpdates.isEmpty {
+                    // Reflect rating / title updates in memory
+                    if !pass1.ratingUpdates.isEmpty || !pass1.titleUpdates.isEmpty {
                         var updated = self.videos
                         for i in updated.indices {
-                            if let id = updated[i].databaseId, let r = pass1.ratingUpdates[id] {
+                            guard let id = updated[i].databaseId else { continue }
+                            if let r = pass1.ratingUpdates[id] {
                                 updated[i].rating = r
+                            }
+                            if let t = pass1.titleUpdates[id] {
+                                updated[i].title = t
                             }
                         }
                         self.videos = updated
@@ -2405,7 +2415,7 @@ final class LibraryViewModel {
         switch sort {
         case .name:
             result.sort { a, b in
-                let r = a.fileName.localizedStandardCompare(b.fileName)
+                let r = a.displayTitle.localizedStandardCompare(b.displayTitle)
                 return descending ? r == .orderedDescending : r == .orderedAscending
             }
         case .dateAdded:
@@ -3509,8 +3519,23 @@ final class LibraryViewModel {
             } else {
                 try FileManager.default.moveItem(at: oldURL, to: newURL)
             }
-            try await videoRepo.renameVideo(videoId: dbId, newFilePath: newFilePath, newFileName: trimmed)
+            try await videoRepo.renameVideo(
+                videoId: dbId,
+                newFilePath: newFilePath,
+                newFileName: trimmed,
+                previousFileName: video.fileName
+            )
             thumbnailService.migrateCacheKey(from: video.filePath, to: newFilePath)
+            if let idx = videos.firstIndex(where: { $0.databaseId == dbId }) {
+                var updated = videos
+                let previousName = video.fileName
+                updated[idx].filePath = newFilePath
+                updated[idx].fileName = trimmed
+                if updated[idx].title == previousName || updated[idx].title.isEmpty {
+                    updated[idx].title = trimmed
+                }
+                videos = updated
+            }
             if selectedVideoIds.contains(video.filePath) {
                 selectedVideoIds.remove(video.filePath)
                 selectedVideoIds.insert(newFilePath)
@@ -3524,6 +3549,50 @@ final class LibraryViewModel {
             reportTransientError("Couldn't rename \"\(video.fileName)\"")
             return nil
         }
+    }
+
+    /// Updates the library display title without renaming the file on disk.
+    func updateVideoTitle(_ video: Video, to newTitle: String) async {
+        guard let dbId = video.databaseId else { return }
+        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolved = trimmed.isEmpty ? video.fileName : trimmed
+        do {
+            try await videoRepo.updateTitle(videoId: dbId, title: resolved)
+            if let idx = videos.firstIndex(where: { $0.databaseId == dbId }) {
+                var updated = videos
+                updated[idx].title = resolved
+                videos = updated
+            }
+            if isSortedByName {
+                pendingScrollToAfterRename = video.filePath
+            }
+        } catch {
+            reportTransientError("Couldn't update title for \"\(video.displayTitle)\"")
+        }
+    }
+
+    func beginEditingTitle(for video: Video) {
+        renamingVideoId = nil
+        renameText = ""
+        titleEditText = video.displayTitle
+        editingTitleVideoId = video.id
+    }
+
+    func beginRenamingFile(for video: Video) {
+        editingTitleVideoId = nil
+        titleEditText = ""
+        renameText = video.fileName
+        renamingVideoId = video.id
+    }
+
+    func cancelTitleEdit() {
+        editingTitleVideoId = nil
+        titleEditText = ""
+    }
+
+    func cancelFileRename() {
+        renamingVideoId = nil
+        renameText = ""
     }
 
     /// Same-volume moves are an atomic rename (instant, no partial-file risk) and run inline.
@@ -3569,7 +3638,12 @@ final class LibraryViewModel {
         }
         guard let dbId = video.databaseId else { return }
         do {
-            try await videoRepo.renameVideo(videoId: dbId, newFilePath: newURL.path, newFileName: newURL.lastPathComponent)
+            try await videoRepo.renameVideo(
+                videoId: dbId,
+                newFilePath: newURL.path,
+                newFileName: newURL.lastPathComponent,
+                previousFileName: video.fileName
+            )
         } catch {
             try? fm.moveItem(at: newURL, to: video.url)
             recordFailedMoveJob(video: video, destinationFolder: newURL.deletingLastPathComponent(),
@@ -3589,6 +3663,9 @@ final class LibraryViewModel {
             var updated = videos
             updated[idx].filePath = newURL.path
             updated[idx].fileName = newURL.lastPathComponent
+            if updated[idx].title == video.fileName || updated[idx].title.isEmpty {
+                updated[idx].title = newURL.lastPathComponent
+            }
             videos = updated
         }
         if wasSelected {
@@ -3606,7 +3683,12 @@ final class LibraryViewModel {
         let newFileName = newURL.lastPathComponent
 
         do {
-            try await videoRepo.renameVideo(videoId: dbId, newFilePath: newPath, newFileName: newFileName)
+            try await videoRepo.renameVideo(
+                videoId: dbId,
+                newFilePath: newPath,
+                newFileName: newFileName,
+                previousFileName: video.fileName
+            )
         } catch {
             print("videoConvertedToMP4 DB update failed: \(error)")
             reportTransientError("Converted \"\(newFileName)\" but couldn't update the library record")
@@ -3627,6 +3709,9 @@ final class LibraryViewModel {
         var updated = videos
         updated[idx].filePath = newPath
         updated[idx].fileName = newFileName
+        if updated[idx].title == video.fileName || updated[idx].title.isEmpty {
+            updated[idx].title = newFileName
+        }
         updated[idx].thumbnailPath = nil
         if let size = (try? newURL.resourceValues(forKeys: [.fileSizeKey]))?.fileSize {
             updated[idx].fileSize = Int64(size)
@@ -4197,7 +4282,12 @@ final class LibraryViewModel {
             return
         }
         do {
-            try await videoRepo.renameVideo(videoId: dbId, newFilePath: finalURL.path, newFileName: sourceName)
+            try await videoRepo.renameVideo(
+                videoId: dbId,
+                newFilePath: finalURL.path,
+                newFileName: sourceName,
+                previousFileName: liveVideo?.fileName ?? job.sourceFileName
+            )
         } catch {
             try? fm.moveItem(at: finalURL, to: sourceURL) // roll back so the file isn't silently lost
             updateMoveJobStatus(jobId, .failed(reason: "Moved the file, but couldn't update the library — rolled back."))
@@ -4208,8 +4298,12 @@ final class LibraryViewModel {
         thumbnailService.migrateCacheKey(from: sourcePath, to: finalURL.path)
         if let idx = videos.firstIndex(where: { $0.databaseId == dbId }) {
             var updated = videos
+            let previousName = liveVideo?.fileName ?? job.sourceFileName
             updated[idx].filePath = finalURL.path
             updated[idx].fileName = sourceName
+            if updated[idx].title == previousName || updated[idx].title.isEmpty {
+                updated[idx].title = sourceName
+            }
             videos = updated
         }
         if wasSelected {

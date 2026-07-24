@@ -671,7 +671,7 @@ private struct LibraryContentView: View {
                         fullScreenController = controller
                         controller.present(
                             player: player,
-                            title: selectedVideo?.fileName ?? "",
+                            title: selectedVideo?.displayTitle ?? "",
                             startWindowInFullscreen: true,
                             subtitleTrack: vm.playback.subtitleTrack,
                             viewModel: vm,
@@ -805,7 +805,7 @@ private struct LibraryContentView: View {
 
     /// Returns `nil` to consume the key event (do not deliver to the app).
     private static func processLibraryKeyDown(_ event: NSEvent, lvm: LibraryViewModel) -> NSEvent? {
-        // Enter key (without modifiers) — start inline rename in list or grid mode.
+            // Enter key (without modifiers) — start inline title edit in list or grid mode.
         // A focused text field (Inspector New Tag, search, notes, filter create-tag, etc.)
         // must keep Return for its own submit — same first-responder carve-out as Space.
         if event.keyCode == 36, event.modifierFlags.intersection(.deviceIndependentFlagsMask) == [], !lvm.isEditingText {
@@ -821,14 +821,13 @@ private struct LibraryContentView: View {
                let video = lvm.filteredVideo(forPath: videoId)
             {
                 DispatchQueue.main.async {
-                    lvm.renameText = video.fileName
-                    lvm.renamingVideoId = videoId
+                    lvm.beginEditingTitle(for: video)
                 }
                 return nil
             }
             return event
         }
-            // Escape key — cancel rename, defocus text input, or stop playback (including fullscreen).
+            // Escape key — cancel title edit / file rename, defocus text input, or stop playback (including fullscreen).
         if event.keyCode == 53 {
             if lvm.renamingTagId != nil {
                 DispatchQueue.main.async {
@@ -838,10 +837,15 @@ private struct LibraryContentView: View {
                 }
                 return nil
             }
+            if lvm.editingTitleVideoId != nil {
+                DispatchQueue.main.async {
+                    lvm.cancelTitleEdit()
+                }
+                return nil
+            }
             if lvm.renamingVideoId != nil {
                 DispatchQueue.main.async {
-                    lvm.renamingVideoId = nil
-                    lvm.renameText = ""
+                    lvm.cancelFileRename()
                 }
                 return nil
             }

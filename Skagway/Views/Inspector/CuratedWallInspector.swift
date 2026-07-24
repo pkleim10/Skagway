@@ -351,10 +351,18 @@ struct CuratedWallInspector: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Color.appTextPrimary)
             } else {
-                Text(v.fileName)
+                Text(v.displayTitle)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Color.appTextPrimary)
                     .lineLimit(2)
+
+                if v.displayTitle != v.fileName {
+                    Text(v.fileName)
+                        .font(.caption)
+                        .foregroundStyle(Color.appTextTertiary)
+                        .lineLimit(1)
+                        .help("On-disk file name")
+                }
 
                 // File path (folder icon + path) — click to reveal in Finder.
                 Button {

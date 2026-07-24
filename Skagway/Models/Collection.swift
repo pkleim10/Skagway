@@ -149,7 +149,7 @@ enum RuleAttribute: String, Codable, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .name: "Name"
+        case .name: "Title"
         case .fileExtension: "Extension"
         case .path: "Path"
         case .parentFolder: "Parent Folder"
@@ -193,7 +193,7 @@ enum RuleAttribute: String, Codable, CaseIterable, Identifiable {
 
     var valuePlaceholder: String {
         switch self {
-        case .name: "File name"
+        case .name: "Title or file name"
         case .fileExtension: "mp4, mkv, etc."
         case .path: "/path/to/folder"
         case .parentFolder: "Folder name"

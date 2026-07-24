@@ -105,7 +105,8 @@ enum MetadataExportColumnRegistry {
     /// Built-in columns in catalog order (not necessarily export order).
     static let builtins: [MetadataExportColumn] = [
         .init(id: "filePath", label: "Path", defaultIncluded: true),
-        .init(id: "fileName", label: "Name", defaultIncluded: true),
+        .init(id: "title", label: "Title", defaultIncluded: true),
+        .init(id: "fileName", label: "File Name", defaultIncluded: true),
         .init(id: "id", label: "Database ID", defaultIncluded: false),
         .init(id: "fileExtension", label: "Extension", defaultIncluded: false),
         .init(id: "parentFolder", label: "Parent Folder", defaultIncluded: false),
@@ -137,7 +138,7 @@ enum MetadataExportColumnRegistry {
     static var builtinIDs: Set<String> { Set(builtins.map(\.id)) }
 
     /// Columns Apply can write in v1.
-    static let writableColumnIDs: Set<String> = ["rating", "tags"]
+    static let writableColumnIDs: Set<String> = ["rating", "tags", "title"]
 
     static func isWritableColumnID(_ id: String) -> Bool {
         if writableColumnIDs.contains(id) { return true }
@@ -365,6 +366,7 @@ enum MetadataExportRowBuilder {
         }
         switch columnId {
         case "filePath": return .string(video.filePath)
+        case "title": return .string(video.displayTitle)
         case "fileName": return .string(video.fileName)
         case "id":
             if let id = video.databaseId { return .int(id) }

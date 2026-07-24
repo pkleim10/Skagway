@@ -1046,7 +1046,7 @@ struct SettingsView: View {
     private var listColumnNameRow: some View {
         HStack(alignment: .firstTextBaseline) {
             SettingsLabel(
-                "Name",
+                "Title",
                 description: "Always visible. Choose which metadata columns appear in list view. Up to 16 custom columns can be shown at once (alphabetically). Reorder and resize visible columns from the table header."
             )
             Spacer(minLength: 8)

@@ -203,9 +203,11 @@ struct LibraryListView: View {
                     )
                 }
                 if ids.count == 1 {
-                    Button("Rename") {
-                        viewModel.renameText = video.fileName
-                        viewModel.renamingVideoId = video.id
+                    Button("Edit Title\u{2026}") {
+                        viewModel.beginEditingTitle(for: video)
+                    }
+                    Button("Rename File\u{2026}") {
+                        viewModel.beginRenamingFile(for: video)
                     }
                     .disabled(isMoving)
                     .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "")
@@ -374,7 +376,7 @@ struct LibraryListView: View {
 
     @TableColumnBuilder<Video, KeyPathComparator<Video>>
     private func listTableColumns() -> some TableColumnContent<Video, KeyPathComparator<Video>> {
-        TableColumn("Name", value: \.fileName) { video in
+        TableColumn("Title", value: \.displayTitle) { video in
             nameRowView(for: video)
         }
         .width(min: 200, ideal: 350)
@@ -592,8 +594,32 @@ struct LibraryListView: View {
                     .onDisappear {
                         viewModel.isEditingText = false
                     }
+            } else if viewModel.editingTitleVideoId == video.id {
+                TextField("", text: $viewModel.titleEditText)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1)
+                    .padding(.horizontal, AppSpacing.xs)
+                    .padding(.vertical, AppSpacing.xxs)
+                    .background(Color.appSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: AppRadius.xs, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppRadius.xs, style: .continuous)
+                            .stroke(Color.appAccent, lineWidth: 1.5)
+                    )
+                    .focused($isRenameFocused)
+                    .onSubmit { commitTitleEdit(video) }
+                    .onExitCommand { cancelTitleEdit() }
+                    .onAppear {
+                        viewModel.isEditingText = true
+                        DispatchQueue.main.async {
+                            isRenameFocused = true
+                        }
+                    }
+                    .onDisappear {
+                        viewModel.isEditingText = false
+                    }
             } else {
-                Text(video.fileName)
+                Text(video.displayTitle)
                     .lineLimit(1)
                     .foregroundStyle(Color.appTextPrimary)
                 if video.hasSubtitles {
@@ -615,20 +641,28 @@ struct LibraryListView: View {
 
     private func commitRename(_ video: Video) {
         let newName = viewModel.renameText.trimmingCharacters(in: .whitespaces)
-        viewModel.renamingVideoId = nil
-        guard !newName.isEmpty, newName != video.fileName else {
-            viewModel.renameText = ""
-            return
-        }
+        viewModel.cancelFileRename()
+        guard !newName.isEmpty, newName != video.fileName else { return }
         Task {
             _ = await viewModel.renameVideo(video, to: newName)
-            viewModel.renameText = ""
         }
     }
 
     private func cancelRename() {
-        viewModel.renamingVideoId = nil
-        viewModel.renameText = ""
+        viewModel.cancelFileRename()
+    }
+
+    private func commitTitleEdit(_ video: Video) {
+        let newTitle = viewModel.titleEditText.trimmingCharacters(in: .whitespacesAndNewlines)
+        viewModel.cancelTitleEdit()
+        guard newTitle != video.displayTitle else { return }
+        Task {
+            await viewModel.updateVideoTitle(video, to: newTitle)
+        }
+    }
+
+    private func cancelTitleEdit() {
+        viewModel.cancelTitleEdit()
     }
 
     private func scrollToSelectedRow(delay: Double) {

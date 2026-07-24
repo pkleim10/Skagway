@@ -12,6 +12,8 @@ struct MetadataApplyPass1Result: Sendable {
     var customUpdates: [UUID: [Int64: String]]
     /// videoDatabaseId → new rating
     var ratingUpdates: [Int64: Int]
+    /// videoDatabaseId → new library title
+    var titleUpdates: [Int64: String]
     /// videoDatabaseId → tag names to merge (add)
     var tagMerges: [Int64: [String]]
     var rowErrors: [String]
@@ -95,6 +97,7 @@ enum MetadataApplier {
         var updatedVideoCount = 0
         var customUpdates: [UUID: [Int64: String]] = [:]
         var ratingUpdates: [Int64: Int] = [:]
+        var titleUpdates: [Int64: String] = [:]
         var tagMerges: [Int64: [String]] = [:]
         var rowErrors: [String] = []
 
@@ -112,6 +115,14 @@ enum MetadataApplier {
             }
 
             var didUpdate = false
+
+            if let raw = row.values["title"] {
+                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty, trimmed != video.displayTitle {
+                    titleUpdates[dbId] = trimmed
+                    didUpdate = true
+                }
+            }
 
             if let raw = row.values["rating"] {
                 let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -181,6 +192,7 @@ enum MetadataApplier {
             ignoredReadOnlyColumns: ignoredReadOnly,
             customUpdates: customUpdates,
             ratingUpdates: ratingUpdates,
+            titleUpdates: titleUpdates,
             tagMerges: tagMerges,
             rowErrors: rowErrors
         )

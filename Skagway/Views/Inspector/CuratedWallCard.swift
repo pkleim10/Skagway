@@ -8,7 +8,9 @@ struct CuratedWallCard: View {
     let video: Video
     let selectionState: CardSelectionState
     let isRenaming: Bool
+    let isEditingTitle: Bool
     @Binding var renameText: String
+    @Binding var titleEditText: String
     let thumbnailService: ThumbnailService
     /// True while this video has an active (queued or in-flight) cross-volume move — shows a
     /// spinner badge over the thumbnail so the "frozen" state is visible without right-clicking.
@@ -21,7 +23,11 @@ struct CuratedWallCard: View {
     var renameFocus: FocusState<Bool>.Binding
     var onCommitRename: () -> Void
     var onCancelRename: () -> Void
+    var onCommitTitle: () -> Void
+    var onCancelTitle: () -> Void
     var onRenameEditingChanged: (Bool) -> Void
+
+    private var isInlineEditing: Bool { isRenaming || isEditingTitle }
 
     @State private var thumbnail: NSImage?
     @State private var isHovering = false
@@ -39,7 +45,7 @@ struct CuratedWallCard: View {
 
     var body: some View {
         let isSelected = selectionState.isSelected
-        let titleVisible = !isRenaming && previewPlayer == nil
+        let titleVisible = !isInlineEditing && previewPlayer == nil
         VStack(alignment: .leading, spacing: 6) {
             ZStack(alignment: .bottom) {
                 thumbMedia
@@ -57,7 +63,7 @@ struct CuratedWallCard: View {
                     }
                     .overlay(alignment: .bottom) {
                         // Keep in hierarchy and fade — sudden remove felt abrupt when preview starts.
-                        if !isRenaming {
+                        if !isInlineEditing {
                             titleScrim
                                 .opacity(titleVisible ? 1 : 0)
                                 .animation(titleScrimFade, value: titleVisible)
@@ -122,8 +128,8 @@ struct CuratedWallCard: View {
 
             // Under-thumb row stays compact (date + stars) so card height is stable with on-scrim titles.
             VStack(alignment: .leading, spacing: 2) {
-                if isRenaming {
-                    TextField("", text: $renameText)
+                if isInlineEditing {
+                    TextField("", text: isEditingTitle ? $titleEditText : $renameText)
                         .textFieldStyle(.plain)
                         .font(.system(size: 11, weight: .medium))
                         .lineLimit(1)
@@ -136,8 +142,12 @@ struct CuratedWallCard: View {
                                 .stroke(Color.appAccent, lineWidth: 1.5)
                         )
                         .focused(renameFocus)
-                        .onSubmit { onCommitRename() }
-                        .onExitCommand { onCancelRename() }
+                        .onSubmit {
+                            if isEditingTitle { onCommitTitle() } else { onCommitRename() }
+                        }
+                        .onExitCommand {
+                            if isEditingTitle { onCancelTitle() } else { onCancelRename() }
+                        }
                         .onAppear { onRenameEditingChanged(true) }
                         .onDisappear { onRenameEditingChanged(false) }
                 }
@@ -244,7 +254,7 @@ struct CuratedWallCard: View {
             )
             .frame(height: 56)
             .overlay(alignment: .bottomLeading) {
-                Text(video.fileName)
+                Text(video.displayTitle)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.white)
                     .shadow(color: .black.opacity(0.55), radius: 1, y: 1)
@@ -309,7 +319,7 @@ struct CuratedWallCard: View {
     // MARK: - Hover preview
 
     private func startHoverPreviewIfAllowed() {
-        guard hoverPreviewEnabled, !isMoving, !isRenaming else { return }
+        guard hoverPreviewEnabled, !isMoving, !isInlineEditing else { return }
         previewTask?.cancel()
         previewTask = nil
         if let previewPlayer {

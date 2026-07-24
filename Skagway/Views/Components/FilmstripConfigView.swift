@@ -29,7 +29,7 @@ struct FilmstripConfigView: View {
 
     private var subtitle: String {
         if videos.count == 1 {
-            return videos[0].fileName
+            return videos[0].displayTitle
         }
         return "\(videos.count) videos"
     }
