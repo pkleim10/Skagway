@@ -334,8 +334,8 @@ struct SkagwayApp: App {
                 } else {
                     Button("Open Home Library") {
                         DatabaseExportImport.openHomeLibrary()
+                        appState.noteRecentLibrariesChanged()
                     }
-                    .disabled(DatabaseExportImport.isHomeLibraryActive)
                     .help(DatabaseExportImport.homeLibraryPathForDisplay)
                 }
                 Button("New Library\u{2026}") {

@@ -62,6 +62,11 @@ final class AppState {
         recentLibrariesEpoch &+= 1
     }
 
+    /// Call after an in-process Open Recent mutation (e.g. Open Home Library when already open).
+    func noteRecentLibrariesChanged() {
+        recentLibrariesEpoch &+= 1
+    }
+
     /// Skagway is dark-only; lock `NSApp` so system light mode cannot wash out the UI.
     static func applyDarkAppearance() {
         NSApplication.shared.appearance = NSAppearance(named: .darkAqua)

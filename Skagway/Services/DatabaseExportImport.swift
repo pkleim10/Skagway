@@ -320,12 +320,14 @@ enum DatabaseExportImport {
 
     // MARK: - Recent Libraries
 
-    /// Returns recent libraries. Paths are authoritative for Standard; Remember mode does not keep a path list.
-    /// Only drops entries whose files are actually gone — never because a bookmark failed to resolve.
+    /// Returns recent libraries for Open Recent / landing.
+    /// Standard / ask-each-launch: path list is authoritative (bookmarks kept in sync).
+    /// Remember (bookmark-only): bookmarks only — never a plain path list on the boot disk.
+    /// Only drops entries whose files are actually gone — never solely because a bookmark failed to resolve.
     static func recentLibraryItems() -> [RecentLibraryItem] {
         if storesLocationAsBookmarkOnly {
             scrubPlainLocationPathsFromPrefs()
-            return []
+            return recentLibraryItemsFromBookmarks()
         }
 
         migrateRecentBookmarksIntoPathsIfNeeded()
@@ -363,6 +365,42 @@ enum DatabaseExportImport {
         return result
     }
 
+    /// Resolve Open Recent from opaque bookmarks only (Remember mode).
+    private static func recentLibraryItemsFromBookmarks() -> [RecentLibraryItem] {
+        let bookmarks = UserDefaults.standard.array(forKey: recentLibraryBookmarksKey) as? [Data] ?? []
+        var result: [RecentLibraryItem] = []
+        var kept: [Data] = []
+        var seenPaths = Set<String>()
+
+        for data in bookmarks {
+            guard let url = resolveLibraryBookmark(data) else {
+                // Volume offline / resolve failed — keep the blob so history survives.
+                kept.append(data)
+                continue
+            }
+            let path = (url.path as NSString).standardizingPath
+            guard FileManager.default.fileExists(atPath: path) else { continue }
+            if seenPaths.contains(path) { continue }
+            seenPaths.insert(path)
+            if let refreshed = makeLibraryBookmark(for: url) {
+                kept.append(refreshed)
+            } else {
+                kept.append(data)
+            }
+            result.append(RecentLibraryItem(
+                id: path,
+                displayName: displayName(for: url),
+                url: url
+            ))
+            if result.count >= maxRecentLibraries { break }
+        }
+
+        if kept != bookmarks {
+            UserDefaults.standard.set(Array(kept.prefix(maxRecentLibraries)), forKey: recentLibraryBookmarksKey)
+        }
+        return result
+    }
+
     /// One-shot: pull paths out of legacy bookmark-only recents so rebuilds don’t erase history.
     private static func migrateRecentBookmarksIntoPathsIfNeeded() {
         if storesLocationAsBookmarkOnly { return }
@@ -394,15 +432,19 @@ enum DatabaseExportImport {
     }
 
     /// Adds a library URL to the recent list. Dedupes by path, trims to max.
+    /// Remember mode updates bookmarks only (no plain path list).
     static func addToRecent(url: URL) {
-        if storesLocationAsBookmarkOnly { return }
-
         let path = (url.path as NSString).standardizingPath
-        var paths = UserDefaults.standard.stringArray(forKey: recentLibraryPathsKey) ?? []
-        paths.removeAll { ($0 as NSString).standardizingPath == path }
-        paths.insert(path, at: 0)
-        paths = Array(paths.prefix(maxRecentLibraries))
-        UserDefaults.standard.set(paths, forKey: recentLibraryPathsKey)
+
+        if storesLocationAsBookmarkOnly {
+            UserDefaults.standard.removeObject(forKey: recentLibraryPathsKey)
+        } else {
+            var paths = UserDefaults.standard.stringArray(forKey: recentLibraryPathsKey) ?? []
+            paths.removeAll { ($0 as NSString).standardizingPath == path }
+            paths.insert(path, at: 0)
+            paths = Array(paths.prefix(maxRecentLibraries))
+            UserDefaults.standard.set(paths, forKey: recentLibraryPathsKey)
+        }
 
         if let bookmark = makeLibraryBookmark(for: url) {
             var kept: [Data] = []
@@ -423,9 +465,7 @@ enum DatabaseExportImport {
         defer { if didStartAccess { item.url.stopAccessingSecurityScopedResource() } }
         syncCachePreferences(forLibraryURL: item.url)
         setActiveLibraryPreferences(url: item.url)
-        if !promptsForLibraryEachLaunch {
-            addToRecent(url: item.url)
-        }
+        addToRecent(url: item.url)
         clearUserClosedLibrary()
         relaunchAfterTerminate()
         NSApplication.shared.terminate(nil)
@@ -559,6 +599,7 @@ enum DatabaseExportImport {
     }
 
     /// Switches to the startup-home library and relaunches.
+    /// Always records the home library in Open Recent (including when it is already open).
     static func openHomeLibrary() {
         if promptsForLibraryEachLaunch {
             openLibraryFromUserSelection()
@@ -572,6 +613,7 @@ enum DatabaseExportImport {
             alert.runModal()
             return
         }
+        addToRecent(url: homeLibraryURL)
         if isHomeLibraryActive {
             return
         }
@@ -579,7 +621,6 @@ enum DatabaseExportImport {
         syncCachePreferences(forLibraryURL: homeLibraryURL)
         setActiveLibraryPreferences(url: homeLibraryURL)
         clearUserClosedLibrary()
-        addToRecent(url: homeLibraryURL)
         relaunchAfterTerminate()
         NSApplication.shared.terminate(nil)
     }
@@ -776,12 +817,15 @@ enum DatabaseExportImport {
             clearRecentLibraries()
             setThumbnailCachePreferences(cacheURL)
             setActiveLibraryPreferences(url: libraryURL)
+            addToRecent(url: libraryURL)
             scrubPlainLocationPathsFromPrefs()
         case .askEachLaunch:
-            // No location residue on the boot disk — open the library explicitly each launch.
+            // No auto-open location on the boot disk — user opens a library each launch.
+            // Open Recent still keeps opaque bookmarks so previously opened libraries stay reachable.
             clearActiveLibraryPreferences()
             clearThumbnailCachePreferences()
             clearRecentLibraries()
+            addToRecent(url: libraryURL)
         case .standard:
             break
         }

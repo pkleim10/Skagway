@@ -49,7 +49,10 @@ struct LandingView: View {
                         .tint(Color.appAccent)
                         .controlSize(.large)
                     } else if DatabaseExportImport.homeLibraryExists {
-                        Button(action: { DatabaseExportImport.openHomeLibrary() }) {
+                        Button(action: {
+                            DatabaseExportImport.openHomeLibrary()
+                            appState.noteRecentLibrariesChanged()
+                        }) {
                             Label("Open home library", systemImage: "building.columns.fill")
                                 .frame(maxWidth: 260)
                         }
@@ -57,7 +60,6 @@ struct LandingView: View {
                         .tint(Color.appAccent)
                         .controlSize(.large)
                         .help(DatabaseExportImport.homeLibraryPathForDisplay)
-                        .disabled(DatabaseExportImport.isHomeLibraryActive)
 
                         Button(action: { DatabaseExportImport.createNewLibrary() }) {
                             Label("Create library…", systemImage: "folder.badge.plus")
@@ -102,9 +104,8 @@ struct LandingView: View {
                     }
                 }
 
-                // Recents (not used when ask-each-launch — no location list on the boot disk)
-                if !DatabaseExportImport.promptsForLibraryEachLaunch,
-                   !appState.recentLibraryItems().isEmpty {
+                // Recents — bookmark-backed in Remember mode; path-backed otherwise.
+                if !appState.recentLibraryItems().isEmpty {
                     Rectangle()
                         .fill(Color.appDivider)
                         .frame(height: 1)
