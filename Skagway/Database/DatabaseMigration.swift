@@ -282,6 +282,19 @@ enum DatabaseMigration {
             try db.execute(sql: "UPDATE video SET originalFileName = fileName WHERE originalFileName = ''")
         }
 
+        migrator.registerMigration("v16_customMetadataField") { db in
+            // Field *definitions* used to live in global UserDefaults and leaked across libraries.
+            // Values already live in `video_custom_metadata` (keyed by field UUID). Definitions now
+            // ship with each library DB; LibraryViewModel seeds from the legacy prefs key once when
+            // this table is empty so existing libraries keep their schema UUIDs.
+            try db.create(table: "custom_metadata_field") { t in
+                t.column("id", .text).primaryKey()
+                t.column("name", .text).notNull()
+                t.column("valueType", .text).notNull()
+                t.column("sortOrder", .integer).notNull().defaults(to: 0)
+            }
+        }
+
         try migrator.migrate(pool)
     }
 }

@@ -1395,6 +1395,7 @@ final class LibraryViewModel {
     let bookmarkRepo: VideoBookmarkRepository
     let collectionRepo: CollectionRepository
     let dataSourceRepo: DataSourceRepository
+    let customMetadataFieldRepo: CustomMetadataFieldRepository
     let thumbnailService: ThumbnailService
     private let scanner: LibraryScanner
     private var observationTask: Task<Void, Never>?
@@ -1406,6 +1407,7 @@ final class LibraryViewModel {
         self.bookmarkRepo = VideoBookmarkRepository(dbPool: dbPool)
         self.collectionRepo = CollectionRepository(dbPool: dbPool)
         self.dataSourceRepo = DataSourceRepository(dbPool: dbPool)
+        self.customMetadataFieldRepo = CustomMetadataFieldRepository(dbPool: dbPool)
         self.thumbnailService = thumbnailService
         self.scanner = LibraryScanner(dbPool: dbPool, thumbnailService: thumbnailService)
         loadPreferences()
@@ -1722,12 +1724,15 @@ final class LibraryViewModel {
         }
     }
 
-    /// Schema for per-video custom metadata (Settings UI only until values are wired in the library UI).
+    /// Schema for per-video custom metadata — scoped to the active library database.
     var customMetadataFieldDefinitions: [CustomMetadataFieldDefinition] = [] {
         didSet {
+            guard !_loadingCustomMetadataFieldDefinitions else { return }
             saveCustomMetadataFieldDefinitions()
         }
     }
+
+    private var _loadingCustomMetadataFieldDefinitions = false
 
     /// Which standard/custom columns appear in list view (Name is always shown).
     var listColumnPreferences: ListColumnPreferences = .default {
@@ -1892,6 +1897,7 @@ final class LibraryViewModel {
         var p = listColumnPreferences
         p.visibleCustomFieldIDs.subtract(ids)
         listColumnPreferences = p
+        try? videoRepo.deleteCustomMetadata(fieldIds: ids)
     }
 
     func updateCustomMetadataFieldName(id: UUID, name: String) {
@@ -1905,8 +1911,30 @@ final class LibraryViewModel {
     }
 
     private func saveCustomMetadataFieldDefinitions() {
-        guard let data = try? JSONEncoder().encode(customMetadataFieldDefinitions) else { return }
-        UserDefaults.standard.set(data, forKey: Self.customMetadataFieldDefinitionsKey)
+        try? customMetadataFieldRepo.replaceAll(customMetadataFieldDefinitions)
+    }
+
+    /// Loads definitions from the library DB. If the table is empty, seeds once from the legacy
+    /// global UserDefaults key (so existing libraries keep field UUIDs / values) without clearing
+    /// prefs — each library can seed independently.
+    private func loadCustomMetadataFieldDefinitions() {
+        _loadingCustomMetadataFieldDefinitions = true
+        defer { _loadingCustomMetadataFieldDefinitions = false }
+
+        do {
+            var fields = try customMetadataFieldRepo.fetchAll()
+            if fields.isEmpty,
+               let data = UserDefaults.standard.data(forKey: Self.customMetadataFieldDefinitionsKey),
+               let decoded = try? JSONDecoder().decode([CustomMetadataFieldDefinition].self, from: data),
+               !decoded.isEmpty
+            {
+                fields = decoded
+                try customMetadataFieldRepo.replaceAll(fields)
+            }
+            customMetadataFieldDefinitions = fields
+        } catch {
+            customMetadataFieldDefinitions = []
+        }
     }
 
     // MARK: - Layout (browsing vs playback)
@@ -2179,11 +2207,7 @@ final class LibraryViewModel {
         if defaults.object(forKey: Self.showThumbnailInDetailKey) != nil {
             showThumbnailInDetail = defaults.bool(forKey: Self.showThumbnailInDetailKey)
         }
-        if let data = defaults.data(forKey: Self.customMetadataFieldDefinitionsKey),
-           let decoded = try? JSONDecoder().decode([CustomMetadataFieldDefinition].self, from: data)
-        {
-            customMetadataFieldDefinitions = decoded
-        }
+        loadCustomMetadataFieldDefinitions()
 
         _loadingListColumnPreferences = true
         if let data = defaults.data(forKey: Self.listColumnPreferencesKey),

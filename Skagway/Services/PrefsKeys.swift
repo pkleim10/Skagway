@@ -73,6 +73,8 @@ enum PrefsKeys {
     static let conversionJobs = "Skagway.conversionJobs"
     static let moveJobs = "Skagway.moveJobs"
     static let ffmpegPath = "Skagway.ffmpegPath"
+    /// Legacy global field definitions (pre–per-library). Kept only as a one-time seed source when a
+    /// library's `custom_metadata_field` table is empty; new edits write to the library DB only.
     static let customMetadataFieldDefinitions = "Skagway.customMetadataFieldDefinitions"
     static let missingCountScanned = "Skagway.missingCountScanned"
     static let filtersDrawerHeight = "Skagway.filtersDrawerHeight"

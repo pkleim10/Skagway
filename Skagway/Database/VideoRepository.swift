@@ -300,4 +300,17 @@ struct VideoRepository {
             }
         }
     }
+
+    /// Removes all stored values for the given custom field definition IDs.
+    func deleteCustomMetadata(fieldIds: Set<UUID>) throws {
+        guard !fieldIds.isEmpty else { return }
+        try dbPool.write { db in
+            for fieldId in fieldIds {
+                try db.execute(
+                    sql: "DELETE FROM video_custom_metadata WHERE fieldId = ?",
+                    arguments: [fieldId.uuidString]
+                )
+            }
+        }
+    }
 }
