@@ -32,6 +32,8 @@ private struct LibraryContentView: View {
     @State private var fullScreenController: FullscreenInlinePlayerWindowController?
     @State private var showConversionQueue = false
     @State private var showMoveQueue = false
+    /// Highlights the empty-library drop zone while a drag is over the browser split.
+    @State private var isBrowserDropTargeted = false
     @FocusState private var isSearchFocused: Bool
 
     /// Local presentation flag for the filters drawer (discrete).
@@ -497,7 +499,12 @@ private struct LibraryContentView: View {
                     .transition(.opacity)
             }
 
-            if vm.viewMode == .grid {
+            if vm.videos.isEmpty {
+                EmptyLibraryBrowserPlaceholder(
+                    isDropTargeted: isBrowserDropTargeted,
+                    onAddFiles: { vm.showAddMediaPicker() }
+                )
+            } else if vm.viewMode == .grid {
                 CuratedWallGrid(
                     viewModel: vm,
                     thumbnailService: thumbService,
@@ -575,7 +582,7 @@ private struct LibraryContentView: View {
                     CuratedWallInspector(video: selectedVideo, viewModel: vm, thumbnailService: thumbService)
                 }
             )
-            .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            .onDrop(of: [.fileURL], isTargeted: $isBrowserDropTargeted) { providers in
                 guard !providers.isEmpty else { return true }
                 let group = DispatchGroup()
                 var urls: [URL] = []

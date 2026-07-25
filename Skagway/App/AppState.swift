@@ -11,7 +11,7 @@ final class AppState {
 
     var hasLibrary: Bool { dbManager != nil }
 
-    /// Bumped when Open Recent changes so File menu / Landing refresh (UserDefaults alone does not invalidate SwiftUI commands).
+    /// Bumped when Open Recent changes so File menu refresh (UserDefaults alone does not invalidate SwiftUI commands).
     private(set) var recentLibrariesEpoch: Int = 0
 
     init() {
@@ -24,10 +24,12 @@ final class AppState {
             // Hold off opening a library until the one-time home/privacy chooser is done.
             if DatabaseExportImport.hasCompletedLibraryHomeSetup {
                 // askEachLaunch: paths exist only for the current session (cleared on quit).
-                // rememberBookmark / standard: paths persist across launches.
+                // rememberBookmark / standard: open (or create) the home library automatically.
                 let userClosed = DatabaseExportImport.userClosedLibrary
                 DatabaseExportImport.clearUserClosedLibrary()
-                if !userClosed, let path = DatabaseExportImport.databasePathForLaunch() {
+                if let path = DatabaseExportImport.resolveOrCreateLibraryForLaunch(
+                    userClosedThisSession: userClosed
+                ) {
                     let manager = try DatabaseManager(path: path)
                     db = manager
                     vm = LibraryViewModel(
@@ -37,7 +39,7 @@ final class AppState {
                 }
             }
         } catch {
-            // File deleted, corrupted, or no library — show landing / setup
+            // File deleted, corrupted, volume offline, or no library — empty chrome + File menu.
         }
         dbManager = db
         libraryViewModel = vm
@@ -51,7 +53,7 @@ final class AppState {
         }
     }
 
-    /// Recent libraries for menus/landing. Reads `recentLibrariesEpoch` so observers refresh after Clear Menu.
+    /// Recent libraries for menus. Reads `recentLibrariesEpoch` so observers refresh after Clear Menu.
     func recentLibraryItems() -> [RecentLibraryItem] {
         _ = recentLibrariesEpoch
         return DatabaseExportImport.recentLibraryItems()

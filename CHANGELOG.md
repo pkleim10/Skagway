@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Empty browser invite** — An empty library shows a dotted drop zone in the browser (highlights while dragging), File → Add Folder… (⇧⌘O), and an Add Files… button that accepts files or folders. Copy explains that added folders (or parent folders of files) become Data Sources in Settings. Dropping folders onto the browser now scans them.
+- **No second landing chooser** — After first-launch home setup, Standard and Remember modes open the home library automatically (creating it if missing). Ask-each-launch and Close Library show a minimal empty window; create/open/recent stay on the File menu. Choosing a new empty home folder creates a new empty library (no longer copies the previous home).
 - **Fix: Missing smart library vs Exclude Corrupt** — Viewing Missing no longer applies Exclude Corrupt first. Absent files often look “corrupt” (no thumbnail / probe data), which hid them from the grid while the Missing badge still counted them.
 - **Bulk Rename: cancel, results, and temp recovery** — Apply no longer dismisses silently: Cancel stops mid-batch and restores staged temps; a results screen shows renamed / failed / restored counts with Retry Failed; launch sweeps leftover `.skagway-bulk-…` names back to originals. Progress stays in the rename dialog (no activity-strip progress).
 - **Move Queue auto-clears successful jobs** — After a batch finishes, completed moves are removed automatically so the header pill / menu only remain for failures (or active work). Re-encode still keeps completed rows while backups need management.

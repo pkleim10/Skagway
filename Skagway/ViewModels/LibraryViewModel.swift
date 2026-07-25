@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import GRDB
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 @Observable
@@ -3382,7 +3383,15 @@ final class LibraryViewModel {
     func importDroppedFiles(_ urls: [URL]) async {
         guard !urls.isEmpty else { return }
 
+        let folders = urls.filter { url in
+            (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+        }
         let videoUrls = urls.filter { $0.isVideoFile }
+        guard !folders.isEmpty || !videoUrls.isEmpty else { return }
+
+        for folder in folders {
+            await scanFolder(folder)
+        }
         guard !videoUrls.isEmpty else { return }
 
         let parentFolders = Set(videoUrls.map { $0.deletingLastPathComponent() })
@@ -3514,6 +3523,34 @@ final class LibraryViewModel {
         if panel.runModal() == .OK {
             for url in panel.urls {
                 Task { await scanFolder(url) }
+            }
+        }
+    }
+
+    /// Empty-library “Add Files…” — pick video files and/or folders.
+    func showAddMediaPicker() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [.movie, .mpeg4Movie, .quickTimeMovie, .avi, .mpeg]
+        panel.message = "Select video files or folders to add to your library"
+        panel.prompt = "Add"
+
+        guard panel.runModal() == .OK else { return }
+        let urls = panel.urls
+        let folders = urls.filter { url in
+            (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+        }
+        let files = urls.filter { url in
+            (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) != true
+        }
+        Task {
+            for folder in folders {
+                await scanFolder(folder)
+            }
+            if !files.isEmpty {
+                await importDroppedFiles(files)
             }
         }
     }

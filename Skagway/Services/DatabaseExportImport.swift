@@ -202,6 +202,56 @@ enum DatabaseExportImport {
         return nil
     }
 
+    /// After home setup: open the existing home library, or create it if missing.
+    /// Returns nil for Ask-each-launch (File menu), when the user just closed the library,
+    /// or when a Remember-mode volume is offline (bookmarks don’t resolve).
+    static func resolveOrCreateLibraryForLaunch(userClosedThisSession: Bool) -> String? {
+        if userClosedThisSession { return nil }
+        if let path = databasePathForLaunch() { return path }
+        if promptsForLibraryEachLaunch { return nil }
+        if storesLocationAsBookmarkOnly && !isRememberHomeVolumeReachable {
+            return nil
+        }
+        return createHomeLibrarySilentlyIfNeeded()
+    }
+
+    /// True when Remember-mode bookmarks resolve to a reachable folder (volume online).
+    private static var isRememberHomeVolumeReachable: Bool {
+        guard storesLocationAsBookmarkOnly else { return true }
+        if let bookmark = UserDefaults.standard.data(forKey: PrefsKeys.thumbnailCacheBookmark),
+           resolveLibraryBookmark(bookmark) != nil {
+            return true
+        }
+        if let bookmark = UserDefaults.standard.data(forKey: activeLibraryBookmarkKey),
+           resolveLibraryBookmark(bookmark) != nil {
+            return true
+        }
+        // No bookmarks yet (edge) — allow App Support / folder create only if we aren't
+        // pretending a custom home is mounted.
+        let hasAnyBookmark =
+            UserDefaults.standard.data(forKey: PrefsKeys.thumbnailCacheBookmark) != nil
+            || UserDefaults.standard.data(forKey: activeLibraryBookmarkKey) != nil
+        return !hasAnyBookmark
+    }
+
+    /// Creates `homeLibraryURL` when missing, activates it, and returns its path. Never overwrites.
+    private static func createHomeLibrarySilentlyIfNeeded() -> String? {
+        let fm = FileManager.default
+        let destURL = homeLibraryURL
+        try? fm.createDirectory(at: destURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if !fm.fileExists(atPath: destURL.path) {
+            do {
+                try DatabaseMigration.createEmptyDatabase(at: destURL.path)
+            } catch {
+                return nil
+            }
+        }
+        syncCachePreferences(forLibraryURL: destURL)
+        setActiveLibraryPreferences(url: destURL)
+        addToRecent(url: destURL)
+        return (destURL.path as NSString).standardizingPath
+    }
+
     /// Display name of the active library for window title (extension stripped). Empty when no library.
     static var activeLibraryDisplayName: String {
         if let path = databasePathForLaunch() {
@@ -655,7 +705,9 @@ enum DatabaseExportImport {
 
     // MARK: - Close / Delete
 
-    /// Closes the current library and relaunches to show landing. Keeps file on disk.
+    /// Closes the current library and relaunches with no library open.
+    /// Standard / Remember auto-open home again on the *next* cold launch; this session stays empty
+    /// so File → Open / New / Recent can switch libraries. Ask-each-launch always starts empty.
     static func closeLibrary() {
         checkpointAndCleanWAL()
         clearActiveLibraryPreferences()
@@ -767,7 +819,7 @@ enum DatabaseExportImport {
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
         panel.title = "Choose Library Location"
-        panel.message = "Choose a folder for the library database and the app-wide cache (a Skagway-cache subfolder). If a library or cache is already there, Skagway will use it as-is."
+        panel.message = "Choose a folder for the library database and the app-wide cache (a Skagway-cache subfolder). If a library is already there, Skagway will use it; otherwise it creates a new empty library (your previous library is left where it is)."
 
         guard panel.runModal() == .OK, let folderURL = panel.url else { return nil }
 
@@ -778,6 +830,8 @@ enum DatabaseExportImport {
 
     /// Custom home folder: `Skagway.machii` (or any existing `*.machii`) + co-located `Skagway-cache/`.
     /// Existing library/cache in the folder are reused — never overwritten or deleted.
+    /// An empty folder gets a **new empty** library (previous homes are left where they are;
+    /// use Save Copy / Open Library… if you want the old catalog at the new location).
     static func activateCustomLibraryHome(_ folderURL: URL, accessMode: LibraryHomeAccessMode) throws {
         precondition(accessMode == .rememberBookmark || accessMode == .askEachLaunch)
 
@@ -794,16 +848,6 @@ enum DatabaseExportImport {
         if let existing = findLibraryFile(in: folderURL) {
             try validateImportFile(at: existing)
             libraryURL = existing
-        } else if let source = migrationSourceLibraryURL() {
-            checkpointAndCleanWAL()
-            libraryURL = folderURL.appendingPathComponent(defaultLibraryFileName, isDirectory: false)
-            if fm.fileExists(atPath: libraryURL.path) {
-                try validateImportFile(at: libraryURL)
-            } else {
-                try fm.copyItem(at: source, to: libraryURL)
-                try? copySQLiteSidecars(from: source, to: libraryURL)
-                try validateImportFile(at: libraryURL)
-            }
         } else {
             libraryURL = folderURL.appendingPathComponent(defaultLibraryFileName, isDirectory: false)
             try DatabaseMigration.createEmptyDatabase(at: libraryURL.path)
@@ -864,30 +908,6 @@ enum DatabaseExportImport {
         ) else { return nil }
         return contents.first {
             $0.pathExtension.lowercased() == libraryFilenameExtension
-        }
-    }
-
-    private static func migrationSourceLibraryURL() -> URL? {
-        if let path = UserDefaults.standard.string(forKey: activeLibraryPathKey),
-           FileManager.default.fileExists(atPath: path) {
-            return URL(fileURLWithPath: path)
-        }
-        // Only Standard setup has an App Support library; custom home never uses it as a source.
-        if !usesCustomLibraryHome,
-           FileManager.default.fileExists(atPath: defaultLibraryURL.path) {
-            return defaultLibraryURL
-        }
-        return nil
-    }
-
-    private static func copySQLiteSidecars(from source: URL, to dest: URL) throws {
-        let fm = FileManager.default
-        for suffix in ["-wal", "-shm"] {
-            let src = URL(fileURLWithPath: source.path + suffix)
-            let dst = URL(fileURLWithPath: dest.path + suffix)
-            guard fm.fileExists(atPath: src.path) else { continue }
-            if fm.fileExists(atPath: dst.path) { continue }
-            try fm.copyItem(at: src, to: dst)
         }
     }
 
