@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.75.0 (build 953) - 2026-07-24
+
 - **Search covers more library fields** — Library search now matches title, file name, original file name, tags, and custom metadata values (AND across terms; case-insensitive contains).
 - **Fix: Custom Metadata fields are per-library** — Field definitions now live in each library database (`custom_metadata_field`) instead of global UserDefaults, so libraries no longer share the same schema. Existing definitions are seeded once from the legacy prefs key when a library’s table is empty (preserving field UUIDs and values). Removing a field also deletes its stored values.
 - **Original File Name** — Stored at import and never changed by rename/move/convert. Available in Export Metadata and Bulk Rename (`{Original File Name}`); existing libraries backfill from the current file name.
