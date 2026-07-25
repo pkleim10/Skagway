@@ -19,6 +19,13 @@ enum AppActivityAction: Equatable {
     case openMoveQueue
 }
 
+extension Notification.Name {
+    /// Posted by the app menu to open the Re-encode Queue sheet in ContentView.
+    static let openConversionQueue = Notification.Name("Skagway.openConversionQueue")
+    /// Posted by the app menu to open the Move Queue sheet in ContentView.
+    static let openMoveQueue = Notification.Name("Skagway.openMoveQueue")
+}
+
 /// One unit of work for the bottom activity strip.
 struct AppActivity: Identifiable, Equatable {
     let id: String
@@ -27,6 +34,8 @@ struct AppActivity: Identifiable, Equatable {
     /// 0...1 when determinate; `nil` for indeterminate.
     let fraction: Double?
     let isError: Bool
+    /// When false, the strip shows a static glyph instead of a spinner (idle review states).
+    let isBusy: Bool
     let action: AppActivityAction?
 
     init(
@@ -35,6 +44,7 @@ struct AppActivity: Identifiable, Equatable {
         title: String,
         fraction: Double? = nil,
         isError: Bool = false,
+        isBusy: Bool? = nil,
         action: AppActivityAction? = nil
     ) {
         self.id = id
@@ -42,6 +52,13 @@ struct AppActivity: Identifiable, Equatable {
         self.title = title
         self.fraction = fraction
         self.isError = isError
+        // Messages / errors are never "busy"; other kinds default to busy unless overridden.
+        switch kind {
+        case .message, .error:
+            self.isBusy = false
+        default:
+            self.isBusy = isBusy ?? true
+        }
         self.action = action
     }
 }

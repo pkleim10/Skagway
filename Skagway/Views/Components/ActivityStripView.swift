@@ -109,10 +109,7 @@ struct ActivityStripView: View {
     }
 
     private func isBusy(_ activity: AppActivity) -> Bool {
-        switch activity.kind {
-        case .message, .error: return false
-        default: return true
-        }
+        activity.isBusy && !activity.isError
     }
 
     private func symbolName(for kind: AppActivityKind) -> String {

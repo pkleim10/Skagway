@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// The "Re-encode Queue" manager, opened from the header status pill.
+/// The "Re-encode Queue" manager, opened from the activity strip, header pill,
+/// or View → Re-encode Queue… — including after jobs finish while backups remain.
 /// Lists every ConversionJob and offers per-status actions: abort, move to top,
 /// delete backup, restore from backup, retry, dismiss.
 struct ConversionQueueView: View {

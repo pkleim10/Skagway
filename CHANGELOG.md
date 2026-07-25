@@ -31,6 +31,11 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Fix: Missing smart library vs Exclude Corrupt** — Viewing Missing no longer applies Exclude Corrupt first. Absent files often look “corrupt” (no thumbnail / probe data), which hid them from the grid while the Missing badge still counted them.
+- **Bulk Rename: cancel, results, and temp recovery** — Apply no longer dismisses silently: Cancel stops mid-batch and restores staged temps; a results screen shows renamed / failed / restored counts with Retry Failed; launch sweeps leftover `.skagway-bulk-…` names back to originals. Progress stays in the rename dialog (no activity-strip progress).
+- **Move Queue auto-clears successful jobs** — After a batch finishes, completed moves are removed automatically so the header pill / menu only remain for failures (or active work). Re-encode still keeps completed rows while backups need management.
+- **Re-encode Queue stays reachable after jobs finish** — While kept `_backup` files remain, the header re-encode pill (and **View → Re-encode Queue…**) open the queue for Delete Backup / Restore. **View → Move Queue…** likewise opens move history when present.
+
 ## 0.75.0 (build 953) - 2026-07-24
 
 - **Search covers more library fields** — Library search now matches title, file name, original file name, tags, and custom metadata values (AND across terms; case-insensitive contains).

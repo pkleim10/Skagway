@@ -34,6 +34,7 @@ This document defines how AI agents (Cursor, Claude, etc.) should work on the Sk
 3. **Releases**
    - When the user says "release" (patch / minor / major), follow `.cursor/rules/release-workflow.mdc`.
    - The detailed steps, versioning rules, and script usage live in `.cursor/rules/build-deploy.mdc` (Release Commands section).
+   - **Notarized DMG required**: After `build_and_install.sh`, run `bash scripts/package_dmg.sh --no-bump` so `dist/` gets a Developer ID–signed, notarized, stapled DMG (`Skagway-X.Y.Z-NNN.dmg` and `Skagway.dmg`). `dist/` is gitignored — do not commit the DMG.
    - **Before releasing**:
      - Stage **all** changes with `git add -A` (tracked modifications + untracked files).
      - Commit **all completed/ready work** together with the version bump and changelog consolidation. Releases must not leave completed work uncommitted.

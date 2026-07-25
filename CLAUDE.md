@@ -18,4 +18,4 @@ This script handles build number bump, `xcodegen`, Release build, install to `/A
 
 Always announce the resulting version (e.g. `✓ Skagway 0.13.0 (375) [Release]`).
 
-For full release process (patch/minor/major), see `.cursor/rules/release-workflow.mdc` and the Release Commands section of `.cursor/rules/build-deploy.mdc`.
+For full release process (patch/minor/major), see `.cursor/rules/release-workflow.mdc` and the Release Commands section of `.cursor/rules/build-deploy.mdc`. Every release must also run `bash scripts/package_dmg.sh --no-bump` so a notarized DMG lands in `dist/`.

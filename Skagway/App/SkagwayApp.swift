@@ -74,6 +74,18 @@ struct SkagwayApp: App {
 
                 Divider()
 
+                Button("Re-encode Queue…") {
+                    NotificationCenter.default.post(name: .openConversionQueue, object: nil)
+                }
+                .disabled(!(appState.libraryViewModel?.hasConversionActivity ?? false))
+
+                Button("Move Queue…") {
+                    NotificationCenter.default.post(name: .openMoveQueue, object: nil)
+                }
+                .disabled(!(appState.libraryViewModel?.hasMoveActivity ?? false))
+
+                Divider()
+
                 Button("Compact") {
                     guard let vm = appState.libraryViewModel else { return }
                     if vm.isPlayerFullScreen { vm.isPlayerFullScreen = false }

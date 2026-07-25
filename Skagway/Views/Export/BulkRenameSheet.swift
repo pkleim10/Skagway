@@ -15,9 +15,11 @@ struct BulkRenameSheet: View {
     @State private var planRows: [BulkRenamePlanRow] = []
     @State private var selectedPreviewIDs: Set<BulkRenamePlanRow.ID> = []
     @State private var previewDetailRow: BulkRenamePlanRow?
+    @State private var applyResult: LibraryViewModel.BulkRenameApplyResult?
     @StateObject private var patternField = BulkRenamePatternFieldModel()
 
     private var isApplying: Bool { viewModel.bulkRenameProgress != nil }
+    private var isShowingResults: Bool { applyResult != nil }
 
     private var actionableCount: Int {
         planRows.filter(\.status.isActionable).count
@@ -44,6 +46,28 @@ struct BulkRenameSheet: View {
             Text("Bulk Rename")
                 .font(.title2.weight(.semibold))
 
+            if isShowingResults {
+                resultsPane
+            } else {
+                planningPane
+            }
+        }
+        .padding(20)
+        .frame(minWidth: 880, minHeight: 560)
+        .onAppear {
+            tokens = BulkRenameTokenCatalog.tokens(
+                customFields: viewModel.customMetadataFieldDefinitions
+            )
+            let loaded = viewModel.loadBulkRenamePattern()
+            pattern = loaded
+            patternField.text = loaded
+            patternField.noteSelection(NSRange(location: (loaded as NSString).length, length: 0))
+            recomputePlan()
+        }
+    }
+
+    private var planningPane: some View {
+        VStack(alignment: .leading, spacing: 14) {
             Text(scopeSummary)
                 .foregroundStyle(Color.appTextSecondary)
 
@@ -76,24 +100,94 @@ struct BulkRenameSheet: View {
                 }
             }
 
-            footer
+            planningFooter
         }
-        .padding(20)
-        .frame(minWidth: 880, minHeight: 560)
-        .onAppear {
-            tokens = BulkRenameTokenCatalog.tokens(
-                customFields: viewModel.customMetadataFieldDefinitions
-            )
-            let loaded = viewModel.loadBulkRenamePattern()
-            pattern = loaded
-            patternField.text = loaded
-            patternField.noteSelection(NSRange(location: (loaded as NSString).length, length: 0))
-            recomputePlan()
+    }
+
+    private var resultsPane: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if let result = applyResult {
+                Text(resultsHeadline(result))
+                    .font(.headline)
+                    .foregroundStyle(Color.appTextPrimary)
+
+                Text(resultsDetail(result))
+                    .foregroundStyle(Color.appTextSecondary)
+
+                if !result.failed.isEmpty {
+                    Table(result.failed) {
+                        TableColumn("File") { failure in
+                            Text(failure.currentFileName)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        .width(min: 160, ideal: 220)
+
+                        TableColumn("Proposed") { failure in
+                            Text(failure.proposedFileName)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        .width(min: 160, ideal: 220)
+
+                        TableColumn("Reason") { failure in
+                            Text(failure.reason)
+                                .foregroundStyle(.orange)
+                                .lineLimit(2)
+                        }
+                        .width(min: 180, ideal: 280)
+                    }
+                    .frame(minHeight: 280)
+                } else {
+                    Spacer(minLength: 0)
+                }
+
+                HStack {
+                    Spacer()
+                    if result.hasFailures {
+                        Button("Retry Failed") {
+                            Task { await retryFailed() }
+                        }
+                        .disabled(isApplying)
+                    }
+                    Button("Done") { dismiss() }
+                        .keyboardShortcut(.defaultAction)
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.appAccent)
+                }
+            }
         }
     }
 
     private var scopeSummary: String {
         "\(videoCount) \(scope.summaryNoun) video\(videoCount == 1 ? "" : "s") · Preview before applying"
+    }
+
+    private func resultsHeadline(_ result: LibraryViewModel.BulkRenameApplyResult) -> String {
+        if result.wasCancelled {
+            return result.renamedCount > 0 ? "Rename cancelled" : "Rename cancelled — nothing changed"
+        }
+        if result.hasFailures {
+            return "Rename finished with errors"
+        }
+        return "Rename complete"
+    }
+
+    private func resultsDetail(_ result: LibraryViewModel.BulkRenameApplyResult) -> String {
+        var parts: [String] = []
+        if result.renamedCount > 0 {
+            parts.append("\(result.renamedCount) renamed")
+        }
+        if result.restoredCount > 0 {
+            parts.append("\(result.restoredCount) restored to original name")
+        }
+        if result.failed.count > 0 {
+            parts.append("\(result.failed.count) failed")
+        }
+        if parts.isEmpty {
+            return result.wasCancelled ? "No files were renamed." : "Nothing to report."
+        }
+        return parts.joined(separator: " · ")
     }
 
     private var fieldsPane: some View {
@@ -181,22 +275,28 @@ struct BulkRenameSheet: View {
         }
     }
 
-    private var footer: some View {
+    private var planningFooter: some View {
         HStack {
             Text(summaryText)
                 .foregroundStyle(Color.appTextSecondary)
             Spacer()
-            Button("Cancel") {
-                dismiss()
-            }
-            .keyboardShortcut(.cancelAction)
-            .disabled(isApplying)
+            if isApplying {
+                Button("Cancel") {
+                    viewModel.cancelBulkRename()
+                }
+                .keyboardShortcut(.cancelAction)
+            } else {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
 
-            Button(actionableCount == 1 ? "Rename 1 File" : "Rename \(actionableCount) Files") {
-                Task { await apply() }
+                Button(actionableCount == 1 ? "Rename 1 File" : "Rename \(actionableCount) Files") {
+                    Task { await apply() }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(actionableCount == 0)
             }
-            .keyboardShortcut(.defaultAction)
-            .disabled(isApplying || actionableCount == 0)
         }
     }
 
@@ -240,8 +340,25 @@ struct BulkRenameSheet: View {
     private func apply() async {
         viewModel.saveBulkRenamePattern(pattern)
         let targets = planRows.filter(\.status.isActionable)
-        await viewModel.applyBulkRename(targets)
-        dismiss()
+        applyResult = await viewModel.applyBulkRename(targets)
+    }
+
+    private func retryFailed() async {
+        guard let result = applyResult, !result.failed.isEmpty else { return }
+        let retryRows: [BulkRenamePlanRow] = result.failed.compactMap { failure in
+            let video = viewModel.videos.first(where: { $0.databaseId == failure.videoDatabaseId })
+                ?? viewModel.videos.first(where: { $0.fileName == failure.currentFileName })
+            guard let video else { return nil }
+            return BulkRenamePlanRow(
+                id: video.filePath,
+                video: video,
+                currentFileName: video.fileName,
+                proposedFileName: failure.proposedFileName,
+                status: .willRename(warning: nil)
+            )
+        }
+        guard !retryRows.isEmpty else { return }
+        applyResult = await viewModel.applyBulkRename(retryRows)
     }
 }
 

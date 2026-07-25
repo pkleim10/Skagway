@@ -84,7 +84,9 @@ echo "Generating appcast with ${SPARKLE_TOOLS}/generate_appcast…"
 "${SPARKLE_TOOLS}/generate_appcast" "${GEN_ARGS[@]}" "$WORK"
 
 # Ensure stable DMG name sits next to the appcast for upload.
-cp -f "$DMG_PATH" "${OUT_DIR}/Skagway.dmg"
+if [[ "$DMG_PATH" != "${OUT_DIR}/Skagway.dmg" ]]; then
+  cp -f "$DMG_PATH" "${OUT_DIR}/Skagway.dmg"
+fi
 
 if [[ ! -f "$APPCAST_OUT" ]]; then
   echo "generate_appcast did not write ${APPCAST_OUT}" >&2

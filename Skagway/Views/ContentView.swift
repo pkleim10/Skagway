@@ -140,7 +140,8 @@ private struct LibraryContentView: View {
         !isConversionActive && vm.conversionJobs.contains { if case .failed = $0.status { return true }; return false }
     }
 
-    /// Timely conversion work is shown in the activity strip; header keeps icon-only access to history.
+    /// Busy conversion work is shown in the activity strip; header keeps icon-only access to
+    /// history (including completed jobs with kept backups) when the strip is not already showing re-encode.
     private var showsHeaderConversionIconOnly: Bool {
         vm.hasConversionActivity
             && vm.activityStripState.primary?.kind != .reencoding
@@ -709,6 +710,12 @@ private struct LibraryContentView: View {
                 }
             }
             .animation(.easeInOut(duration: 0.2), value: vm.activityStripState.isVisible)
+            .onReceive(NotificationCenter.default.publisher(for: .openConversionQueue)) { _ in
+                showConversionQueue = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .openMoveQueue)) { _ in
+                showMoveQueue = true
+            }
         }
         .task {
             vm.startObserving()

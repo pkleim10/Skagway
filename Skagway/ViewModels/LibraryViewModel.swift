@@ -660,20 +660,23 @@ final class LibraryViewModel {
     var bulkRenamePresentation: BulkRenamePresentation? = nil
     /// Non-nil while a bulk rename apply is in progress.
     var bulkRenameProgress: BulkRenameApplyProgress? = nil
+    /// Set while applying; checked between files so Cancel can stop the batch.
+    private var bulkRenameCancelRequested = false
 
     enum BulkRenameApplyProgress: Equatable {
         case preparing(current: Int, total: Int)
         case finishing(current: Int, total: Int)
+        case rollingBack(current: Int, total: Int)
 
         var current: Int {
             switch self {
-            case .preparing(let c, _), .finishing(let c, _): return c
+            case .preparing(let c, _), .finishing(let c, _), .rollingBack(let c, _): return c
             }
         }
 
         var total: Int {
             switch self {
-            case .preparing(_, let t), .finishing(_, let t): return t
+            case .preparing(_, let t), .finishing(_, let t), .rollingBack(_, let t): return t
             }
         }
 
@@ -683,11 +686,32 @@ final class LibraryViewModel {
                 return "Preparing \(c) of \(t)…"
             case .finishing(let c, let t):
                 return "Renaming \(c) of \(t)…"
+            case .rollingBack(let c, let t):
+                return "Restoring \(c) of \(t)…"
             }
         }
     }
 
+    struct BulkRenameFailure: Identifiable, Equatable {
+        let id: String
+        let currentFileName: String
+        let proposedFileName: String
+        let reason: String
+        let videoDatabaseId: Int64?
+    }
+
+    /// Outcome of one apply pass — shown in the Bulk Rename sheet (no silent dismiss).
+    struct BulkRenameApplyResult: Equatable {
+        var renamedCount: Int
+        var failed: [BulkRenameFailure]
+        var wasCancelled: Bool
+        var restoredCount: Int
+
+        var hasFailures: Bool { !failed.isEmpty }
+    }
+
     private static let bulkRenamePatternKey = PrefsKeys.bulkRenamePattern
+    private static let bulkRenameTempPrefix = ".skagway-bulk-"
 
     struct BulkRenamePresentation: Identifiable, Equatable {
         let id = UUID()
@@ -699,6 +723,7 @@ final class LibraryViewModel {
         let videos = videosForMetadataExport(scope: scope)
         guard !videos.isEmpty else { return }
         bulkRenameProgress = nil
+        bulkRenameCancelRequested = false
         bulkRenamePresentation = BulkRenamePresentation(scope: scope, videoCount: videos.count)
     }
 
@@ -713,57 +738,198 @@ final class LibraryViewModel {
         UserDefaults.standard.set(pattern, forKey: Self.bulkRenamePatternKey)
     }
 
+    func cancelBulkRename() {
+        guard bulkRenameProgress != nil else { return }
+        bulkRenameCancelRequested = true
+    }
+
     /// Two-phase rename so in-batch swaps/collisions that clear after a peer moves still succeed.
-    func applyBulkRename(_ rows: [BulkRenamePlanRow]) async {
+    /// Supports Cancel (rolls back staged temps). Does not auto-dismiss — caller shows the result.
+    @discardableResult
+    func applyBulkRename(_ rows: [BulkRenamePlanRow]) async -> BulkRenameApplyResult {
         let actionable = rows.filter(\.status.isActionable)
-        guard !actionable.isEmpty else { return }
+        guard !actionable.isEmpty else {
+            return BulkRenameApplyResult(renamedCount: 0, failed: [], wasCancelled: false, restoredCount: 0)
+        }
 
         let total = actionable.count
+        bulkRenameCancelRequested = false
         bulkRenameProgress = .preparing(current: 0, total: total)
-        defer { bulkRenameProgress = nil }
+        defer {
+            bulkRenameProgress = nil
+            bulkRenameCancelRequested = false
+        }
 
         struct Phase1 {
             let video: Video
-            let tempName: String
+            let originalName: String
             let finalName: String
+            let sourceId: String
         }
 
         var phase1: [Phase1] = []
         phase1.reserveCapacity(actionable.count)
+        var failed: [BulkRenameFailure] = []
+        var wasCancelled = false
 
         for (index, row) in actionable.enumerated() {
-            // Re-resolve from current library state (paths may be stale only if something else moved).
+            if bulkRenameCancelRequested {
+                wasCancelled = true
+                break
+            }
             guard let live = videos.first(where: { $0.databaseId == row.video.databaseId })
                     ?? videos.first(where: { $0.filePath == row.video.filePath })
             else {
+                failed.append(BulkRenameFailure(
+                    id: row.id,
+                    currentFileName: row.currentFileName,
+                    proposedFileName: row.proposedFileName,
+                    reason: "Video is no longer in the library",
+                    videoDatabaseId: row.video.databaseId
+                ))
                 bulkRenameProgress = .preparing(current: index + 1, total: total)
                 continue
             }
-            let tempName = ".skagway-bulk-\(UUID().uuidString)-\(live.fileName)"
-            guard let _ = await renameVideo(live, to: tempName) else {
-                bulkRenameProgress = .preparing(current: index + 1, total: total)
-                continue
-            }
-            let afterTemp = videos.first(where: { $0.databaseId == live.databaseId })
-                ?? videos.first(where: { $0.fileName == tempName })
+            let originalName = live.fileName
+            let tempName = "\(Self.bulkRenameTempPrefix)\(UUID().uuidString)-\(originalName)"
+            let outcome = await renameVideo(live, to: tempName, reportErrors: false)
             bulkRenameProgress = .preparing(current: index + 1, total: total)
-            guard let afterTemp else { continue }
-            phase1.append(Phase1(video: afterTemp, tempName: tempName, finalName: row.proposedFileName))
+            switch outcome {
+            case .success:
+                let afterTemp = videos.first(where: { $0.databaseId == live.databaseId })
+                    ?? videos.first(where: { $0.fileName == tempName })
+                guard let afterTemp else {
+                    failed.append(BulkRenameFailure(
+                        id: row.id,
+                        currentFileName: originalName,
+                        proposedFileName: row.proposedFileName,
+                        reason: "Staged rename, but library state didn't update",
+                        videoDatabaseId: live.databaseId
+                    ))
+                    continue
+                }
+                phase1.append(Phase1(
+                    video: afterTemp,
+                    originalName: originalName,
+                    finalName: row.proposedFileName,
+                    sourceId: row.id
+                ))
+            case .failure(let reason):
+                failed.append(BulkRenameFailure(
+                    id: row.id,
+                    currentFileName: originalName,
+                    proposedFileName: row.proposedFileName,
+                    reason: reason,
+                    videoDatabaseId: live.databaseId
+                ))
+            }
         }
 
+        if wasCancelled || bulkRenameCancelRequested {
+            wasCancelled = true
+            let restored = await restoreBulkRenameStaged(phase1.map { ($0.video, $0.originalName) })
+            recomputeFilteredVideos()
+            return BulkRenameApplyResult(
+                renamedCount: 0,
+                failed: failed,
+                wasCancelled: true,
+                restoredCount: restored
+            )
+        }
+
+        var renamedCount = 0
         bulkRenameProgress = .finishing(current: 0, total: max(phase1.count, 1))
         for (index, item) in phase1.enumerated() {
+            if bulkRenameCancelRequested {
+                wasCancelled = true
+                let remaining = Array(phase1.suffix(from: index))
+                let restored = await restoreBulkRenameStaged(remaining.map { ($0.video, $0.originalName) })
+                recomputeFilteredVideos()
+                return BulkRenameApplyResult(
+                    renamedCount: renamedCount,
+                    failed: failed,
+                    wasCancelled: true,
+                    restoredCount: restored
+                )
+            }
             guard let live = videos.first(where: { $0.databaseId == item.video.databaseId })
                     ?? videos.first(where: { $0.filePath == item.video.filePath })
             else {
+                failed.append(BulkRenameFailure(
+                    id: item.sourceId,
+                    currentFileName: item.originalName,
+                    proposedFileName: item.finalName,
+                    reason: "Video is no longer in the library",
+                    videoDatabaseId: item.video.databaseId
+                ))
                 bulkRenameProgress = .finishing(current: index + 1, total: phase1.count)
                 continue
             }
-            _ = await renameVideo(live, to: item.finalName)
+            let outcome = await renameVideo(live, to: item.finalName, reportErrors: false)
             bulkRenameProgress = .finishing(current: index + 1, total: phase1.count)
+            switch outcome {
+            case .success:
+                renamedCount += 1
+            case .failure(let reason):
+                if let stillTemp = videos.first(where: { $0.databaseId == item.video.databaseId }) {
+                    _ = await renameVideo(stillTemp, to: item.originalName, reportErrors: false)
+                }
+                failed.append(BulkRenameFailure(
+                    id: item.sourceId,
+                    currentFileName: item.originalName,
+                    proposedFileName: item.finalName,
+                    reason: reason,
+                    videoDatabaseId: item.video.databaseId
+                ))
+            }
         }
 
         recomputeFilteredVideos()
+        return BulkRenameApplyResult(
+            renamedCount: renamedCount,
+            failed: failed,
+            wasCancelled: wasCancelled,
+            restoredCount: 0
+        )
+    }
+
+    /// Restores staged `.skagway-bulk-…` names back to their pre-batch originals.
+    private func restoreBulkRenameStaged(_ items: [(video: Video, originalName: String)]) async -> Int {
+        guard !items.isEmpty else { return 0 }
+        var restored = 0
+        bulkRenameProgress = .rollingBack(current: 0, total: items.count)
+        for (index, item) in items.enumerated() {
+            let live = videos.first(where: { $0.databaseId == item.video.databaseId })
+                ?? videos.first(where: { $0.filePath == item.video.filePath })
+                ?? item.video
+            if case .success = await renameVideo(live, to: item.originalName, reportErrors: false) {
+                restored += 1
+            }
+            bulkRenameProgress = .rollingBack(current: index + 1, total: items.count)
+        }
+        return restored
+    }
+
+    /// Recovers library rows left at `.skagway-bulk-<uuid>-<original>` after an interrupted batch.
+    func sweepInterruptedBulkRenameTemps() async {
+        let candidates = videos.filter { $0.fileName.hasPrefix(Self.bulkRenameTempPrefix) }
+        guard !candidates.isEmpty else { return }
+        for video in candidates {
+            guard let original = Self.originalNameFromBulkRenameTemp(video.fileName) else { continue }
+            _ = await renameVideo(video, to: original, reportErrors: false)
+        }
+        recomputeFilteredVideos()
+    }
+
+    /// `.skagway-bulk-<uuid>-<originalName>` → `originalName` (UUID is always 36 characters).
+    private static func originalNameFromBulkRenameTemp(_ fileName: String) -> String? {
+        guard fileName.hasPrefix(bulkRenameTempPrefix) else { return nil }
+        let rest = String(fileName.dropFirst(bulkRenameTempPrefix.count))
+        guard rest.count > 37 else { return nil }
+        let uuidEnd = rest.index(rest.startIndex, offsetBy: 36)
+        guard rest[uuidEnd] == "-" else { return nil }
+        let original = String(rest[rest.index(after: uuidEnd)...])
+        return original.isEmpty ? nil : original
     }
 
     func videosForMetadataExport(scope: MetadataExportScope) -> [Video] {
@@ -2297,6 +2463,7 @@ final class LibraryViewModel {
 
         resumePendingConversions()
         resumePendingMoves()
+        Task { await sweepInterruptedBulkRenameTemps() }
     }
 
     /// Once per app session (after videos first load), start the fingerprint backfill. The
@@ -2752,8 +2919,12 @@ final class LibraryViewModel {
         var baseResult = snapshot.videos
         let isSearching = !snapshot.searchText.isEmpty
         let isCorruptFilter = snapshot.sidebarFilter == .corrupt
+        let isMissingFilter = snapshot.sidebarFilter == .missing
 
-        if snapshot.excludeCorrupt && !isCorruptFilter && !isSearching {
+        // Don't hide "corrupt-looking" rows inside Missing — absent files often have no
+        // thumbnail / probe data, which would otherwise make Exclude Corrupt empty the view
+        // while the Missing badge still counts them.
+        if snapshot.excludeCorrupt && !isCorruptFilter && !isMissingFilter && !isSearching {
             baseResult = baseResult.filter { !isCorrupt($0) }
         }
 
@@ -3079,7 +3250,8 @@ final class LibraryViewModel {
     private func baseVideosForPrimaryFilter() -> [Video] {
         var result = videos
         let isCorruptFilter = sidebarFilter == .corrupt
-        if excludeCorrupt && !isCorruptFilter && searchText.isEmpty {
+        let isMissingFilter = sidebarFilter == .missing
+        if excludeCorrupt && !isCorruptFilter && !isMissingFilter && searchText.isEmpty {
             result = result.filter { !Self.isCorrupt($0, thumbnailsSettled: thumbnailsSettled) }
         }
         if !searchText.isEmpty, let matchIds = ftsMatchIds {
@@ -3628,15 +3800,26 @@ final class LibraryViewModel {
         refreshSearchIfActive()
     }
 
-    func renameVideo(_ video: Video, to newName: String) async -> String? {
-        guard let dbId = video.databaseId else { return nil }
+    enum RenameVideoResult: Equatable {
+        case success(String)
+        case failure(String)
+    }
+
+    @discardableResult
+    func renameVideo(_ video: Video, to newName: String, reportErrors: Bool = true) async -> RenameVideoResult {
+        guard let dbId = video.databaseId else {
+            return .failure("Video has no library id")
+        }
         guard !activeMoveVideoIds.contains(video.filePath) else {
-            reportTransientError("Can't rename \"\(video.fileName)\" — a move is still in progress")
-            return nil
+            let reason = "Can't rename \"\(video.fileName)\" — a move is still in progress"
+            if reportErrors { reportTransientError(reason) }
+            return .failure(reason)
         }
 
         let trimmed = newName.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return nil }
+        guard !trimmed.isEmpty else {
+            return .failure("New file name is empty")
+        }
 
         let oldURL = video.url
         let newURL = oldURL.deletingLastPathComponent().appendingPathComponent(trimmed)
@@ -3649,8 +3832,9 @@ final class LibraryViewModel {
         if !isCaseOnlyRename {
             guard !FileManager.default.fileExists(atPath: newFilePath) else {
                 print("Rename failed: file already exists at \(newFilePath)")
-                reportTransientError("A file named \"\(trimmed)\" already exists here")
-                return nil
+                let reason = "A file named \"\(trimmed)\" already exists here"
+                if reportErrors { reportTransientError(reason) }
+                return .failure(reason)
             }
         }
 
@@ -3687,11 +3871,12 @@ final class LibraryViewModel {
             if isSortedByName {
                 pendingScrollToAfterRename = newFilePath
             }
-            return newFilePath
+            return .success(newFilePath)
         } catch {
             print("Rename failed: \(error)")
-            reportTransientError("Couldn't rename \"\(video.fileName)\"")
-            return nil
+            let reason = "Couldn't rename \"\(video.fileName)\""
+            if reportErrors { reportTransientError(reason) }
+            return .failure(reason)
         }
     }
 
@@ -4315,6 +4500,9 @@ final class LibraryViewModel {
             updateMoveJobStatus(jobId, .moving(fractionComplete: 0))
             await performMove(jobId: jobId)
         }
+        // Successful moves need no post-hoc management (unlike re-encode backups). Drop them
+        // so the header pill / menu only remain for failures or leftover active work.
+        clearCompletedMoves()
     }
 
     private func performMove(jobId: UUID) async {
@@ -4523,7 +4711,7 @@ final class LibraryViewModel {
     }
 
     /// On launch: re-queue any job interrupted mid-copy, sweep stray `.moving` partials under
-    /// every known destination folder, and restart the drain loop.
+    /// every known destination folder, drop successful history, and restart the drain loop.
     func resumePendingMoves() {
         let fm = FileManager.default
         var changed = false
@@ -4539,6 +4727,8 @@ final class LibraryViewModel {
             try? fm.removeItem(at: tempURL)
         }
         if changed { persistMoveJobs() }
+        // Stale successful rows from prior sessions are history only — drop them.
+        clearCompletedMoves()
         startDrainingMovesIfNeeded()
     }
 

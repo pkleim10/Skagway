@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// The "Move Queue" manager. Lists every cross-volume `MoveJob` with abort / move-to-top /
-/// retry / dismiss. Same-volume moves (atomic rename) never appear here.
+/// The "Move Queue" manager. Lists cross-volume `MoveJob`s with abort / move-to-top /
+/// retry / dismiss. Successful completed jobs are auto-cleared when the queue drains
+/// (kept only while work is in flight or failed). Same-volume moves never appear here.
 struct MoveQueueView: View {
     @Bindable var vm: LibraryViewModel
     @Environment(\.dismiss) private var dismiss
