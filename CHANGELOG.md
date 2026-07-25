@@ -31,6 +31,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Search covers more library fields** — Library search now matches title, file name, original file name, tags, and custom metadata values (AND across terms; case-insensitive contains).
 - **Fix: Custom Metadata fields are per-library** — Field definitions now live in each library database (`custom_metadata_field`) instead of global UserDefaults, so libraries no longer share the same schema. Existing definitions are seeded once from the legacy prefs key when a library’s table is empty (preserving field UUIDs and values). Removing a field also deletes its stored values.
 - **Original File Name** — Stored at import and never changed by rename/move/convert. Available in Export Metadata and Bulk Rename (`{Original File Name}`); existing libraries backfill from the current file name.
 - **Bulk Rename** — Pattern-based on-disk rename for the filtered set or selection (`File → Bulk Rename…`, context menu). Searchable field list covers built-ins and custom metadata; free text + `{Token}` patterns with caret insert and token selection; optional date/duration format args (`{Date Created MMM-yyyy}`, `{Duration mmm}` / `{Duration sss}`), case transforms (`{Title lower|UPPER|Name}` / `L|U|N`), and specials `{Inc}`, `{Conflict}`, `{Stem}`, `{Date …}`, `{UUID8}`; live preview with collision / empty / length skips and a **No extension** warning (still renameable); two-phase apply with progress; preserves library metadata.

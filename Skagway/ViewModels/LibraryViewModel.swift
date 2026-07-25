@@ -1023,7 +1023,13 @@ final class LibraryViewModel {
                     self.recentlyAppliedPaths = Set(pass1.matchedPaths)
                     self.sidebarFilter = .recentlyApplied
                     self.updateLibraryCounts()
-                    self.recomputeFilteredVideos()
+                    // Tag / custom-metadata writes don't go through `videos` didSet; refresh
+                    // search matches so an active query picks up imported Featuring/tags/etc.
+                    if !self.searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+                        self.refreshSearchIfActive()
+                    } else {
+                        self.recomputeFilteredVideos()
+                    }
 
                     self.metadataApplyProgress = nil
                     self.metadataApplySummary = MetadataApplySummary(
@@ -1898,6 +1904,7 @@ final class LibraryViewModel {
         p.visibleCustomFieldIDs.subtract(ids)
         listColumnPreferences = p
         try? videoRepo.deleteCustomMetadata(fieldIds: ids)
+        refreshSearchIfActive()
     }
 
     func updateCustomMetadataFieldName(id: UUID, name: String) {
@@ -3618,6 +3625,7 @@ final class LibraryViewModel {
         for id in dbIds {
             mergeListCustomMetadataCache(videoId: id, fieldId: fieldId, value: value)
         }
+        refreshSearchIfActive()
     }
 
     func renameVideo(_ video: Video, to newName: String) async -> String? {
@@ -4893,6 +4901,8 @@ final class LibraryViewModel {
         do {
             try await tagRepo.rename(tagId, to: newName)
             await loadTags()
+            await refreshTagsByVideoId()
+            refreshSearchIfActive()
         } catch {
             print("Failed to rename tag: \(error)")
             reportTransientError("Couldn't rename tag \"\(tag.name)\"")
@@ -4971,6 +4981,7 @@ final class LibraryViewModel {
     private func reloadTagState() async {
         await loadTags()
         await refreshTagsByVideoId()
+        refreshSearchIfActive()
     }
 
     /// Tags common to every video in the selection. Iterates the selection only (O(selection)),

@@ -19,18 +19,33 @@ struct VideoRepository {
                 .map { $0.trimmingCharacters(in: .whitespaces) }
                 .filter { !$0.isEmpty }
             guard !terms.isEmpty else { return try Video.fetchAll(db) }
-            // Contains (*term*), AND logic, case-insensitive — "coop" matches "Cooper"/"acoop", "bear coop" matches "Dale Cooper fights a bear"
-            let conditions = terms.map { _ in
-                "(LOWER(title) LIKE ? ESCAPE '\\' OR LOWER(fileName) LIKE ? ESCAPE '\\')"
-            }.joined(separator: " AND ")
+            // Contains (*term*), AND logic, case-insensitive across title, file names, tags,
+            // and custom metadata values. Each term may match a different field.
+            let termClause = """
+                (
+                    LOWER(video.title) LIKE ? ESCAPE '\\'
+                    OR LOWER(video.fileName) LIKE ? ESCAPE '\\'
+                    OR LOWER(video.originalFileName) LIKE ? ESCAPE '\\'
+                    OR EXISTS (
+                        SELECT 1 FROM video_tag vt
+                        JOIN tag t ON t.id = vt.tagId
+                        WHERE vt.videoId = video.id AND LOWER(t.name) LIKE ? ESCAPE '\\'
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM video_custom_metadata cm
+                        WHERE cm.videoId = video.id AND LOWER(cm.value) LIKE ? ESCAPE '\\'
+                    )
+                )
+                """
+            let conditions = Array(repeating: termClause, count: terms.count).joined(separator: " AND ")
             let args = terms.flatMap { term -> [String] in
                 let pattern = "%\(Self.escapeLike(term))%".lowercased()
-                return [pattern, pattern]
+                return Array(repeating: pattern, count: 5)
             }
             let sql = """
-                SELECT * FROM video
+                SELECT video.* FROM video
                 WHERE \(conditions)
-                ORDER BY dateAdded DESC
+                ORDER BY video.dateAdded DESC
                 """
             return try Video.fetchAll(db, sql: sql, arguments: StatementArguments(args))
         }
