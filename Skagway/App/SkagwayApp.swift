@@ -371,6 +371,12 @@ struct SkagwayApp: App {
                 .disabled(!(appState.hasLibrary)
                     || (appState.libraryViewModel?.filteredVideos.isEmpty ?? true))
                 .help("Export metadata for the current filtered video set")
+                Button("Bulk Rename\u{2026}") {
+                    appState.libraryViewModel?.presentBulkRename(scope: .filtered)
+                }
+                .disabled(!(appState.hasLibrary)
+                    || (appState.libraryViewModel?.filteredVideos.isEmpty ?? true))
+                .help("Rename filtered videos on disk using a name pattern")
                 Button("Import Metadata\u{2026}") {
                     ApplyMetadataFilePicker.present(
                         onPicked: { url, data in

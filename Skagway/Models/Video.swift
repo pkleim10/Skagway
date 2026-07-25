@@ -7,6 +7,8 @@ struct Video: Codable, Equatable, Hashable, Identifiable {
     var fileName: String
     /// Library display name. Seeded from `fileName` on import; editable without renaming the file on disk.
     var title: String = ""
+    /// On-disk name at first import. Set once and never changed by rename/move/convert.
+    var originalFileName: String = ""
     var fileSize: Int64
     var duration: Double?
     var width: Int?
@@ -37,7 +39,7 @@ struct Video: Codable, Equatable, Hashable, Identifiable {
 
     private enum CodingKeys: String, CodingKey {
         case databaseId = "id"
-        case filePath, fileName, title, fileSize, duration, width, height
+        case filePath, fileName, title, originalFileName, fileSize, duration, width, height
         case codec, frameRate, creationDate, dateAdded, rating
         case thumbnailPath, lastPlayed, playCount, hasSubtitles
         case contentFingerprint

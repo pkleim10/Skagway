@@ -738,6 +738,13 @@ private struct LibraryContentView: View {
                 videoCount: presentation.videoCount
             )
         }
+        .sheet(item: $vm.bulkRenamePresentation) { presentation in
+            BulkRenameSheet(
+                viewModel: vm,
+                scope: presentation.scope,
+                videoCount: presentation.videoCount
+            )
+        }
         .sheet(item: $vm.metadataApplyUnknownColumnsPrompt) { prompt in
             ApplyMetadataUnknownColumnsSheet(viewModel: vm, prompt: prompt)
         }

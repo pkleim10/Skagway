@@ -129,12 +129,20 @@ struct CuratedWallGrid: View {
                             Button("Edit Title\u{2026}") {
                                 viewModel.beginEditingTitle(for: video)
                             }
-                            Button("Rename File\u{2026}") {
-                                viewModel.beginRenamingFile(for: video)
-                            }
-                            .disabled(isMoving)
-                            .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "")
-                            Menu("Open With") {
+                    Button("Rename File\u{2026}") {
+                        viewModel.beginRenamingFile(for: video)
+                    }
+                    .disabled(isMoving)
+                    .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "")
+                    Button("Bulk Rename\u{2026}") {
+                        let ids = viewModel.selectedVideoIds.contains(video.id)
+                            ? viewModel.selectedVideoIds : [video.id]
+                        viewModel.selectedVideoIds = ids
+                        viewModel.presentBulkRename(scope: .selection)
+                    }
+                    .disabled(isMoving)
+                    .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "")
+                    Menu("Open With") {
                                 // NB: SwiftUI evaluates contextMenu content EAGERLY, per
                                 // instantiated card, on every grid update — nothing heavy may
                                 // run directly in this builder. Computing the selection URLs

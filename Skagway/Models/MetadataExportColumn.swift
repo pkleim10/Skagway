@@ -107,6 +107,7 @@ enum MetadataExportColumnRegistry {
         .init(id: "filePath", label: "Path", defaultIncluded: true),
         .init(id: "title", label: "Title", defaultIncluded: true),
         .init(id: "fileName", label: "File Name", defaultIncluded: true),
+        .init(id: "originalFileName", label: "Original File Name", defaultIncluded: false),
         .init(id: "id", label: "Database ID", defaultIncluded: false),
         .init(id: "fileExtension", label: "Extension", defaultIncluded: false),
         .init(id: "parentFolder", label: "Parent Folder", defaultIncluded: false),
@@ -368,6 +369,7 @@ enum MetadataExportRowBuilder {
         case "filePath": return .string(video.filePath)
         case "title": return .string(video.displayTitle)
         case "fileName": return .string(video.fileName)
+        case "originalFileName": return .string(video.originalFileName)
         case "id":
             if let id = video.databaseId { return .int(id) }
             return .null

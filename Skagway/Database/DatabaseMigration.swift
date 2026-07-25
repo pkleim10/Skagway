@@ -275,6 +275,13 @@ enum DatabaseMigration {
             try db.execute(sql: "UPDATE video SET title = fileName WHERE title = ''")
         }
 
+        migrator.registerMigration("v15_originalFileName") { db in
+            try db.alter(table: "video") { t in
+                t.add(column: "originalFileName", .text).notNull().defaults(to: "")
+            }
+            try db.execute(sql: "UPDATE video SET originalFileName = fileName WHERE originalFileName = ''")
+        }
+
         try migrator.migrate(pool)
     }
 }

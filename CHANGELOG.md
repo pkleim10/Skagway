@@ -31,6 +31,9 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Original File Name** — Stored at import and never changed by rename/move/convert. Available in Export Metadata and Bulk Rename (`{Original File Name}`); existing libraries backfill from the current file name.
+- **Bulk Rename** — Pattern-based on-disk rename for the filtered set or selection (`File → Bulk Rename…`, context menu). Searchable field list covers built-ins and custom metadata; free text + `{Token}` patterns with caret insert and token selection; optional date/duration format args (`{Date Created MMM-yyyy}`, `{Duration mmm}` / `{Duration sss}`), case transforms (`{Title lower|UPPER|Name}` / `L|U|N`), and specials `{Inc}`, `{Conflict}`, `{Stem}`, `{Date …}`, `{UUID8}`; live preview with collision / empty / length skips and a **No extension** warning (still renameable); two-phase apply with progress; preserves library metadata.
+
 ## 0.74.0 (build 938) - 2026-07-24
 
 - **Fix: Open Recent in Remember mode** — Bookmark-only library homes now keep Open Recent via opaque bookmarks (still no plain path list). Opening Home or any other library records it; ask-each-launch no longer skips Recents.

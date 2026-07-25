@@ -212,6 +212,12 @@ struct LibraryListView: View {
                     .disabled(isMoving)
                     .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "")
                 }
+                Button("Bulk Rename\u{2026}") {
+                    viewModel.selectedVideoIds = ids
+                    viewModel.presentBulkRename(scope: .selection)
+                }
+                .disabled(isMoving)
+                .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "")
                 Menu("Open With") {
                     // If the right-clicked row is part of a multi-selection,
                     // send the whole selection; otherwise just this one video.

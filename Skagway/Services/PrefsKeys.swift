@@ -32,6 +32,7 @@ enum PrefsKeys {
     static let metadataExportFormat = "Skagway.metadataExportFormat"
     static let metadataExportColumnOrder = "Skagway.metadataExportColumnOrder"
     static let metadataExportIncludedColumns = "Skagway.metadataExportIncludedColumns"
+    static let bulkRenamePattern = "Skagway.bulkRenamePattern"
     static let viewMode = "Skagway.viewMode"
     static let gridSize = "Skagway.gridSize"
     static let sortColumn = "Skagway.sortColumn"

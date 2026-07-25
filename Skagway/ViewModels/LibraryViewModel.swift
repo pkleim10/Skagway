@@ -654,6 +654,118 @@ final class LibraryViewModel {
         metadataExportPresentation = MetadataExportPresentation(scope: scope, videoCount: videos.count)
     }
 
+    // MARK: - Bulk rename
+
+    /// Non-nil while the Bulk Rename sheet is presented.
+    var bulkRenamePresentation: BulkRenamePresentation? = nil
+    /// Non-nil while a bulk rename apply is in progress.
+    var bulkRenameProgress: BulkRenameApplyProgress? = nil
+
+    enum BulkRenameApplyProgress: Equatable {
+        case preparing(current: Int, total: Int)
+        case finishing(current: Int, total: Int)
+
+        var current: Int {
+            switch self {
+            case .preparing(let c, _), .finishing(let c, _): return c
+            }
+        }
+
+        var total: Int {
+            switch self {
+            case .preparing(_, let t), .finishing(_, let t): return t
+            }
+        }
+
+        var statusText: String {
+            switch self {
+            case .preparing(let c, let t):
+                return "Preparing \(c) of \(t)…"
+            case .finishing(let c, let t):
+                return "Renaming \(c) of \(t)…"
+            }
+        }
+    }
+
+    private static let bulkRenamePatternKey = PrefsKeys.bulkRenamePattern
+
+    struct BulkRenamePresentation: Identifiable, Equatable {
+        let id = UUID()
+        let scope: MetadataExportScope
+        let videoCount: Int
+    }
+
+    func presentBulkRename(scope: MetadataExportScope) {
+        let videos = videosForMetadataExport(scope: scope)
+        guard !videos.isEmpty else { return }
+        bulkRenameProgress = nil
+        bulkRenamePresentation = BulkRenamePresentation(scope: scope, videoCount: videos.count)
+    }
+
+    func loadBulkRenamePattern() -> String {
+        let stored = UserDefaults.standard.string(forKey: Self.bulkRenamePatternKey)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let stored, !stored.isEmpty { return stored }
+        return BulkRenameTokenCatalog.defaultPattern
+    }
+
+    func saveBulkRenamePattern(_ pattern: String) {
+        UserDefaults.standard.set(pattern, forKey: Self.bulkRenamePatternKey)
+    }
+
+    /// Two-phase rename so in-batch swaps/collisions that clear after a peer moves still succeed.
+    func applyBulkRename(_ rows: [BulkRenamePlanRow]) async {
+        let actionable = rows.filter(\.status.isActionable)
+        guard !actionable.isEmpty else { return }
+
+        let total = actionable.count
+        bulkRenameProgress = .preparing(current: 0, total: total)
+        defer { bulkRenameProgress = nil }
+
+        struct Phase1 {
+            let video: Video
+            let tempName: String
+            let finalName: String
+        }
+
+        var phase1: [Phase1] = []
+        phase1.reserveCapacity(actionable.count)
+
+        for (index, row) in actionable.enumerated() {
+            // Re-resolve from current library state (paths may be stale only if something else moved).
+            guard let live = videos.first(where: { $0.databaseId == row.video.databaseId })
+                    ?? videos.first(where: { $0.filePath == row.video.filePath })
+            else {
+                bulkRenameProgress = .preparing(current: index + 1, total: total)
+                continue
+            }
+            let tempName = ".skagway-bulk-\(UUID().uuidString)-\(live.fileName)"
+            guard let _ = await renameVideo(live, to: tempName) else {
+                bulkRenameProgress = .preparing(current: index + 1, total: total)
+                continue
+            }
+            let afterTemp = videos.first(where: { $0.databaseId == live.databaseId })
+                ?? videos.first(where: { $0.fileName == tempName })
+            bulkRenameProgress = .preparing(current: index + 1, total: total)
+            guard let afterTemp else { continue }
+            phase1.append(Phase1(video: afterTemp, tempName: tempName, finalName: row.proposedFileName))
+        }
+
+        bulkRenameProgress = .finishing(current: 0, total: max(phase1.count, 1))
+        for (index, item) in phase1.enumerated() {
+            guard let live = videos.first(where: { $0.databaseId == item.video.databaseId })
+                    ?? videos.first(where: { $0.filePath == item.video.filePath })
+            else {
+                bulkRenameProgress = .finishing(current: index + 1, total: phase1.count)
+                continue
+            }
+            _ = await renameVideo(live, to: item.finalName)
+            bulkRenameProgress = .finishing(current: index + 1, total: phase1.count)
+        }
+
+        recomputeFilteredVideos()
+    }
+
     func videosForMetadataExport(scope: MetadataExportScope) -> [Video] {
         switch scope {
         case .filtered:
