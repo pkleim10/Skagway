@@ -31,6 +31,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Bulk Rename case transforms** — Distinct title case (`title` / `T`: The Quick Brown Fox) vs name case (`name` / `N`: The quick brown fox). `{Stem}` honors case args (`{Stem title}`, `{Stem name}`, etc.).
 - **Empty browser invite** — An empty library shows a dotted drop zone in the browser (highlights while dragging), File → Add Folder… (⇧⌘O), and an Add Files… button that accepts files or folders. Copy explains that added folders (or parent folders of files) become Data Sources in Settings. Dropping folders onto the browser now scans them.
 - **No second landing chooser** — After first-launch home setup, Standard and Remember modes open the home library automatically (creating it if missing). Ask-each-launch and Close Library show a minimal empty window; create/open/recent stay on the File menu. Choosing a new empty home folder creates a new empty library (no longer copies the previous home).
 - **Fix: Missing smart library vs Exclude Corrupt** — Viewing Missing no longer applies Exclude Corrupt first. Absent files often look “corrupt” (no thumbnail / probe data), which hid them from the grid while the Missing badge still counted them.

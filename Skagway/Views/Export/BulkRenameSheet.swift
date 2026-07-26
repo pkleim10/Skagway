@@ -85,7 +85,7 @@ struct BulkRenameSheet: View {
                             recomputePlan()
                         }
 
-                    Text("Insert at the caret. Optional args: date format (`{Date Created MMM-yyyy}`), duration (`{Duration mmm}`), case (`{Title lower}` / `{Title U}` / `{Title N}`). Special: `{Inc 015}`, `{Conflict -1}`, `{Stem}`, `{Date …}`, `{UUID8}`.")
+                    Text("Insert at the caret. Optional args: date format (`{Date Created MMM-yyyy}`), duration (`{Duration mmm}`), case (`{Title lower}` / `{Title U}` / `{Stem title}` / `{Stem T}` / `{Stem name}` / `{Stem N}`). Special: `{Inc 015}`, `{Conflict -1}`, `{Stem}`, `{Date …}`, `{UUID8}`.")
                         .font(.caption)
                         .foregroundStyle(Color.appTextSecondary)
                         .fixedSize(horizontal: false, vertical: true)

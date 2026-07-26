@@ -177,12 +177,16 @@ enum BulkRenameTokenCatalog {
 enum BulkRenameCaseTransform: Equatable, Sendable {
     case lower
     case upper
+    /// Title Case — capitalize the first letter of each word (`The Quick Brown Fox`).
+    case title
+    /// Name case — capitalize only the first letter (`The quick brown fox`).
     case name
 
     static func parseKeyword(_ word: String) -> BulkRenameCaseTransform? {
         switch word {
         case "L", "l": return .lower
         case "U", "u": return .upper
+        case "T", "t": return .title
         case "N", "n": return .name
         default:
             break
@@ -190,6 +194,7 @@ enum BulkRenameCaseTransform: Equatable, Sendable {
         switch word.lowercased() {
         case "lower": return .lower
         case "upper": return .upper
+        case "title": return .title
         case "name": return .name
         default: return nil
         }
@@ -199,7 +204,11 @@ enum BulkRenameCaseTransform: Equatable, Sendable {
         switch self {
         case .lower: return string.lowercased()
         case .upper: return string.uppercased()
-        case .name: return string.localizedCapitalized
+        case .title: return string.localizedCapitalized
+        case .name:
+            let lower = string.lowercased()
+            guard let first = lower.first else { return lower }
+            return String(first).uppercased() + lower.dropFirst()
         }
     }
 }
@@ -301,7 +310,7 @@ enum BulkRenameParsedToken: Equatable, Sendable {
     case inc(BulkRenameNumberFormat)
     case conflict(BulkRenameConflictFormat)
     case uuid8
-    case stem
+    case stem(caseTransform: BulkRenameCaseTransform?)
     case nowDate(format: String?, caseTransform: BulkRenameCaseTransform?)
     case field(tokenId: String, format: String?, caseTransform: BulkRenameCaseTransform?)
     case unknown
@@ -327,7 +336,7 @@ enum BulkRenameTokenParser {
         case "uuid8":
             return .uuid8
         case "stem":
-            return .stem
+            return .stem(caseTransform: caseTransform)
         case "nowDate":
             return .nowDate(format: format, caseTransform: caseTransform)
         default:
@@ -432,8 +441,10 @@ enum BulkRenameTemplate {
             case .uuid8:
                 let hex = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
                 result += String(hex.prefix(8))
-            case .stem:
-                result += sanitizeComponent((video.fileName as NSString).deletingPathExtension)
+            case .stem(let caseTransform):
+                var text = (video.fileName as NSString).deletingPathExtension
+                if let caseTransform { text = caseTransform.apply(text) }
+                result += sanitizeComponent(text)
             case .nowDate(let format, let caseTransform):
                 var text = formatDate(Date(), format: format)
                 if let caseTransform { text = caseTransform.apply(text) }

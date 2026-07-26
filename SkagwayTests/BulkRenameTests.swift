@@ -68,11 +68,55 @@ final class BulkRenameTests: XCTestCase {
         )
         XCTAssertEqual(
             BulkRenameTemplate.render(pattern: "{Title N}", video: video, context: context, tokenIdByKey: map),
+            "Copper river"
+        )
+        XCTAssertEqual(
+            BulkRenameTemplate.render(pattern: "{Title name}", video: video, context: context, tokenIdByKey: map),
+            "Copper river"
+        )
+        XCTAssertEqual(
+            BulkRenameTemplate.render(pattern: "{Title title}", video: video, context: context, tokenIdByKey: map),
+            "Copper River"
+        )
+        XCTAssertEqual(
+            BulkRenameTemplate.render(pattern: "{Title T}", video: video, context: context, tokenIdByKey: map),
             "Copper River"
         )
         XCTAssertEqual(
             BulkRenameTemplate.render(pattern: "{Title U}", video: video, context: context, tokenIdByKey: map),
             "COPPER RIVER"
+        )
+    }
+
+    func testRender_stemCaseTransforms() {
+        let video = sampleVideo(title: "A", fileName: "vacation clip.mp4", duration: 10, height: 1080)
+        let tokens = BulkRenameTokenCatalog.tokens(customFields: [])
+        let map = BulkRenameTokenCatalog.lookupMap(tokens: tokens)
+        let context = emptyContext()
+
+        XCTAssertEqual(
+            BulkRenameTemplate.render(pattern: "{Stem}.mp4", video: video, context: context, tokenIdByKey: map),
+            "vacation clip.mp4"
+        )
+        XCTAssertEqual(
+            BulkRenameTemplate.render(pattern: "{Stem title}.mp4", video: video, context: context, tokenIdByKey: map),
+            "Vacation Clip.mp4"
+        )
+        XCTAssertEqual(
+            BulkRenameTemplate.render(pattern: "{Stem T}.mp4", video: video, context: context, tokenIdByKey: map),
+            "Vacation Clip.mp4"
+        )
+        XCTAssertEqual(
+            BulkRenameTemplate.render(pattern: "{Stem name}.mp4", video: video, context: context, tokenIdByKey: map),
+            "Vacation clip.mp4"
+        )
+        XCTAssertEqual(
+            BulkRenameTemplate.render(pattern: "{Stem N}.mp4", video: video, context: context, tokenIdByKey: map),
+            "Vacation clip.mp4"
+        )
+        XCTAssertEqual(
+            BulkRenameTemplate.render(pattern: "{Stem U}.mp4", video: video, context: context, tokenIdByKey: map),
+            "VACATION CLIP.mp4"
         )
     }
 
