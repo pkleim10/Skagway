@@ -99,7 +99,7 @@ actor LibraryScanner {
                 dateAdded: Date(),
                 rating: 0,
                 playCount: 0,
-                hasSubtitles: hasSRT,
+                subtitlePresence: hasSRT ? .sidecar : .none,
                 contentFingerprint: ContentFingerprint.compute(url: fileURL)
             )
 
@@ -268,7 +268,7 @@ actor LibraryScanner {
                 dateAdded: Date(),
                 rating: 0,
                 playCount: 0,
-                hasSubtitles: hasSRT,
+                subtitlePresence: hasSRT ? .sidecar : .none,
                 contentFingerprint: ContentFingerprint.compute(url: fileURL)
             )
 

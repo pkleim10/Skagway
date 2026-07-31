@@ -268,13 +268,13 @@ struct CuratedWallCard: View {
 
     private var topBadgeCluster: some View {
         HStack(spacing: 4) {
-            if video.hasSubtitles {
+            if video.subtitlePresence.showsBadge {
                 chromeBadge {
                     Image(systemName: "captions.bubble.fill")
                         .font(.system(size: 9, weight: .semibold))
                 }
-                .help("Subtitles available")
-                .accessibilityLabel("Subtitles available")
+                .help(video.subtitlePresence.badgeHelp)
+                .accessibilityLabel(video.subtitlePresence.badgeHelp)
             }
             if let dur = video.formattedDuration {
                 chromeBadge {

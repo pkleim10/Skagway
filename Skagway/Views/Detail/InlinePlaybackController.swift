@@ -174,9 +174,9 @@ final class InlinePlaybackController {
             if let sidecar = await sidecarTask.value, !Task.isCancelled {
                 guard player === newPlayer else { return }
                 _ = subtitleTrack.applyLoadedCues(sidecar.cues, sourceURL: sidecar.url)
-                Task { await viewModel.setHasSubtitles(videoPath: videoPath, hasSubtitles: true) }
+                Task { await viewModel.applySidecarSubtitlePresence(videoPath: videoPath, sidecarPresent: true) }
             } else if !Task.isCancelled {
-                Task { await viewModel.setHasSubtitles(videoPath: videoPath, hasSubtitles: false) }
+                Task { await viewModel.applySidecarSubtitlePresence(videoPath: videoPath, sidecarPresent: false) }
             }
 
             // Status monitoring: catch load failures that slip past the isPlayable check

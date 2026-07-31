@@ -258,6 +258,43 @@ final class MetadataApplyTests: XCTestCase {
         XCTAssertTrue(result.rowErrors.contains(where: { $0.contains("invalid boolean") }))
     }
 
+    func testPass1_subtitlePresenceParsesLabelsAndLegacyBools() throws {
+        let video = sampleVideo(id: 1, path: "/a.mp4", fp: nil, rating: 0)
+        let index = MetadataApplier.buildIndex(
+            videos: [video],
+            tagsByVideoId: [:],
+            customByVideoId: [:],
+            customFieldDefinitions: []
+        )
+        let rows = [
+            MetadataApplyRow(lineNumber: 2, values: [
+                "filePath": "/a.mp4",
+                "hasSubtitles": "Burned-in",
+            ]),
+        ]
+        let result = try MetadataApplier.pass1(
+            rows: rows,
+            resolvedColumnIDs: ["filePath", "hasSubtitles"],
+            skippedUnknownColumns: [],
+            index: index
+        )
+        XCTAssertEqual(result.subtitleUpdates[1], .burnedIn)
+        XCTAssertTrue(result.ignoredReadOnlyColumns.isEmpty)
+
+        let legacy = try MetadataApplier.pass1(
+            rows: [
+                MetadataApplyRow(lineNumber: 2, values: [
+                    "filePath": "/a.mp4",
+                    "hasSubtitles": "yes",
+                ]),
+            ],
+            resolvedColumnIDs: ["filePath", "hasSubtitles"],
+            skippedUnknownColumns: [],
+            index: index
+        )
+        XCTAssertEqual(legacy.subtitleUpdates[1], .sidecar)
+    }
+
     func testParse_reResolveAfterCreatingUnknownField() throws {
         let csv = "Path,Director\n/a.mp4,Nolan\n"
         let data = Data(csv.utf8)
@@ -340,7 +377,7 @@ final class MetadataApplyTests: XCTestCase {
             thumbnailPath: nil,
             lastPlayed: nil,
             playCount: 0,
-            hasSubtitles: false,
+            subtitlePresence: .none,
             contentFingerprint: fp
         )
     }

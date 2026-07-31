@@ -14,6 +14,8 @@ struct MetadataApplyPass1Result: Sendable {
     var ratingUpdates: [Int64: Int]
     /// videoDatabaseId → new library title
     var titleUpdates: [Int64: String]
+    /// videoDatabaseId → new subtitle presence
+    var subtitleUpdates: [Int64: SubtitlePresence]
     /// videoDatabaseId → tag names to merge (add)
     var tagMerges: [Int64: [String]]
     var rowErrors: [String]
@@ -98,6 +100,7 @@ enum MetadataApplier {
         var customUpdates: [UUID: [Int64: String]] = [:]
         var ratingUpdates: [Int64: Int] = [:]
         var titleUpdates: [Int64: String] = [:]
+        var subtitleUpdates: [Int64: SubtitlePresence] = [:]
         var tagMerges: [Int64: [String]] = [:]
         var rowErrors: [String] = []
 
@@ -134,6 +137,20 @@ enum MetadataApplier {
                         }
                     } else {
                         rowErrors.append("Line \(row.lineNumber): invalid rating “\(trimmed)”")
+                    }
+                }
+            }
+
+            if let raw = row.values["hasSubtitles"] {
+                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    if let presence = SubtitlePresence.parse(trimmed) {
+                        if video.subtitlePresence != presence {
+                            subtitleUpdates[dbId] = presence
+                            didUpdate = true
+                        }
+                    } else {
+                        rowErrors.append("Line \(row.lineNumber): invalid subtitles “\(trimmed)”")
                     }
                 }
             }
@@ -193,6 +210,7 @@ enum MetadataApplier {
             customUpdates: customUpdates,
             ratingUpdates: ratingUpdates,
             titleUpdates: titleUpdates,
+            subtitleUpdates: subtitleUpdates,
             tagMerges: tagMerges,
             rowErrors: rowErrors
         )

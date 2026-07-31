@@ -459,17 +459,13 @@ struct CuratedWallInspector: View {
         let codec     = commonString(videos.map(\.codec))
         let dateStr   = commonDate(videos.map(\.dateAdded))
         let plays     = multi ? "—" : (v.playCount == 1 ? "1 play" : "\(v.playCount) plays")
-        let subtitles = videos.map(\.hasSubtitles)
-        let subLabel  = (subtitles.allSatisfy { $0 == subtitles[0] })
-            ? "Subtitle: \(subtitles[0] ? "Yes" : "No")"
-            : "Subtitle: —"
 
         return VStack(spacing: 0) {
             factGridRow([resFps, duration, fileSize])
             hLine()
             factGridRow([codec, dateStr, plays])
             hLine()
-            factCell(subLabel)
+            subtitlePresenceRow(for: videos)
         }
         .background(Self.factCellBackground)
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -477,6 +473,50 @@ struct CuratedWallInspector: View {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .stroke(Self.factLineColor, lineWidth: 1)
         )
+    }
+
+    private func subtitlePresenceRow(for videos: [Video]) -> some View {
+        let common: SubtitlePresence? = {
+            guard let first = videos.first?.subtitlePresence,
+                  videos.allSatisfy({ $0.subtitlePresence == first })
+            else { return nil }
+            return first
+        }()
+        let paths: Set<String> = selectedIds.isEmpty
+            ? Set(videos.map(\.filePath))
+            : selectedIds
+
+        return HStack(spacing: 6) {
+            Text("Subtitles")
+                .font(.caption2)
+                .foregroundStyle(Color.appTextSecondary)
+            Picker(
+                "",
+                selection: Binding<SubtitlePresence?>(
+                    get: { common },
+                    set: { newValue in
+                        guard let newValue else { return }
+                        Task { await viewModel.setSubtitlePresence(videoPaths: paths, presence: newValue) }
+                    }
+                )
+            ) {
+                if common == nil {
+                    Text("—").tag(SubtitlePresence?.none)
+                }
+                ForEach(SubtitlePresence.allCases, id: \.rawValue) { presence in
+                    Text(presence.displayName).tag(Optional(presence))
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .controlSize(.small)
+            .tint(Color.appTextSecondary)
+            .fixedSize() // Hug the option label; don't stretch across the inspector.
+            .help("None, burned-in hardsubs, sidecar file (e.g. .srt), or both")
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func factGridRow(_ values: [String]) -> some View {

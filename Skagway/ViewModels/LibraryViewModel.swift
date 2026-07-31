@@ -9,7 +9,7 @@ import UniformTypeIdentifiers
 final class LibraryViewModel {
     var videos: [Video] = [] {
         didSet {
-            // Surgical field updates (e.g. hasSubtitles on play) assign `videos` but must not
+            // Surgical field updates (e.g. subtitlePresence on play) assign `videos` but must not
             // cascade into counts / filter recompute / custom-metadata refresh — those are O(n).
             // Also skip the full path-index rebuild; callers update the one touched entry.
             if suppressVideosDidSet { return }
@@ -1153,6 +1153,10 @@ final class LibraryViewModel {
                 for (dbId, title) in pass1.titleUpdates {
                     try? await videoRepo.updateTitle(videoId: dbId, title: title)
                 }
+                if !pass1.subtitleUpdates.isEmpty {
+                    let subtitleBulk = pass1.subtitleUpdates.map { (videoId: $0.key, presence: $0.value) }
+                    try? await videoRepo.updateSubtitlePresence(updates: subtitleBulk)
+                }
                 for (fieldId, byVideo) in pass1.customUpdates {
                     for (dbId, value) in byVideo {
                         try? await videoRepo.upsertCustomMetadata(videoId: dbId, fieldId: fieldId, value: value)
@@ -1168,8 +1172,8 @@ final class LibraryViewModel {
 
                 await MainActor.run {
                     guard let self else { return }
-                    // Reflect rating / title updates in memory
-                    if !pass1.ratingUpdates.isEmpty || !pass1.titleUpdates.isEmpty {
+                    // Reflect rating / title / subtitle updates in memory
+                    if !pass1.ratingUpdates.isEmpty || !pass1.titleUpdates.isEmpty || !pass1.subtitleUpdates.isEmpty {
                         var updated = self.videos
                         for i in updated.indices {
                             guard let id = updated[i].databaseId else { continue }
@@ -1178,6 +1182,9 @@ final class LibraryViewModel {
                             }
                             if let t = pass1.titleUpdates[id] {
                                 updated[i].title = t
+                            }
+                            if let s = pass1.subtitleUpdates[id] {
+                                updated[i].subtitlePresence = s
                             }
                         }
                         self.videos = updated
@@ -3617,8 +3624,8 @@ final class LibraryViewModel {
         videos = updated
     }
 
-    /// Rescans videos in the **current filtered list** for a sidecar `.srt` file and updates the
-    /// `hasSubtitles` flag accordingly (search, tags, collections, sidebar filters, etc. all narrow scope).
+    /// Rescans videos in the **current filtered list** for a sidecar `.srt` and updates
+    /// `subtitlePresence` via `applying(sidecarPresent:)` (preserves burned-in marks).
     /// Disk I/O is chunked and dispatched off the main actor so the UI remains responsive; progress is
     /// reported via `scanCurrent` / `scanTotal` / `scanProgress`.
     func scanForSubtitles() async {
@@ -3637,11 +3644,11 @@ final class LibraryViewModel {
         struct Row: Sendable {
             let dbId: Int64
             let filePath: String
-            let had: Bool
+            let current: SubtitlePresence
         }
         let snapshot: [Row] = filteredVideos.compactMap { v in
             guard let id = v.databaseId else { return nil }
-            return Row(dbId: id, filePath: v.filePath, had: v.hasSubtitles)
+            return Row(dbId: id, filePath: v.filePath, current: v.subtitlePresence)
         }
         let total = snapshot.count
 
@@ -3653,19 +3660,20 @@ final class LibraryViewModel {
 
         // Process in chunks on a background task so the UI can keep drawing progress.
         let chunkSize = 200
-        var updates: [(videoId: Int64, hasSubtitles: Bool)] = []
+        var updates: [(videoId: Int64, presence: SubtitlePresence)] = []
         var index = 0
         while index < snapshot.count {
             let end = min(index + chunkSize, snapshot.count)
             let chunk = Array(snapshot[index..<end])
-            let chunkUpdates: [(Int64, Bool)] = await Task.detached(priority: .userInitiated) {
-                var out: [(Int64, Bool)] = []
+            let chunkUpdates: [(Int64, SubtitlePresence)] = await Task.detached(priority: .userInitiated) {
+                var out: [(Int64, SubtitlePresence)] = []
                 out.reserveCapacity(chunk.count)
                 for row in chunk {
                     let url = URL(fileURLWithPath: row.filePath)
                     let hasNow = SubtitleTrack.findSidecarSRT(for: url) != nil
-                    if hasNow != row.had {
-                        out.append((row.dbId, hasNow))
+                    let next = row.current.applying(sidecarPresent: hasNow)
+                    if next != row.current {
+                        out.append((row.dbId, next))
                     }
                 }
                 return out
@@ -3675,31 +3683,33 @@ final class LibraryViewModel {
             scanCurrent = index
         }
 
-        let added = updates.reduce(0) { $0 + ($1.hasSubtitles ? 1 : 0) }
-        let removed = updates.count - added
+        let gainedSidecar = updates.filter {
+            $0.presence == .sidecar || $0.presence == .burnedInAndSidecar
+        }.count
+        let lostSidecar = updates.count - gainedSidecar
 
         if !updates.isEmpty {
-            try? await videoRepo.updateHasSubtitles(updates: updates)
+            try? await videoRepo.updateSubtitlePresence(updates: updates)
             videos = (try? await videoRepo.fetchAll()) ?? videos
             // `applyFilteredVideos` only bumps `filteredVideosVersion` when the **set** of rows
             // changes — so a subtitle-only edit leaves the list/grid `.id(...)` unchanged and
             // SwiftUI reuses stale `Video` values. Force a version bump so both views remount
-            // with the refreshed `hasSubtitles` flag.
+            // with the refreshed presence.
             filteredVideosVersion &+= 1
         }
         startObserving()
         isScanning = false
 
         let summary: String
-        switch (added, removed) {
+        switch (gainedSidecar, lostSidecar) {
         case (0, 0):
             summary = "No subtitle changes found"
         case (let a, 0):
-            summary = "Found subtitles for \(a) video\(a == 1 ? "" : "s")"
+            summary = "Found sidecar subtitles for \(a) video\(a == 1 ? "" : "s")"
         case (0, let r):
-            summary = "Cleared subtitles flag on \(r) video\(r == 1 ? "" : "s")"
+            summary = "Removed sidecar flag on \(r) video\(r == 1 ? "" : "s")"
         case (let a, let r):
-            summary = "Added \(a), cleared \(r)"
+            summary = "Sidecar found on \(a), removed on \(r)"
         }
         scanProgress = summary
         Task { [summary] in
@@ -3764,29 +3774,78 @@ final class LibraryViewModel {
         }
     }
 
-    /// Sets the `hasSubtitles` flag in-memory and persists to the DB. No-op if the flag already matches,
-    /// so repeated calls (e.g. from play start when the flag is already correct) are free.
-    /// Surgical: updates one row in `videos` / path index without the O(n) didSet cascade, does **not**
-    /// reassign `filteredVideos` (that would invalidate the whole grid ForEach), and discards the
-    /// GRDB observation echo from the DB write so play doesn't reload 12k rows.
-    func setHasSubtitles(videoPath: String, hasSubtitles: Bool) async {
+    /// Sets subtitle presence in-memory and persists. No-op when unchanged.
+    /// Surgical: updates one row without the O(n) didSet cascade and discards the GRDB observation
+    /// echo so edits don't reload the full library.
+    /// - Parameter syncFiltered: When true (Inspector), also patch `filteredVideos` and bump version
+    ///   so badges remount. Play-time discovery leaves filtered rows alone to avoid grid thrash.
+    func setSubtitlePresence(
+        videoPath: String,
+        presence: SubtitlePresence,
+        syncFiltered: Bool = true
+    ) async {
         guard let idx = videoIndexByPath[videoPath] else { return }
-        guard videos[idx].hasSubtitles != hasSubtitles else { return }
+        guard videos[idx].subtitlePresence != presence else { return }
 
         suppressVideosDidSet = true
         var updated = videos
-        updated[idx].hasSubtitles = hasSubtitles
+        updated[idx].subtitlePresence = presence
         let dbId = updated[idx].databaseId
         videos = updated
         videosByPath[videoPath] = updated[idx]
-        // Intentionally do not assign `filteredVideos` — Observation would re-diff the full grid.
-        // Card badges refresh on the next natural filter recompute; play path doesn't need them live.
+        if syncFiltered, let fIdx = filteredIndexByPath[videoPath], fIdx < filteredVideos.count {
+            var filtered = filteredVideos
+            filtered[fIdx].subtitlePresence = presence
+            filteredVideos = filtered
+            filteredVideosVersion &+= 1
+        }
         suppressVideosDidSet = false
 
         if let dbId {
             discardObservationDeliveries += 1
-            try? await videoRepo.updateHasSubtitles(videoId: dbId, hasSubtitles: hasSubtitles)
+            try? await videoRepo.updateSubtitlePresence(videoId: dbId, presence: presence)
         }
+    }
+
+    /// Apply a chosen presence to every selected path (Inspector multi-edit).
+    func setSubtitlePresence(videoPaths: Set<String>, presence: SubtitlePresence) async {
+        let paths = videoPaths.filter { videoIndexByPath[$0] != nil }
+        guard !paths.isEmpty else { return }
+
+        var bulk: [(videoId: Int64, presence: SubtitlePresence)] = []
+        suppressVideosDidSet = true
+        var updated = videos
+        var filtered = filteredVideos
+        var anyChange = false
+        for path in paths {
+            guard let idx = videoIndexByPath[path] else { continue }
+            guard updated[idx].subtitlePresence != presence else { continue }
+            anyChange = true
+            updated[idx].subtitlePresence = presence
+            videosByPath[path] = updated[idx]
+            if let fIdx = filteredIndexByPath[path], fIdx < filtered.count {
+                filtered[fIdx].subtitlePresence = presence
+            }
+            if let dbId = updated[idx].databaseId {
+                bulk.append((dbId, presence))
+            }
+        }
+        videos = updated
+        filteredVideos = filtered
+        if anyChange { filteredVideosVersion &+= 1 }
+        suppressVideosDidSet = false
+
+        if !bulk.isEmpty {
+            discardObservationDeliveries += 1
+            try? await videoRepo.updateSubtitlePresence(updates: bulk)
+        }
+    }
+
+    /// Play-time helper: merge sidecar detection into the current presence without wiping burned-in.
+    func applySidecarSubtitlePresence(videoPath: String, sidecarPresent: Bool) async {
+        guard let idx = videoIndexByPath[videoPath] else { return }
+        let next = videos[idx].subtitlePresence.applying(sidecarPresent: sidecarPresent)
+        await setSubtitlePresence(videoPath: videoPath, presence: next, syncFiltered: false)
     }
 
     func persistRating(for videoIds: Set<String>, rating: Int) async {

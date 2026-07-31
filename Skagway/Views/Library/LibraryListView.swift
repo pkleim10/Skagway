@@ -628,7 +628,7 @@ struct LibraryListView: View {
                 Text(video.displayTitle)
                     .lineLimit(1)
                     .foregroundStyle(Color.appTextPrimary)
-                if video.hasSubtitles {
+                if video.subtitlePresence.showsBadge {
                     // Blue-accented subtitles indicator, consistent with Cinematic Blue theme.
                     Image(systemName: "captions.bubble.fill")
                         .font(.system(size: 10, weight: .semibold))
@@ -636,8 +636,8 @@ struct LibraryListView: View {
                         .padding(.horizontal, 5)
                         .padding(.vertical, 2)
                         .background(Color.appAccent, in: RoundedRectangle(cornerRadius: AppRadius.xs, style: .continuous))
-                        .help("Subtitles available")
-                        .accessibilityLabel("Subtitles available")
+                        .help(video.subtitlePresence.badgeHelp)
+                        .accessibilityLabel(video.subtitlePresence.badgeHelp)
                 }
             }
         }

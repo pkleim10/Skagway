@@ -139,7 +139,7 @@ enum MetadataExportColumnRegistry {
     static var builtinIDs: Set<String> { Set(builtins.map(\.id)) }
 
     /// Columns Apply can write in v1.
-    static let writableColumnIDs: Set<String> = ["rating", "tags", "title"]
+    static let writableColumnIDs: Set<String> = ["rating", "tags", "title", "hasSubtitles"]
 
     static func isWritableColumnID(_ id: String) -> Bool {
         if writableColumnIDs.contains(id) { return true }
@@ -418,7 +418,7 @@ enum MetadataExportRowBuilder {
         case "lastPlayed":
             if let d = video.lastPlayed { return .string(isoDateTime.string(from: d)) }
             return .null
-        case "hasSubtitles": return .bool(video.hasSubtitles)
+        case "hasSubtitles": return .string(video.subtitlePresence.displayName)
         case "contentFingerprint":
             if let fp = video.contentFingerprint { return .string(fp) }
             return .null

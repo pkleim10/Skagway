@@ -21,9 +21,8 @@ struct Video: Codable, Equatable, Hashable, Identifiable {
     var thumbnailPath: String?
     var lastPlayed: Date?
     var playCount: Int
-    /// True when a sidecar `.srt` was detected at import or during the detail/playback flow.
-    /// Surfaced as a subtle CC icon in list rows and a Subtitles attribute in the detail pane.
-    var hasSubtitles: Bool = false
+    /// Caption presence: none / burned-in / sidecar / both. Stored in the `hasSubtitles` column.
+    var subtitlePresence: SubtitlePresence = .none
     /// Cheap content fingerprint (SHA-256 of file size + first/last 64 KB) used to detect
     /// byte-identical duplicates far more reliably than the old size+duration heuristic. `nil`
     /// until computed (unreachable files, or not yet backfilled). See `ContentFingerprint`.
@@ -41,7 +40,8 @@ struct Video: Codable, Equatable, Hashable, Identifiable {
         case databaseId = "id"
         case filePath, fileName, title, originalFileName, fileSize, duration, width, height
         case codec, frameRate, creationDate, dateAdded, rating
-        case thumbnailPath, lastPlayed, playCount, hasSubtitles
+        case thumbnailPath, lastPlayed, playCount
+        case subtitlePresence = "hasSubtitles"
         case contentFingerprint
     }
 }

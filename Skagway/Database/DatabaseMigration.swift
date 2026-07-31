@@ -295,6 +295,12 @@ enum DatabaseMigration {
             }
         }
 
+        migrator.registerMigration("v17_subtitlePresenceRemap") { db in
+            // Legacy bool: 0 = none, 1 = sidecar present. New enum reuses raw 1 for Burned-in,
+            // so remap old true → Sidecar (2) before any burned-in values can exist.
+            try db.execute(sql: "UPDATE video SET hasSubtitles = 2 WHERE hasSubtitles = 1")
+        }
+
         try migrator.migrate(pool)
     }
 }
