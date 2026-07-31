@@ -499,7 +499,12 @@ private struct LibraryContentView: View {
                     .transition(.opacity)
             }
 
-            if vm.videos.isEmpty {
+            if vm.videos.isEmpty && !vm.hasCompletedInitialVideoLoad {
+                // Stay blank until the first video observation arrives — otherwise a populated
+                // library briefly flashes the empty-library invite while `videos` is still [].
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if vm.videos.isEmpty {
                 EmptyLibraryBrowserPlaceholder(
                     isDropTargeted: isBrowserDropTargeted,
                     onAddFiles: { vm.showAddMediaPicker() }

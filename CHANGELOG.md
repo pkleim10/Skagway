@@ -31,6 +31,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Fix: empty-library invite flash on launch** — A populated library no longer briefly shows the empty-browser drop-zone invite while the first video list observation is still in flight; the invite only appears after load completes and the catalog is actually empty.
 - **Bulk Rename case transforms** — Distinct title case (`title` / `T`: The Quick Brown Fox) vs name case (`name` / `N`: The quick brown fox). `{Stem}` honors case args (`{Stem title}`, `{Stem name}`, etc.).
 - **Empty browser invite** — An empty library shows a dotted drop zone in the browser (highlights while dragging), File → Add Folder… (⇧⌘O), and an Add Files… button that accepts files or folders. Copy explains that added folders (or parent folders of files) become Data Sources in Settings. Dropping folders onto the browser now scans them.
 - **No second landing chooser** — After first-launch home setup, Standard and Remember modes open the home library automatically (creating it if missing). Ask-each-launch and Close Library show a minimal empty window; create/open/recent stay on the File menu. Choosing a new empty home folder creates a new empty library (no longer copies the previous home).

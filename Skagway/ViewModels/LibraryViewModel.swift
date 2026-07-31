@@ -25,6 +25,10 @@ final class LibraryViewModel {
         }
     }
 
+    /// False until the first GRDB video observation delivery. Prevents the empty-library invite
+    /// from flashing while a populated library is still loading asynchronously.
+    private(set) var hasCompletedInitialVideoLoad = false
+
     /// Path → video for O(1) lookup. Rebuilt whenever `videos` is assigned. `@ObservationIgnored`
     /// so reading it during selection/play does not register extra observation edges.
     @ObservationIgnored private(set) var videosByPath: [String: Video] = [:]
@@ -2439,6 +2443,7 @@ final class LibraryViewModel {
                             return
                         }
                         self.videos = videos
+                        self.hasCompletedInitialVideoLoad = true
                         // Kick off the fingerprint backfill from *here* — the first delivery is when
                         // `videos` is actually populated. Calling it from `startObserving` ran it
                         // against an empty array (observation is async), so it silently no-op'd and
@@ -2450,6 +2455,7 @@ final class LibraryViewModel {
                 if !Task.isCancelled {
                     print("Video observation error: \(error)")
                     await MainActor.run {
+                        self.hasCompletedInitialVideoLoad = true
                         self.reportTransientError("Library updates paused: \(error.localizedDescription)")
                     }
                 }
