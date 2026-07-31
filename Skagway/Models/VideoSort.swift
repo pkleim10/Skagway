@@ -124,6 +124,8 @@ enum SidebarFilter: Hashable {
     case recentlyConverted
     /// Videos matched by the last successful Import Metadata run (path set).
     case recentlyApplied
+    /// Videos successfully imported by the most recent media-add scan (path set).
+    case lastAdded
     case collection(VideoCollection)
 }
 
@@ -137,5 +139,6 @@ struct LibraryCounts {
     var missing: Int = 0
     var recentlyConverted: Int = 0
     var recentlyApplied: Int = 0
+    var lastAdded: Int = 0
     var byRating: [Int: Int] = [:]
 }

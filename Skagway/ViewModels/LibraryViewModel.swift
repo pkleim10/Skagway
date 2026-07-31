@@ -1391,6 +1391,12 @@ final class LibraryViewModel {
             UserDefaults.standard.set(Array(recentlyAppliedPaths), forKey: Self.recentlyAppliedPathsKey)
         }
     }
+    /// Paths imported by the most recent media-add scan (Last Added smart library).
+    private(set) var lastAddedPaths: Set<String> = [] {
+        didSet {
+            UserDefaults.standard.set(Array(lastAddedPaths), forKey: Self.lastAddedPathsKey)
+        }
+    }
     private(set) var missingCountScanned: Bool = false
     private(set) var isRefreshingMissing: Bool = false
     private var filterGeneration: Int = 0
@@ -1636,6 +1642,7 @@ final class LibraryViewModel {
     private static let showRecentlyConvertedKey = "Skagway.showRecentlyConverted"
     private static let recentlyConvertedEntriesKey = "Skagway.recentlyConvertedEntries"
     private static let recentlyAppliedPathsKey = "Skagway.recentlyAppliedPaths"
+    private static let lastAddedPathsKey = "Skagway.lastAddedPaths"
     private static let conversionJobsKey = "Skagway.conversionJobs"
     private static let moveJobsKey = "Skagway.moveJobs"
     private static let ffmpegPathKey = "Skagway.ffmpegPath"
@@ -2361,6 +2368,9 @@ final class LibraryViewModel {
         if let paths = defaults.stringArray(forKey: Self.recentlyAppliedPathsKey) {
             recentlyAppliedPaths = Set(paths)
         }
+        if let paths = defaults.stringArray(forKey: Self.lastAddedPathsKey) {
+            lastAddedPaths = Set(paths)
+        }
         if let data = defaults.data(forKey: Self.conversionJobsKey),
            let decoded = try? JSONDecoder().decode([ConversionJob].self, from: data)
         {
@@ -2645,6 +2655,7 @@ final class LibraryViewModel {
             topRatedMinRating: topRatedMinRating,
             recentlyConvertedDates: recentlyConvertedDates,
             recentlyAppliedPaths: recentlyAppliedPaths,
+            lastAddedPaths: lastAddedPaths,
             minDurationSeconds: minDurationSeconds,
             maxDurationSeconds: maxDurationSeconds,
             selectedQualityBuckets: selectedQualityBuckets,
@@ -2690,6 +2701,7 @@ final class LibraryViewModel {
         let topRatedMinRating: Int
         let recentlyConvertedDates: [String: Date]
         let recentlyAppliedPaths: Set<String>
+        let lastAddedPaths: Set<String>
         let minDurationSeconds: Double?
         let maxDurationSeconds: Double?
         let selectedQualityBuckets: Set<String>
@@ -2965,6 +2977,8 @@ final class LibraryViewModel {
             baseResult = baseResult.filter { snapshot.recentlyConvertedDates[$0.filePath] != nil }
         case .recentlyApplied:
             baseResult = baseResult.filter { snapshot.recentlyAppliedPaths.contains($0.filePath) }
+        case .lastAdded:
+            baseResult = baseResult.filter { snapshot.lastAddedPaths.contains($0.filePath) }
         case .collection(let collection):
             guard let collectionId = collection.id else {
                 return ([], [:])
@@ -3167,6 +3181,7 @@ final class LibraryViewModel {
 
         let recentlyConverted = videos.filter { convertedPaths.contains($0.filePath) }.count
         let recentlyApplied = videos.filter { recentlyAppliedPaths.contains($0.filePath) }.count
+        let lastAdded = videos.filter { lastAddedPaths.contains($0.filePath) }.count
 
         libraryCounts = LibraryCounts(
             all: allCount,
@@ -3178,6 +3193,7 @@ final class LibraryViewModel {
             missing: missingCountScanned ? missingVideoIds.count : 0,
             recentlyConverted: recentlyConverted,
             recentlyApplied: recentlyApplied,
+            lastAdded: lastAdded,
             byRating: byRating
         )
     }
@@ -3290,6 +3306,8 @@ final class LibraryViewModel {
             result = result.filter { recentlyConvertedDates[$0.filePath] != nil }
         case .recentlyApplied:
             result = result.filter { recentlyAppliedPaths.contains($0.filePath) }
+        case .lastAdded:
+            result = result.filter { lastAddedPaths.contains($0.filePath) }
         case .collection(let collection):
             guard let collectionId = collection.id else { return [] }
             if collection.kind == .album {
@@ -3333,6 +3351,23 @@ final class LibraryViewModel {
 
     // MARK: - Actions
 
+    /// Snapshot library paths before a media-add scan so newly inserted rows can feed Last Added.
+    private func snapshotLibraryPaths() async -> Set<String> {
+        (try? await videoRepo.fetchAllFilePaths()) ?? Set(videos.map(\.filePath))
+    }
+
+    /// If `before` → current differs, replace Last Added and select that smart library.
+    /// Empty scans leave the previous Last Added set unchanged.
+    private func commitLastAdded(before: Set<String>) async {
+        let after = await snapshotLibraryPaths()
+        let added = after.subtracting(before)
+        guard !added.isEmpty else { return }
+        lastAddedPaths = added
+        sidebarFilter = .lastAdded
+        updateLibraryCounts()
+        recomputeFilteredVideos()
+    }
+
     func importNew() async {
         let dataSources = (try? await dataSourceRepo.fetchAll()) ?? []
         guard !dataSources.isEmpty else {
@@ -3349,6 +3384,7 @@ final class LibraryViewModel {
         stopObserving()
 
         let knownPaths = (try? await videoRepo.fetchAllFilePaths()) ?? []
+        let beforePaths = knownPaths
         let folders = dataSources.map(\.url)
         var failureCount = 0
 
@@ -3385,6 +3421,7 @@ final class LibraryViewModel {
                 }
                 isScanning = false
                 await refreshAfterScan()
+                await commitLastAdded(before: beforePaths)
             case .error(let message):
                 scanProgress = "Error: \(message)"
                 isScanning = false
@@ -3393,7 +3430,7 @@ final class LibraryViewModel {
         }
     }
 
-    func importDroppedFiles(_ urls: [URL]) async {
+    func importDroppedFiles(_ urls: [URL], recordAsLastAdded: Bool = true) async {
         guard !urls.isEmpty else { return }
 
         let folders = urls.filter { url in
@@ -3402,10 +3439,17 @@ final class LibraryViewModel {
         let videoUrls = urls.filter { $0.isVideoFile }
         guard !folders.isEmpty || !videoUrls.isEmpty else { return }
 
+        let beforePaths = recordAsLastAdded ? await snapshotLibraryPaths() : []
+
         for folder in folders {
-            await scanFolder(folder)
+            await scanFolder(folder, recordAsLastAdded: false)
         }
-        guard !videoUrls.isEmpty else { return }
+        guard !videoUrls.isEmpty else {
+            if recordAsLastAdded {
+                await commitLastAdded(before: beforePaths)
+            }
+            return
+        }
 
         let parentFolders = Set(videoUrls.map { $0.deletingLastPathComponent() })
         for folder in parentFolders {
@@ -3449,6 +3493,9 @@ final class LibraryViewModel {
                 }
                 isScanning = false
                 await refreshAfterScan()
+                if recordAsLastAdded {
+                    await commitLastAdded(before: beforePaths)
+                }
             case .error(let message):
                 scanProgress = "Error: \(message)"
                 isScanning = false
@@ -3559,19 +3606,23 @@ final class LibraryViewModel {
             (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) != true
         }
         Task {
+            let beforePaths = await snapshotLibraryPaths()
             for folder in folders {
-                await scanFolder(folder)
+                await scanFolder(folder, recordAsLastAdded: false)
             }
             if !files.isEmpty {
-                await importDroppedFiles(files)
+                await importDroppedFiles(files, recordAsLastAdded: false)
             }
+            await commitLastAdded(before: beforePaths)
         }
     }
 
-    func scanFolder(_ url: URL) async {
+    func scanFolder(_ url: URL, recordAsLastAdded: Bool = true) async {
         isScanning = true
         scanProgress = "Scanning..."
         stopObserving()
+
+        let beforePaths = recordAsLastAdded ? await snapshotLibraryPaths() : []
 
         let path = url.path
         let alreadySaved = (try? await dataSourceRepo.exists(folderPath: path)) ?? false
@@ -3608,6 +3659,9 @@ final class LibraryViewModel {
                 }
                 isScanning = false
                 await refreshAfterScan()
+                if recordAsLastAdded {
+                    await commitLastAdded(before: beforePaths)
+                }
             case .error(let message):
                 scanProgress = "Error: \(message)"
                 isScanning = false
@@ -4857,6 +4911,7 @@ final class LibraryViewModel {
             missing: missIds.count,
             recentlyConverted: libraryCounts.recentlyConverted,
             recentlyApplied: libraryCounts.recentlyApplied,
+            lastAdded: libraryCounts.lastAdded,
             byRating: libraryCounts.byRating
         )
         recomputeFilteredVideos()
@@ -4899,6 +4954,7 @@ final class LibraryViewModel {
             missing: missingVideoIds.count,
             recentlyConverted: libraryCounts.recentlyConverted,
             recentlyApplied: libraryCounts.recentlyApplied,
+            lastAdded: libraryCounts.lastAdded,
             byRating: libraryCounts.byRating
         )
         recomputeFilteredVideos()

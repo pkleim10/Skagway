@@ -70,6 +70,7 @@ enum PrefsKeys {
     static let showRecentlyConverted = "Skagway.showRecentlyConverted"
     static let recentlyConvertedEntries = "Skagway.recentlyConvertedEntries"
     static let recentlyAppliedPaths = "Skagway.recentlyAppliedPaths"
+    static let lastAddedPaths = "Skagway.lastAddedPaths"
     static let conversionJobs = "Skagway.conversionJobs"
     static let moveJobs = "Skagway.moveJobs"
     static let ffmpegPath = "Skagway.ffmpegPath"
@@ -132,6 +133,7 @@ enum PrefsKeys {
         "showRecentlyConverted",
         "recentlyConvertedEntries",
         "recentlyAppliedPaths",
+        "lastAddedPaths",
         "conversionJobs",
         "moveJobs",
         "ffmpegPath",

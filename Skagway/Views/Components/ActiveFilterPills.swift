@@ -130,6 +130,7 @@ struct ActiveFilterPills: View {
         case .missing: return "Missing"
         case .recentlyConverted: return "Recently Converted"
         case .recentlyApplied: return "Last Metadata Import"
+        case .lastAdded: return "Last Added"
         case .collection(let c): return c.name
         }
     }
@@ -145,6 +146,7 @@ struct ActiveFilterPills: View {
         case .missing: return "questionmark.circle"
         case .recentlyConverted: return "arrow.triangle.2.circlepath"
         case .recentlyApplied: return "square.and.arrow.down.on.square"
+        case .lastAdded: return "plus.rectangle.on.folder"
         case .collection(let c): return c.isAlbum ? "rectangle.stack" : "folder"
         }
     }

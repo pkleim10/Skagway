@@ -31,6 +31,9 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.76.0 (build 972) - 2026-07-31
+
+- **Last Added smart library** — Shows videos imported by the most recent media-add scan (Import New, Add Folder, Add Files, drop). Appears when non-empty, auto-selects after a scan that added videos; empty scans leave the previous set.
 - **Subtitles field is now four values** — Inspector dropdown: None / Burned-in / Sidecar / Burned-in + Sidecar. Scan and playback detect sidecar `.srt` files without wiping a user-set Burned-in mark (removing a sidecar from “both” reverts to Burned-in). Export/import and Bulk Rename `{Subtitles}` use the display labels (legacy Yes/No still import).
 - **Fix: empty-library invite flash on launch** — A populated library no longer briefly shows the empty-browser drop-zone invite while the first video list observation is still in flight; the invite only appears after load completes and the catalog is actually empty.
 - **Bulk Rename case transforms** — Distinct title case (`title` / `T`: The Quick Brown Fox) vs name case (`name` / `N`: The quick brown fox). `{Stem}` honors case args (`{Stem title}`, `{Stem name}`, etc.).
