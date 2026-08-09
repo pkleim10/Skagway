@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Set Poster from Image** — Context menu (grid + list) chooses an image as the library poster for one or many selected videos (same image for all). Dragging an image onto a Wall card sets that video’s poster; dragging videos/folders onto the grid still imports into the library. Filmstrips are unchanged; Regenerate Thumbnail still replaces a custom poster with a frame from the file.
+
 ## 0.76.0 (build 972) - 2026-07-31
 
 - **Last Added smart library** — Shows videos imported by the most recent media-add scan (Import New, Add Folder, Add Files, drop). Appears when non-empty, auto-selects after a scan that added videos; empty scans leave the previous set.

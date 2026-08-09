@@ -3828,6 +3828,51 @@ final class LibraryViewModel {
         }
     }
 
+    /// Open an image picker and apply the chosen file as the poster for every video in `videos`
+    /// (same image for all). No-op if the user cancels.
+    func chooseAndApplyPosterImage(to videos: [Video], thumbnailService: ThumbnailService) async {
+        guard !videos.isEmpty else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Set Poster"
+        panel.message = videos.count == 1
+            ? "Choose an image to use as this video’s poster thumbnail"
+            : "Choose an image to use as the poster thumbnail for \(videos.count) selected videos"
+        panel.allowedContentTypes = [.image]
+        guard panel.runModal() == .OK, let imageURL = panel.url else { return }
+        await applyPosterImage(from: imageURL, to: videos, thumbnailService: thumbnailService)
+    }
+
+    /// Write `imageURL` into each video’s library poster cache (thumb + detail still) and bump
+    /// `thumbnailPath` so grid/list refresh. Filmstrips are left alone.
+    func applyPosterImage(
+        from imageURL: URL,
+        to videos: [Video],
+        thumbnailService: ThumbnailService
+    ) async {
+        guard !videos.isEmpty else { return }
+        var applied = 0
+        for video in videos {
+            do {
+                let url = try await thumbnailService.setPoster(fromImageURL: imageURL, for: video)
+                await setRegeneratedThumbnailPath(videoPath: video.filePath, url: url)
+                applied += 1
+            } catch {
+                reportTransientError("Couldn't set poster for \"\(video.displayTitle)\": \(error.localizedDescription)")
+            }
+        }
+        if applied > 0 {
+            let text = applied == 1 ? "Poster updated" : "Poster updated on \(applied) videos"
+            scanProgress = text
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(2.5))
+                if self?.scanProgress == text { self?.scanProgress = "" }
+            }
+        }
+    }
+
     /// Sets subtitle presence in-memory and persists. No-op when unchanged.
     /// Surgical: updates one row without the O(n) didSet cascade and discards the GRDB observation
     /// echo so edits don't reload the full library.

@@ -279,6 +279,17 @@ struct LibraryListView: View {
                     let selected = viewModel.filteredVideos.filter { ids.contains($0.id) }
                     filmstripSession = FilmstripModifySession(videos: selected)
                 }
+                Button("Set Poster from Image\u{2026}") {
+                    let selected = viewModel.filteredVideos.filter { ids.contains($0.id) }
+                    Task {
+                        await viewModel.chooseAndApplyPosterImage(
+                            to: selected,
+                            thumbnailService: thumbnailService
+                        )
+                    }
+                }
+                .disabled(isMoving)
+                .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "Choose an image to use as the poster thumbnail")
                 Button("Regenerate Thumbnail") {
                     let selected = viewModel.filteredVideos.filter { ids.contains($0.id) }
                     for v in selected {

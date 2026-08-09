@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 // MARK: - Per-card selection state
 
@@ -55,6 +56,8 @@ struct CuratedWallGrid: View {
     @FocusState private var renameFocus: Bool
     @State private var selectionStore = CardSelectionStore()
     @State private var filmstripSession: FilmstripModifySession?
+    /// Card id currently targeted by an image/video file drag (poster drop highlight).
+    @State private var posterDropTargetId: String?
 
     // Max from the full-window mock; live `columns` is the source of truth for ↑/↓ row steps
     // in ContentView and for scroll-to-row math below.
@@ -121,6 +124,26 @@ struct CuratedWallGrid: View {
                         .simultaneousGesture(TapGesture(count: 2).onEnded {
                             viewModel.isPlayingInline = true
                         })
+                        .onDrop(of: [.fileURL], isTargeted: Binding(
+                            get: { posterDropTargetId == video.id },
+                            set: { hovering in
+                                if hovering {
+                                    posterDropTargetId = video.id
+                                } else if posterDropTargetId == video.id {
+                                    posterDropTargetId = nil
+                                }
+                            }
+                        )) { providers in
+                            handleCardFileDrop(providers, onto: video)
+                        }
+                        .overlay {
+                            if posterDropTargetId == video.id {
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .strokeBorder(Color.appAccent, lineWidth: 2)
+                                    .padding(4)
+                                    .allowsHitTesting(false)
+                            }
+                        }
                         .contextMenu {
                             Button("Play in External Player") { play(video) }
                             Button("Show in Finder") {
@@ -203,6 +226,19 @@ struct CuratedWallGrid: View {
                                 let selected = viewModel.filteredVideos.filter { ids.contains($0.id) }
                                 filmstripSession = FilmstripModifySession(videos: selected)
                             }
+                            Button("Set Poster from Image\u{2026}") {
+                                let ids = viewModel.selectedVideoIds.contains(video.id)
+                                    ? viewModel.selectedVideoIds : [video.id]
+                                let selected = viewModel.filteredVideos.filter { ids.contains($0.id) }
+                                Task {
+                                    await viewModel.chooseAndApplyPosterImage(
+                                        to: selected,
+                                        thumbnailService: thumbnailService
+                                    )
+                                }
+                            }
+                            .disabled(isMoving)
+                            .help(isMoving ? "Move in progress — file isn't safe to modify yet" : "Choose an image to use as the poster thumbnail")
                             Button("Regenerate Thumbnail") {
                                 let ids = viewModel.selectedVideoIds.contains(video.id)
                                     ? viewModel.selectedVideoIds : [video.id]
@@ -422,6 +458,52 @@ struct CuratedWallGrid: View {
     private func play(_ video: Video) {
         NSWorkspace.shared.open(video.url)
         Task { await viewModel.recordPlay(for: video) }
+    }
+
+    /// Image drop → set that card’s poster. Video/folder drop → same library import as the browser pane.
+    private func handleCardFileDrop(_ providers: [NSItemProvider], onto video: Video) -> Bool {
+        guard !providers.isEmpty else { return false }
+        Task {
+            let urls = await Self.loadFileURLs(from: providers)
+            guard !urls.isEmpty else { return }
+            if let imageURL = urls.first(where: \.isImageFile) {
+                await viewModel.applyPosterImage(
+                    from: imageURL,
+                    to: [video],
+                    thumbnailService: thumbnailService
+                )
+                return
+            }
+            await viewModel.importDroppedFiles(urls)
+        }
+        return true
+    }
+
+    private static func loadFileURLs(from providers: [NSItemProvider]) async -> [URL] {
+        await withTaskGroup(of: URL?.self, returning: [URL].self) { group in
+            for provider in providers {
+                group.addTask {
+                    await withCheckedContinuation { continuation in
+                        _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
+                            guard let data,
+                                  let path = String(data: data, encoding: .utf8)?
+                                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                                  let url = URL(string: path)
+                            else {
+                                continuation.resume(returning: nil)
+                                return
+                            }
+                            continuation.resume(returning: url)
+                        }
+                    }
+                }
+            }
+            var urls: [URL] = []
+            for await url in group {
+                if let url { urls.append(url) }
+            }
+            return urls
+        }
     }
 
     /// URLs the "Open With" actions target: the whole selection when the clicked card is part of

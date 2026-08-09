@@ -846,6 +846,115 @@ final class ThumbnailService: @unchecked Sendable {
         return thumbURL
     }
 
+    /// Replace the library poster (grid thumb + 720pt detail still) with a user-chosen image.
+    /// Does not touch the filmstrip. Same cache keys as frame capture so UI refresh paths stay unchanged.
+    func setPoster(fromImageURL imageURL: URL, for video: Video) async throws -> URL {
+        await generationGate.acquire()
+        do {
+            let url = try await performSetPoster(fromImageURL: imageURL, for: video)
+            await generationGate.release()
+            return url
+        } catch {
+            await generationGate.release()
+            throw error
+        }
+    }
+
+    private func performSetPoster(fromImageURL imageURL: URL, for video: Video) async throws -> URL {
+        let accessing = imageURL.startAccessingSecurityScopedResource()
+        defer {
+            if accessing { imageURL.stopAccessingSecurityScopedResource() }
+        }
+        guard FileManager.default.fileExists(atPath: imageURL.path) else {
+            throw ThumbnailError.fileNotFound
+        }
+        guard let source = NSImage(contentsOf: imageURL) else {
+            throw ThumbnailError.generationFailed
+        }
+
+        let filePath = video.filePath
+        clearCachedStills(filePath: filePath)
+
+        let thumbURL = thumbnailURL(for: filePath)
+        try writeImageStill(
+            source,
+            maxDimension: 400,
+            compressionFactor: 0.75,
+            cacheURL: thumbURL,
+            memoryKey: filePath as NSString
+        )
+        try writeImageStill(
+            source,
+            maxDimension: 720,
+            compressionFactor: 0.82,
+            cacheURL: detailPreviewURL(for: filePath, longEdge: 720),
+            memoryKey: detailPreviewMemoryKey(filePath: filePath, longEdge: 720)
+        )
+        return thumbURL
+    }
+
+    /// JPEG-encode a scaled copy of `source` into the thumbnail cache (poster path, not AV frame).
+    private func writeImageStill(
+        _ source: NSImage,
+        maxDimension: CGFloat,
+        compressionFactor: CGFloat,
+        cacheURL: URL,
+        memoryKey: NSString
+    ) throws {
+        let scaled = Self.scaledImage(source, maxDimension: maxDimension)
+        guard let tiffData = scaled.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffData),
+              let jpegData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: compressionFactor])
+        else {
+            throw ThumbnailError.encodingFailed
+        }
+        try jpegData.write(to: cacheURL)
+        memoryCache.setObject(scaled, forKey: memoryKey)
+    }
+
+    private static func scaledImage(_ image: NSImage, maxDimension: CGFloat) -> NSImage {
+        guard let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff)
+        else { return image }
+        let width = CGFloat(rep.pixelsWide)
+        let height = CGFloat(rep.pixelsHigh)
+        let longest = max(width, height)
+        guard longest > maxDimension, longest > 0 else {
+            if let cgImage = rep.cgImage {
+                return NSImage(cgImage: cgImage, size: NSSize(width: width, height: height))
+            }
+            return image
+        }
+        let scale = maxDimension / longest
+        let targetW = max(1, Int((width * scale).rounded()))
+        let targetH = max(1, Int((height * scale).rounded()))
+        guard let out = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: targetW,
+            pixelsHigh: targetH,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ) else { return image }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: out)
+        NSGraphicsContext.current?.imageInterpolation = .high
+        image.draw(
+            in: NSRect(x: 0, y: 0, width: targetW, height: targetH),
+            from: NSRect(x: 0, y: 0, width: width, height: height),
+            operation: .copy,
+            fraction: 1.0
+        )
+        NSGraphicsContext.restoreGraphicsState()
+        let result = NSImage(size: NSSize(width: targetW, height: targetH))
+        result.addRepresentation(out)
+        return result
+    }
+
     /// Capture a frame for a bookmark still. Does **not** touch library/detail thumbnail caches.
     func captureBookmarkStill(
         for video: Video,
