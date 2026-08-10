@@ -403,10 +403,20 @@ struct SkagwayApp: App {
                 .disabled(!appState.hasLibrary)
                 .help("Import metadata from a CSV or JSON Lines file (updates matched videos)")
                 Divider()
-                Button("Change Library & Cache Location\u{2026}") {
+                Button("Change Library Location\u{2026}") {
                     DatabaseExportImport.changeLibraryAndCacheLocation()
                 }
-                .help("Quit and choose again where the library and app-wide thumbnail cache are stored. Files on disk are not deleted.")
+                .help("Quit and choose again where the library lives. Each library keeps its own thumbnail cache. Files on disk are not deleted.")
+                Button("Change Thumbnail Cache Location\u{2026}") {
+                    if let pool = appState.dbManager?.dbPool {
+                        DatabaseExportImport.changeThumbnailCacheLocation(
+                            dbPool: pool,
+                            thumbnailService: appState.thumbnailService
+                        )
+                    }
+                }
+                .disabled(!appState.hasLibrary)
+                .help("Choose where the open library’s thumbnails are stored. Other libraries are unaffected.")
                 Button("Close Library\u{2026}") {
                     DatabaseExportImport.closeLibrary()
                 }

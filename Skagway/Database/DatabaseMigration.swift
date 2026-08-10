@@ -301,6 +301,23 @@ enum DatabaseMigration {
             try db.execute(sql: "UPDATE video SET hasSubtitles = 2 WHERE hasSubtitles = 1")
         }
 
+        migrator.registerMigration("v18_libraryCache") { db in
+            // Per-library thumbnail/filmstrip cache root (path + bookmark). Replaces app-global
+            // UserDefaults cache location so LibB is not stuck pointing at Enc’s cache.
+            // Idempotent: some libraries already received this table from an earlier feature build.
+            let exists = try Bool.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = 'library_cache'"
+            ) ?? false
+            if !exists {
+                try db.create(table: "library_cache") { t in
+                    t.column("id", .integer).primaryKey()
+                    t.column("path", .text).notNull()
+                    t.column("bookmark", .blob)
+                }
+            }
+        }
+
         try migrator.migrate(pool)
     }
 }

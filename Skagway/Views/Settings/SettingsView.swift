@@ -50,6 +50,9 @@ struct SettingsView: View {
     @State private var draftCustomFieldName = ""
     @State private var draftCustomFieldType: CustomMetadataValueType = .string
 
+    /// Display path for the open library’s thumbnail cache (Storage card).
+    @State private var thumbnailCachePathDisplay = ""
+
     private var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -255,16 +258,44 @@ struct SettingsView: View {
             sectionBlock(title: "Storage") {
                 settingsCard {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Library & thumbnail cache")
+                        Text("Library location")
                             .font(.body)
-                        Text("The thumbnail cache location is shared by every library. Changing it quits Skagway and shows the storage chooser again; files on disk are not deleted.")
+                        Text("Quits Skagway and shows the library-home chooser again. Each library keeps its own thumbnail cache; files on disk are not deleted.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
-                        Button("Change Library & Cache Location…") {
+                        Button("Change Library Location…") {
                             DatabaseExportImport.changeLibraryAndCacheLocation()
                         }
                         .padding(.top, 4)
+                        Divider().padding(.vertical, 4)
+                        Text("Thumbnail cache (this library)")
+                            .font(.body)
+                        Text("Stored in the open library file. Other libraries are unaffected. Retargets the pointer only; existing cache files are left in place.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(thumbnailCachePathDisplay)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, 2)
+                        Button("Change Thumbnail Cache Location…") {
+                            DatabaseExportImport.changeThumbnailCacheLocation(
+                                dbPool: viewModel.dbPool,
+                                thumbnailService: appState.thumbnailService
+                            )
+                            thumbnailCachePathDisplay = DatabaseExportImport.pathForDisplay(
+                                appState.thumbnailService.cacheDirectory
+                            )
+                        }
+                        .padding(.top, 4)
+                    }
+                    .onAppear {
+                        thumbnailCachePathDisplay = DatabaseExportImport.pathForDisplay(
+                            appState.thumbnailService.cacheDirectory
+                        )
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)

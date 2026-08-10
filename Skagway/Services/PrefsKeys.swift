@@ -18,7 +18,7 @@ enum PrefsKeys {
     static let didCompleteLibraryHomeSetup = "Skagway.didCompleteLibraryHomeSetup"
     /// `LibraryHomeAccessMode.rawValue`: standard | rememberBookmark | askEachLaunch
     static let libraryHomeAccessMode = "Skagway.libraryHomeAccessMode"
-    /// Custom thumbnail/filmstrip cache directory (co-located with a chosen library home). Nil → system Caches.
+    /// Legacy app-wide cache prefs (migration seed only). Live root is `library_cache` in each `.machii`.
     static let thumbnailCachePath = "Skagway.thumbnailCachePath"
     static let thumbnailCacheBookmark = "Skagway.thumbnailCacheBookmark"
 

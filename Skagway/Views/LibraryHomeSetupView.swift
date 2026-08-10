@@ -1,15 +1,20 @@
 import SwiftUI
 
 /// Privacy / library-home chooser shown before Landing or the library UI.
-/// Can be shown again via File → Change Library & Cache Location…
+/// Can be shown again via File → Change Library Location…
 struct LibraryHomeSetupView: View {
-    /// After Choose Folder…, ask remember-bookmark vs open-each-launch.
+    /// After Choose Folder…, pick cache placement then remember-bookmark vs open-each-launch.
     @State private var pendingCustomFolder: URL?
+    @State private var pendingCachePlacement: DatabaseExportImport.LibraryCachePlacement?
 
     var body: some View {
         Group {
             if let folder = pendingCustomFolder {
-                accessModeStep(folder: folder)
+                if let placement = pendingCachePlacement {
+                    accessModeStep(folder: folder, cachePlacement: placement)
+                } else {
+                    cachePlacementStep(folder: folder)
+                }
             } else {
                 locationStep
             }
@@ -45,19 +50,15 @@ struct LibraryHomeSetupView: View {
                 )
                 privacyBullet(
                     title: "You control the catalog and cache",
-                    detail: "Skagway keeps its own library catalog (paths, tags, ratings, collections, play history) and thumbnail cache on disk. You choose where those live."
+                    detail: "Skagway keeps its own library catalog (paths, tags, ratings, collections, play history) and thumbnail cache on disk. Each library stores its own cache location, so opening one library never depends on another volume’s cache."
                 )
                 privacyBullet(
                     title: "Media on an encrypted volume",
-                    detail: "Choose Folder… and put the library and cache on the same encrypted volume as your media. When that volume is locked or offline, Skagway’s catalog and previews are unavailable too — not just the videos."
+                    detail: "Choose Folder… and co-locate the library and cache on the same encrypted volume as your media. When that volume is locked or offline, that library’s catalog and previews are unavailable — other libraries keep working with their own caches."
                 )
                 privacyBullet(
-                    title: "Media on a normal volume",
-                    detail: "Use standard location on this Mac. The library goes in Application Support and the cache in Caches — the usual places for app data."
-                )
-                privacyBullet(
-                    title: "One cache for the whole app",
-                    detail: "Whichever option you pick, that thumbnail cache is shared by every library you open later. Existing files in a chosen folder are never wiped. You can change this later from File → Change Library & Cache Location…"
+                    title: "Use defaults on this Mac",
+                    detail: "Library in Application Support and cache in system Caches — no further choices. Best when you are not putting the catalog on an encrypted volume."
                 )
             }
             .padding(.vertical, AppSpacing.xl)
@@ -80,6 +81,7 @@ struct LibraryHomeSetupView: View {
                 Button(action: {
                     if let folder = DatabaseExportImport.pickCustomLibraryHomeFolder() {
                         pendingCustomFolder = folder
+                        pendingCachePlacement = nil
                     }
                 }) {
                     Label("Choose Folder…", systemImage: "folder.badge.gearshape")
@@ -88,12 +90,108 @@ struct LibraryHomeSetupView: View {
                 .buttonStyle(.bordered)
                 .tint(Color.appAccent)
                 .controlSize(.large)
-                .help("Best when your media is on an encrypted volume — library and Skagway-cache stay with that volume.")
+                .help("Pick a library folder, then choose where this library’s thumbnail cache lives.")
             }
         }
     }
 
-    private func accessModeStep(folder: URL) -> some View {
+    private func cachePlacementStep(folder: URL) -> some View {
+        VStack(spacing: AppSpacing.xxxl) {
+            Image(nsImage: NSApplication.shared.applicationIconImage)
+                .resizable()
+                .frame(width: 96, height: 96)
+
+            VStack(spacing: AppSpacing.sm) {
+                Text("Where should this library’s cache live?")
+                    .font(.largeTitle.weight(.semibold))
+                    .foregroundStyle(Color.appTextPrimary)
+                    .multilineTextAlignment(.center)
+
+                Text(DatabaseExportImport.pathForDisplay(folder))
+                    .font(.callout.monospaced())
+                    .foregroundStyle(Color.appTextSecondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 520)
+
+                Text("Each library keeps its own thumbnail cache. This choice is stored in the library file.")
+                    .font(.body)
+                    .foregroundStyle(Color.appTextSecondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 520)
+            }
+
+            VStack(alignment: .leading, spacing: AppSpacing.lg) {
+                privacyBullet(
+                    title: "Co-locate with library (recommended)",
+                    detail: "Creates a Skagway-cache folder next to the library. Best when the library sits on the same volume as your media (including encrypted volumes)."
+                )
+                privacyBullet(
+                    title: "System default",
+                    detail: "Stores this library’s cache under ~/Library/Caches/Skagway. Useful when the library folder is on a volume you prefer not to fill with previews."
+                )
+                privacyBullet(
+                    title: "Choose a folder…",
+                    detail: "Pick any folder. Skagway will read and write this library’s thumbnails there."
+                )
+            }
+            .padding(.vertical, AppSpacing.xl)
+            .padding(.horizontal, AppSpacing.xxl)
+            .frame(maxWidth: 560)
+            .background(cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous))
+            .overlay(cardStroke)
+
+            VStack(spacing: AppSpacing.md) {
+                Button(action: { pendingCachePlacement = .coLocated }) {
+                    Label("Co-locate with library", systemImage: "folder.fill")
+                        .frame(maxWidth: 360)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.appAccent)
+                .controlSize(.large)
+
+                Button(action: { pendingCachePlacement = .systemDefault }) {
+                    Label("System default", systemImage: "internaldrive")
+                        .frame(maxWidth: 360)
+                }
+                .buttonStyle(.bordered)
+                .tint(Color.appAccent)
+                .controlSize(.large)
+
+                Button(action: {
+                    let panel = NSOpenPanel()
+                    panel.canChooseFiles = false
+                    panel.canChooseDirectories = true
+                    panel.canCreateDirectories = true
+                    panel.allowsMultipleSelection = false
+                    panel.title = "Choose Thumbnail Cache Folder"
+                    panel.message = "Skagway will store this library’s thumbnails in the folder you choose."
+                    if panel.runModal() == .OK, let url = panel.url {
+                        pendingCachePlacement = .custom(url)
+                    }
+                }) {
+                    Label("Choose Folder…", systemImage: "folder.badge.plus")
+                        .frame(maxWidth: 360)
+                }
+                .buttonStyle(.bordered)
+                .tint(Color.appAccent)
+                .controlSize(.large)
+
+                Button("Back") {
+                    pendingCustomFolder = nil
+                    pendingCachePlacement = nil
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.appTextSecondary)
+                .padding(.top, AppSpacing.sm)
+            }
+        }
+    }
+
+    private func accessModeStep(
+        folder: URL,
+        cachePlacement: DatabaseExportImport.LibraryCachePlacement
+    ) -> some View {
         VStack(spacing: AppSpacing.xxxl) {
             Image(nsImage: NSApplication.shared.applicationIconImage)
                 .resizable()
@@ -119,7 +217,7 @@ struct LibraryHomeSetupView: View {
                 )
                 privacyBullet(
                     title: "Ask every time I open Skagway",
-                    detail: "Skagway stores no library or cache location on the boot disk. Each launch you open the library yourself (File → Open Library…). Maximum privacy for where you keep Skagway’s data; slightly more friction."
+                    detail: "Skagway stores no library location on the boot disk. Each launch you open the library yourself (File → Open Library…). The cache location stays inside the library file."
                 )
             }
             .padding(.vertical, AppSpacing.xl)
@@ -131,7 +229,7 @@ struct LibraryHomeSetupView: View {
 
             VStack(spacing: AppSpacing.md) {
                 Button(action: {
-                    commitCustomHome(folder: folder, mode: .rememberBookmark)
+                    commitCustomHome(folder: folder, mode: .rememberBookmark, cachePlacement: cachePlacement)
                 }) {
                     Label("Remember this location", systemImage: "bookmark.fill")
                         .frame(maxWidth: 360)
@@ -141,7 +239,7 @@ struct LibraryHomeSetupView: View {
                 .controlSize(.large)
 
                 Button(action: {
-                    commitCustomHome(folder: folder, mode: .askEachLaunch)
+                    commitCustomHome(folder: folder, mode: .askEachLaunch, cachePlacement: cachePlacement)
                 }) {
                     Label("Ask every time I open Skagway", systemImage: "hand.raised")
                         .frame(maxWidth: 360)
@@ -151,7 +249,7 @@ struct LibraryHomeSetupView: View {
                 .controlSize(.large)
 
                 Button("Back") {
-                    pendingCustomFolder = nil
+                    pendingCachePlacement = nil
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.appTextSecondary)
@@ -160,9 +258,17 @@ struct LibraryHomeSetupView: View {
         }
     }
 
-    private func commitCustomHome(folder: URL, mode: DatabaseExportImport.LibraryHomeAccessMode) {
+    private func commitCustomHome(
+        folder: URL,
+        mode: DatabaseExportImport.LibraryHomeAccessMode,
+        cachePlacement: DatabaseExportImport.LibraryCachePlacement
+    ) {
         do {
-            try DatabaseExportImport.activateCustomLibraryHome(folder, accessMode: mode)
+            try DatabaseExportImport.activateCustomLibraryHome(
+                folder,
+                accessMode: mode,
+                cachePlacement: cachePlacement
+            )
         } catch {
             NSAlert(error: error).runModal()
         }

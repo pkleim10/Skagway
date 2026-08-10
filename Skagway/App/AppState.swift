@@ -16,6 +16,7 @@ final class AppState {
 
     init() {
         LegacyRenameMigrator.migrateIfNeeded()
+        // Placeholder until a library opens and rebinds to that library’s `library_cache` root.
         thumbnailService = ThumbnailService()
         var db: DatabaseManager?
         var vm: LibraryViewModel?
@@ -31,6 +32,13 @@ final class AppState {
                     userClosedThisSession: userClosed
                 ) {
                     let manager = try DatabaseManager(path: path)
+                    let libraryURL = URL(fileURLWithPath: path)
+                    if let cacheRoot = try? DatabaseExportImport.ensureLibraryCacheRoot(
+                        dbPool: manager.dbPool,
+                        libraryURL: libraryURL
+                    ) {
+                        thumbnailService.setSessionCacheRoot(cacheRoot)
+                    }
                     db = manager
                     vm = LibraryViewModel(
                         dbPool: manager.dbPool,

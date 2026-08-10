@@ -67,12 +67,14 @@ enum DatabaseExportImport {
                let mode = LibraryHomeAccessMode(rawValue: raw) {
                 return mode
             }
-            // Pre-access-mode installs: custom cache path ⇒ remembered bookmark; else standard.
+            // Pre-access-mode installs: custom library bookmark ⇒ remembered; else standard.
             if hasCompletedLibraryHomeSetup {
-                let hasCustomCache =
-                    UserDefaults.standard.string(forKey: PrefsKeys.thumbnailCachePath) != nil
+                let hasCustomLibrary =
+                    UserDefaults.standard.data(forKey: PrefsKeys.activeLibraryBookmark) != nil
+                    || UserDefaults.standard.string(forKey: PrefsKeys.activeLibraryPath) != nil
+                    || UserDefaults.standard.string(forKey: PrefsKeys.thumbnailCachePath) != nil
                     || UserDefaults.standard.data(forKey: PrefsKeys.thumbnailCacheBookmark) != nil
-                return hasCustomCache ? .rememberBookmark : .standard
+                return hasCustomLibrary ? .rememberBookmark : .standard
             }
             return .standard
         }
@@ -100,23 +102,38 @@ enum DatabaseExportImport {
         libraryHomeAccessMode == .rememberBookmark
     }
 
-    /// Folder that owns the startup library + (when custom) co-located `Skagway-cache/`.
+    /// Folder that owns the startup library (custom home folder, or App Support for Standard).
     static var homeLibraryFolderURL: URL {
         if storesLocationAsBookmarkOnly {
-            if let bookmark = UserDefaults.standard.data(forKey: PrefsKeys.thumbnailCacheBookmark),
+            if let bookmark = UserDefaults.standard.data(forKey: activeLibraryBookmarkKey),
                let url = resolveLibraryBookmark(bookmark) {
                 return url.deletingLastPathComponent()
             }
-            if let bookmark = UserDefaults.standard.data(forKey: activeLibraryBookmarkKey),
+            // Legacy: home folder was inferred from the old app-wide cache bookmark.
+            if let bookmark = UserDefaults.standard.data(forKey: PrefsKeys.thumbnailCacheBookmark),
                let url = resolveLibraryBookmark(bookmark) {
                 return url.deletingLastPathComponent()
             }
             return dbDirectoryURL
         }
+        if let path = UserDefaults.standard.string(forKey: activeLibraryPathKey),
+           FileManager.default.fileExists(atPath: path) {
+            return URL(fileURLWithPath: path).deletingLastPathComponent()
+        }
         if let path = UserDefaults.standard.string(forKey: PrefsKeys.thumbnailCachePath) {
             return URL(fileURLWithPath: path, isDirectory: true).deletingLastPathComponent()
         }
         return dbDirectoryURL
+    }
+
+    /// Where a library’s thumbnail cache should live when first bound.
+    enum LibraryCachePlacement: Equatable {
+        /// Sibling `Skagway-cache` next to the `.machii` (default for custom homes).
+        case coLocated
+        /// `~/Library/Caches/Skagway/…` — shared folder for Standard home; per-library subfolder otherwise.
+        case systemDefault
+        /// User-chosen folder.
+        case custom(URL)
     }
 
     /// Library file for the startup home (chosen folder, or App Support only if Standard was chosen).
@@ -246,7 +263,7 @@ enum DatabaseExportImport {
                 return nil
             }
         }
-        syncCachePreferences(forLibraryURL: destURL)
+        seedLibraryCacheIfNeeded(at: destURL, preferredPlacement: defaultPlacement(for: destURL))
         setActiveLibraryPreferences(url: destURL)
         addToRecent(url: destURL)
         return (destURL.path as NSString).standardizingPath
@@ -513,7 +530,7 @@ enum DatabaseExportImport {
         checkpointAndCleanWAL()
         let didStartAccess = item.url.startAccessingSecurityScopedResource()
         defer { if didStartAccess { item.url.stopAccessingSecurityScopedResource() } }
-        syncCachePreferences(forLibraryURL: item.url)
+        seedLibraryCacheIfNeeded(at: item.url, preferredPlacement: nil)
         setActiveLibraryPreferences(url: item.url)
         addToRecent(url: item.url)
         clearUserClosedLibrary()
@@ -611,7 +628,7 @@ enum DatabaseExportImport {
             return
         }
 
-        syncCachePreferences(forLibraryURL: sourceURL)
+        seedLibraryCacheIfNeeded(at: sourceURL, preferredPlacement: nil)
         let item = RecentLibraryItem(
             id: sourceURL.path,
             displayName: sourceURL.lastPathComponent,
@@ -638,6 +655,7 @@ enum DatabaseExportImport {
         }
         do {
             try DatabaseMigration.createEmptyDatabase(at: destURL.path)
+            seedLibraryCacheIfNeeded(at: destURL, preferredPlacement: defaultPlacement(for: destURL))
             clearUserClosedLibrary()
             setActiveLibraryPreferences(url: destURL)
             addToRecent(url: destURL)
@@ -668,7 +686,7 @@ enum DatabaseExportImport {
             return
         }
         checkpointAndCleanWAL()
-        syncCachePreferences(forLibraryURL: homeLibraryURL)
+        seedLibraryCacheIfNeeded(at: homeLibraryURL, preferredPlacement: nil)
         setActiveLibraryPreferences(url: homeLibraryURL)
         clearUserClosedLibrary()
         relaunchAfterTerminate()
@@ -681,7 +699,7 @@ enum DatabaseExportImport {
         panel.allowedFileTypes = [libraryFilenameExtension]
         panel.nameFieldStringValue = "New Library.\(libraryFilenameExtension)"
         panel.title = "New Library"
-        panel.message = "Choose a location for the new library."
+        panel.message = "Choose a location for the new library. Its thumbnail cache defaults to a Skagway-cache folder beside the file."
         panel.showsTagField = false
 
         guard panel.runModal() == .OK, let destURL = panel.url else { return }
@@ -691,7 +709,7 @@ enum DatabaseExportImport {
 
         do {
             try DatabaseMigration.createEmptyDatabase(at: destURL.path)
-            syncCachePreferences(forLibraryURL: destURL)
+            seedLibraryCacheIfNeeded(at: destURL, preferredPlacement: .coLocated)
             let item = RecentLibraryItem(
                 id: destURL.path,
                 displayName: destURL.lastPathComponent,
@@ -765,7 +783,7 @@ enum DatabaseExportImport {
         UserDefaults.standard.set(true, forKey: PrefsKeys.didCompleteLibraryHomeSetup)
     }
 
-    /// Standard home: App Support library + `~/Library/Caches/Skagway/Skagway-cache`. Never deletes an existing library.
+    /// Standard home: App Support library + system Caches (bound into that library’s `library_cache`).
     static func useStandardLibraryHome() {
         let fm = FileManager.default
         try? fm.createDirectory(at: dbDirectoryURL, withIntermediateDirectories: true)
@@ -781,6 +799,7 @@ enum DatabaseExportImport {
             }
         }
 
+        seedLibraryCacheIfNeeded(at: defaultLibraryURL, preferredPlacement: .systemDefault)
         clearActiveLibraryPreferences()
         addToRecent(url: defaultLibraryURL)
         libraryHomeAccessMode = .standard
@@ -789,14 +808,14 @@ enum DatabaseExportImport {
         NSApplication.shared.terminate(nil)
     }
 
-    /// Quits and shows the library/cache location chooser again. Does not delete files on disk.
+    /// Quits and shows the library-home chooser again. Does not delete files on disk.
     static func changeLibraryAndCacheLocation() {
         let alert = NSAlert()
-        alert.messageText = "Change Library & Cache Location?"
+        alert.messageText = "Change Library Location?"
         alert.informativeText = """
-        Skagway will quit and ask again where to store the library and thumbnail cache, and (for a chosen folder) whether to remember that location.
+        Skagway will quit and ask again where to store the library, and (for a chosen folder) where that library’s thumbnail cache should live and whether to remember the location.
 
-        Your library files and thumbnails on disk are not deleted. The thumbnail cache location is shared by every library you open — choosing a folder sets that one cache for the whole app.
+        Your library files and thumbnails on disk are not deleted. Each library keeps its own cache location.
         """
         alert.alertStyle = .informational
         alert.addButton(withTitle: "Continue")
@@ -811,7 +830,7 @@ enum DatabaseExportImport {
         NSApplication.shared.terminate(nil)
     }
 
-    /// Folder picker only — caller shows the remember vs ask-each-launch step next.
+    /// Folder picker only — caller shows cache placement, then remember vs ask-each-launch.
     static func pickCustomLibraryHomeFolder() -> URL? {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
@@ -819,7 +838,7 @@ enum DatabaseExportImport {
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
         panel.title = "Choose Library Location"
-        panel.message = "Choose a folder for the library database and the app-wide cache (a Skagway-cache subfolder). If a library is already there, Skagway will use it; otherwise it creates a new empty library (your previous library is left where it is)."
+        panel.message = "Choose a folder for the library database. Next you will choose where this library’s thumbnail cache lives. If a library is already there, Skagway will use it; otherwise it creates a new empty library."
 
         guard panel.runModal() == .OK, let folderURL = panel.url else { return nil }
 
@@ -828,11 +847,13 @@ enum DatabaseExportImport {
         return folderURL
     }
 
-    /// Custom home folder: `Skagway.machii` (or any existing `*.machii`) + co-located `Skagway-cache/`.
-    /// Existing library/cache in the folder are reused — never overwritten or deleted.
-    /// An empty folder gets a **new empty** library (previous homes are left where they are;
-    /// use Save Copy / Open Library… if you want the old catalog at the new location).
-    static func activateCustomLibraryHome(_ folderURL: URL, accessMode: LibraryHomeAccessMode) throws {
+    /// Custom home folder: `Skagway.machii` (or any existing `*.machii`) + chosen cache placement.
+    /// Existing library / `library_cache` row are reused — never overwritten.
+    static func activateCustomLibraryHome(
+        _ folderURL: URL,
+        accessMode: LibraryHomeAccessMode,
+        cachePlacement: LibraryCachePlacement = .coLocated
+    ) throws {
         precondition(accessMode == .rememberBookmark || accessMode == .askEachLaunch)
 
         let fm = FileManager.default
@@ -840,9 +861,6 @@ enum DatabaseExportImport {
         guard fm.fileExists(atPath: folderURL.path, isDirectory: &isDir), isDir.boolValue else {
             throw LibraryHomeSetupError.notAFolder
         }
-
-        let cacheURL = ThumbnailService.coLocatedCacheDirectory(inLibraryHome: folderURL)
-        try fm.createDirectory(at: cacheURL, withIntermediateDirectories: true)
 
         let libraryURL: URL
         if let existing = findLibraryFile(in: folderURL) {
@@ -853,21 +871,27 @@ enum DatabaseExportImport {
             try DatabaseMigration.createEmptyDatabase(at: libraryURL.path)
         }
 
+        let pool = try DatabasePool(path: libraryURL.path)
+        try DatabaseMigration.migrate(pool)
+        let hasStored = try pool.read { db in try LibraryCacheStore.hasStoredLocation(db: db) }
+        _ = try ensureLibraryCacheRoot(
+            dbPool: pool,
+            libraryURL: libraryURL,
+            preferredPlacement: hasStored ? nil : cachePlacement
+        )
+
         libraryHomeAccessMode = accessMode
         clearUserClosedLibrary()
+        clearThumbnailCachePreferences()
 
         switch accessMode {
         case .rememberBookmark:
             clearRecentLibraries()
-            setThumbnailCachePreferences(cacheURL)
             setActiveLibraryPreferences(url: libraryURL)
             addToRecent(url: libraryURL)
             scrubPlainLocationPathsFromPrefs()
         case .askEachLaunch:
-            // No auto-open location on the boot disk — user opens a library each launch.
-            // Open Recent still keeps opaque bookmarks so previously opened libraries stay reachable.
             clearActiveLibraryPreferences()
-            clearThumbnailCachePreferences()
             clearRecentLibraries()
             addToRecent(url: libraryURL)
         case .standard:
@@ -879,19 +903,66 @@ enum DatabaseExportImport {
         NSApplication.shared.terminate(nil)
     }
 
-    /// When opening a library under a custom home, point the app-wide cache at that folder’s Skagway-cache.
+    /// Ensures the library DB has a `library_cache` row (migration seed). Live reads happen at open.
     static func syncCachePreferences(forLibraryURL url: URL) {
-        guard usesCustomLibraryHome else { return }
-        let folder = url.deletingLastPathComponent()
-        let cacheURL = ThumbnailService.coLocatedCacheDirectory(inLibraryHome: folder)
-        setThumbnailCachePreferences(cacheURL)
+        seedLibraryCacheIfNeeded(at: url, preferredPlacement: nil)
     }
 
-    /// Clears remembered library/cache paths after a prompt-each-launch session (quit or next launch).
+    /// Clears remembered library paths after a prompt-each-launch session (quit or next launch).
     static func clearSessionLocationPreferencesIfNeeded() {
         guard promptsForLibraryEachLaunch else { return }
         clearActiveLibraryPreferences()
         clearThumbnailCachePreferences()
+    }
+
+    /// Retarget the open library’s cache (pointer only; does not move existing files).
+    static func changeThumbnailCacheLocation(dbPool: DatabasePool, thumbnailService: ThumbnailService) {
+        guard let libraryURL = activeLibraryURL() else { return }
+        let current = (try? dbPool.read { db in try LibraryCacheStore.resolvedURL(db: db) })
+            ?? ThumbnailCacheLocator.coLocatedCacheDirectory(forLibraryURL: libraryURL)
+
+        let alert = NSAlert()
+        alert.messageText = "Change Thumbnail Cache Location"
+        alert.informativeText = """
+        Choose where this library’s thumbnails and filmstrips are stored. Other libraries keep their own cache locations.
+
+        Current: \(pathForDisplay(current))
+
+        Existing cache files are left in place; Skagway will read/write the new folder going forward.
+        """
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Co-locate with Library")
+        alert.addButton(withTitle: "System Default")
+        alert.addButton(withTitle: "Choose Folder…")
+        alert.addButton(withTitle: "Cancel")
+        let response = alert.runModal()
+
+        let placement: LibraryCachePlacement
+        switch response {
+        case .alertFirstButtonReturn:
+            placement = .coLocated
+        case .alertSecondButtonReturn:
+            placement = .systemDefault
+        case .alertThirdButtonReturn:
+            let panel = NSOpenPanel()
+            panel.canChooseFiles = false
+            panel.canChooseDirectories = true
+            panel.canCreateDirectories = true
+            panel.allowsMultipleSelection = false
+            panel.title = "Choose Thumbnail Cache Folder"
+            panel.message = "Skagway will store this library’s thumbnails in the folder you choose."
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            placement = .custom(url)
+        default:
+            return
+        }
+
+        do {
+            let root = try applyCachePlacement(placement, libraryURL: libraryURL, dbPool: dbPool)
+            thumbnailService.setSessionCacheRoot(root)
+        } catch {
+            NSAlert(error: error).runModal()
+        }
     }
 
     /// Prefer `Skagway.machii`, else the first `*.machii` in the folder (non-recursive).
@@ -911,23 +982,141 @@ enum DatabaseExportImport {
         }
     }
 
-    private static func setThumbnailCachePreferences(_ url: URL) {
-        if let bookmark = makeLibraryBookmark(for: url) {
-            UserDefaults.standard.set(bookmark, forKey: PrefsKeys.thumbnailCacheBookmark)
-        }
-        if storesLocationAsBookmarkOnly {
-            UserDefaults.standard.removeObject(forKey: PrefsKeys.thumbnailCachePath)
-        } else {
-            let path = (url.path as NSString).standardizingPath
-            UserDefaults.standard.set(path, forKey: PrefsKeys.thumbnailCachePath)
-        }
-    }
-
     private static func clearThumbnailCachePreferences() {
         UserDefaults.standard.removeObject(forKey: PrefsKeys.thumbnailCachePath)
         UserDefaults.standard.removeObject(forKey: PrefsKeys.thumbnailCacheBookmark)
     }
 
+    // MARK: - Per-library cache
+
+    /// Best-effort seed used before relaunch / switch. Failures are non-fatal.
+    static func seedLibraryCacheIfNeeded(at libraryURL: URL, preferredPlacement: LibraryCachePlacement?) {
+        do {
+            let pool = try DatabasePool(path: libraryURL.path)
+            try DatabaseMigration.migrate(pool)
+            _ = try ensureLibraryCacheRoot(
+                dbPool: pool,
+                libraryURL: libraryURL,
+                preferredPlacement: preferredPlacement
+            )
+        } catch {
+            // Open path will retry; avoid blocking switch/setup on seed failure.
+        }
+    }
+
+    private static func defaultPlacement(for libraryURL: URL) -> LibraryCachePlacement {
+        let parent = libraryURL.deletingLastPathComponent().standardizedFileURL
+        if parent.path == dbDirectoryURL.standardizedFileURL.path {
+            return .systemDefault
+        }
+        return .coLocated
+    }
+
+    /// Resolve the library’s cache root from `library_cache`, or seed and persist it.
+    @discardableResult
+    static func ensureLibraryCacheRoot(
+        dbPool: DatabasePool,
+        libraryURL: URL,
+        preferredPlacement: LibraryCachePlacement? = nil
+    ) throws -> URL {
+        let fm = FileManager.default
+        let hasStored = try dbPool.read { db in try LibraryCacheStore.hasStoredLocation(db: db) }
+
+        if let preferredPlacement, !hasStored {
+            return try applyCachePlacement(preferredPlacement, libraryURL: libraryURL, dbPool: dbPool)
+        }
+
+        if let existing = try dbPool.read({ db in try LibraryCacheStore.resolvedURL(db: db) }) {
+            if fm.fileExists(atPath: existing.path) {
+                _ = existing.startAccessingSecurityScopedResource()
+                return existing
+            }
+            // Stored path missing — look for a sibling known cache name beside the old parent.
+            let parent = existing.deletingLastPathComponent()
+            if let relocated = ThumbnailCacheLocator.resolveExistingCacheDirectory(inParent: parent) {
+                return try persistCacheRoot(relocated, dbPool: dbPool)
+            }
+            // Recreate at the stored path when the parent folder is still reachable.
+            if fm.fileExists(atPath: parent.path) {
+                try fm.createDirectory(at: existing, withIntermediateDirectories: true)
+                return try persistCacheRoot(existing, dbPool: dbPool)
+            }
+        }
+
+        // No usable stored row — seed without using an unrelated volume’s legacy global cache.
+        if let sibling = ThumbnailCacheLocator.resolveExistingCacheDirectory(
+            inParent: libraryURL.deletingLastPathComponent()
+        ) {
+            return try persistCacheRoot(sibling, dbPool: dbPool)
+        }
+        if let legacy = legacyGlobalCacheURL(), isReasonableLegacyCache(legacy, forLibrary: libraryURL) {
+            return try persistCacheRoot(legacy, dbPool: dbPool)
+        }
+        return try applyCachePlacement(defaultPlacement(for: libraryURL), libraryURL: libraryURL, dbPool: dbPool)
+    }
+
+    private static func applyCachePlacement(
+        _ placement: LibraryCachePlacement,
+        libraryURL: URL,
+        dbPool: DatabasePool
+    ) throws -> URL {
+        let fm = FileManager.default
+        let root: URL
+        switch placement {
+        case .coLocated:
+            root = ThumbnailCacheLocator.coLocatedCacheDirectory(forLibraryURL: libraryURL)
+        case .systemDefault:
+            let parent = libraryURL.deletingLastPathComponent().standardizedFileURL
+            if parent.path == dbDirectoryURL.standardizedFileURL.path {
+                root = ThumbnailCacheLocator.standardSharedCacheDirectory
+            } else {
+                root = ThumbnailCacheLocator.systemCacheDirectory(forLibraryURL: libraryURL)
+            }
+        case .custom(let url):
+            root = url
+        }
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        return try persistCacheRoot(root, dbPool: dbPool)
+    }
+
+    private static func persistCacheRoot(_ root: URL, dbPool: DatabasePool) throws -> URL {
+        let bookmark = LibraryCacheStore.makeBookmark(for: root)
+        try dbPool.write { db in
+            try LibraryCacheStore.save(db: db, directory: root, bookmark: bookmark)
+        }
+        _ = root.startAccessingSecurityScopedResource()
+        return root.standardizedFileURL
+    }
+
+    /// Legacy app-wide prefs — seed source only.
+    private static func legacyGlobalCacheURL() -> URL? {
+        if let path = UserDefaults.standard.string(forKey: PrefsKeys.thumbnailCachePath) {
+            let url = URL(fileURLWithPath: path, isDirectory: true)
+            if FileManager.default.fileExists(atPath: url.path) { return url }
+        }
+        if let bookmark = UserDefaults.standard.data(forKey: PrefsKeys.thumbnailCacheBookmark),
+           let url = resolveLibraryBookmark(bookmark),
+           FileManager.default.fileExists(atPath: url.path) {
+            return url
+        }
+        return nil
+    }
+
+    /// Only adopt a legacy global cache when it clearly belongs to this library (same folder or
+    /// Standard App Support + system Caches). Prevents LibB from inheriting Enc’s cache.
+    private static func isReasonableLegacyCache(_ cache: URL, forLibrary libraryURL: URL) -> Bool {
+        let cacheParent = cache.deletingLastPathComponent().standardizedFileURL
+        let libraryParent = libraryURL.deletingLastPathComponent().standardizedFileURL
+        if cacheParent.path == libraryParent.path { return true }
+        if libraryParent.path == dbDirectoryURL.standardizedFileURL.path {
+            let systemParent = ThumbnailCacheLocator.systemSkagwayCachesParent.standardizedFileURL
+            if cacheParent.path == systemParent.path { return true }
+            if cache.path.hasPrefix(systemParent.path + "/") { return true }
+        }
+        return false
+    }
+
+    // MARK: - Launch
     // MARK: - Launch
 
     /// Run at app launch. Ensures App Support folder exists. Does not create a default library.

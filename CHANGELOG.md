@@ -31,6 +31,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Per-library thumbnail cache** — Each library stores its cache location in the DB (`library_cache`), so opening LibB never depends on Enc’s cache from LibA. Startup: Use standard location (App Support + system Caches), or Choose Folder… then pick co-locate / system default / custom folder, then remember vs ask-each-launch. Settings/File → Change Thumbnail Cache Location… retargets the open library only (Settings shows the current path above the button). Save Copy keeps the original cache pointer. Legacy app-wide cache prefs are seed-only and only adopted when they clearly belong to that library.
 - **Set Poster from Image** — Context menu (grid + list) chooses an image as the library poster for one or many selected videos (same image for all). Dragging an image onto a Wall card sets that video’s poster; dragging videos/folders onto the grid still imports into the library. Filmstrips are unchanged; Regenerate Thumbnail still replaces a custom poster with a frame from the file.
 
 ## 0.76.0 (build 972) - 2026-07-31

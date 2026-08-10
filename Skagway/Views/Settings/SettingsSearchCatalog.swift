@@ -41,15 +41,21 @@ enum SettingsSearchCatalog {
         ),
         .init(
             id: "library.storage",
-            title: "Library & thumbnail cache",
+            title: "Library location",
             category: .library,
-            keywords: ["storage", "location", "cache", "folder", "encrypted", "home"]
+            keywords: ["storage", "location", "folder", "encrypted", "home"]
         ),
         .init(
             id: "library.storage.change",
-            title: "Change Library & Cache Location…",
+            title: "Change Library Location…",
             category: .library,
-            keywords: ["storage", "location", "cache", "folder", "setup", "startup"]
+            keywords: ["storage", "location", "folder", "setup", "startup", "home"]
+        ),
+        .init(
+            id: "library.storage.cache",
+            title: "Change Thumbnail Cache Location…",
+            category: .library,
+            keywords: ["storage", "location", "cache", "folder", "thumbnail", "filmstrip"]
         ),
         .init(
             id: "library.autoUpdates",

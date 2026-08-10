@@ -72,6 +72,7 @@ This document defines how AI agents (Cursor, Claude, etc.) should work on the Sk
 - **Persistence**:
   - Layouts (browsing vs playback), sort, view mode, column customization, and many preferences live in `LayoutParams` + UserDefaults.
   - Be careful restoring the correct layout when exiting playback.
+  - **Thumbnail / filmstrip disk cache is per library**: stored in the library DB (`library_cache`). Default co-locate is sibling `Skagway-cache` (system Caches for the standard App Support library). Hidden `.Skagway-cache` / legacy `thumbnails` are still recognized. Save Copy keeps the original cache pointer. Memory cache stays process-wide.
 
 ## Build & Environment Notes
 
