@@ -43,7 +43,8 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
         let chrome = FullscreenTransportChromeView(
             viewModel: viewModel,
             exitTarget: self,
-            exitAction: #selector(closeButtonTapped)
+            exitAction: #selector(closeButtonTapped),
+            onStopPlayback: onStopPlayback
         )
         chrome.onDidHide = { [weak self] in
             // Lightweight only — rebuilding tracking areas here re-shows chrome immediately.
@@ -73,7 +74,7 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
         }
         embedMouseCatcher(in: content)
         if let chrome = chromeView {
-            embedBottomChrome(chrome, in: content)
+            embedFullscreenChrome(chrome, in: content)
         }
 
         let w = NSWindow(
@@ -112,7 +113,7 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
         }
         embedMouseCatcher(in: content)
         if let chrome = chromeView {
-            embedBottomChrome(chrome, in: content)
+            embedFullscreenChrome(chrome, in: content)
         }
 
         let w = NSWindow(
@@ -160,11 +161,11 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
         mouseCatcher = catcher
     }
 
-    private func embedBottomChrome(_ chrome: NSView, in parent: NSView) {
+    /// Full-window clear chrome host (bottom transport + top traffic lights; hit-tests only interactive bands).
+    private func embedFullscreenChrome(_ chrome: NSView, in parent: NSView) {
         chrome.translatesAutoresizingMaskIntoConstraints = true
-        let height = FullscreenTransportChromeView.chromeHeight
-        chrome.frame = NSRect(x: 0, y: 0, width: parent.bounds.width, height: height)
-        chrome.autoresizingMask = [.width, .maxYMargin]
+        chrome.frame = parent.bounds
+        chrome.autoresizingMask = [.width, .height]
         parent.addSubview(chrome)
     }
 

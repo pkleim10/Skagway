@@ -73,13 +73,14 @@ struct OverlayInlinePlayerView: View {
         .onChange(of: viewModel.resumeBannerFadeDelaySeconds) { _, _ in playback.onFadeDelayChanged() }
     }
 
-    // Very compact header that makes the overlay read as a deliberate floating player panel.
-    // No close button here: the panel's title bar is covered edge-to-edge by
-    // `FloatingPlayerPanel.titleBarDragArea` for dragging, which intercepts taps before they
-    // reach anything underneath — a close ("X") button here was unreachable and dead weight.
-    // Escape already stops playback (see the Space/Escape key handler in ContentView).
+    // Header for the floating player. Leading room for the traffic-light cluster drawn by
+    // `FloatingPlayerPanel` (above the drag layer). Escape and the bottom Stop button still
+    // end playback.
     private var overlayHeader: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 0) {
+            // Match traffic-light leading inset + cluster + gap (lights drawn in FloatingPlayerPanel).
+            Color.clear
+                .frame(width: PlayerTrafficLights.leadingChromeWidth)
             Text(video.displayTitle)
                 // 14pt / 30pt bar — 25% larger than the original 11pt / 24pt, matching the
                 // size-control buttons in FloatingPlayerPanel.
@@ -87,8 +88,8 @@ struct OverlayInlinePlayerView: View {
                 .foregroundStyle(Color.appTextSecondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
+            Spacer(minLength: 10)
         }
-        .padding(.horizontal, 10)
         .frame(height: 30)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(

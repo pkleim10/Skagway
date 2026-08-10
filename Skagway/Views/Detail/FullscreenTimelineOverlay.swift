@@ -2,14 +2,14 @@ import AppKit
 import QuartzCore
 import SwiftUI
 
-/// Full-screen transport + exit control.
+/// Full-screen transport + exit control + top-leading traffic lights.
 ///
 /// Idle model:
 /// - Real pointer **movement** (or click) → show chrome and (re)schedule hide.
 /// - Mouse-wheel / trackpad scroll over the video → show chrome; stay up while the
 ///   scroll gesture (or its momentum) is active; each discrete notch also resets idle.
 /// - Stationary / spurious tracking noise is ignored (movement threshold).
-/// - Timer fire: if pointer is in the bar band or wheel-scrubbing → reschedule; else hide.
+/// - Timer fire: if pointer is in the bar / lights band or wheel-scrubbing → reschedule; else hide.
 /// - After hide, only re-enable `acceptsMouseMovedEvents` — do **not** rebuild tracking
 ///   areas (that synthesizes `mouseEntered` and immediately re-shows chrome).
 @MainActor
@@ -21,7 +21,9 @@ final class FullscreenTransportChromeView: NSView {
     private static let previewClearance: CGFloat = PlaybackTimelineBar.scrubPreviewHeight + 16
     static var chromeHeight: CGFloat { previewClearance + PlaybackTimelineBar.barHeight }
 
+    private let viewModel: LibraryViewModel
     private let timelineHost: NSHostingView<FullscreenTimelineOverlay>
+    private let trafficLightsHost: NSHostingView<PlayerTrafficLights>
     private let closeButton = NSButton()
     private var hideWorkItem: DispatchWorkItem?
     private var lastActivityLocation: CGPoint?
@@ -30,13 +32,39 @@ final class FullscreenTransportChromeView: NSView {
 
     /// Called after chrome hides so the window can re-enable mouse-moved delivery (lightweight).
     var onDidHide: (() -> Void)?
+    private let onStopPlayback: () -> Void
+    private weak var exitTarget: AnyObject?
+    private let exitAction: Selector
 
     private var barHitRect: NSRect {
         NSRect(x: 0, y: 0, width: bounds.width, height: PlaybackTimelineBar.barHeight)
     }
 
-    init(viewModel: LibraryViewModel, exitTarget: AnyObject, exitAction: Selector) {
+    private var trafficLightsHitRect: NSRect {
+        let height: CGFloat = 44
+        let width: CGFloat = 88
+        return NSRect(x: 0, y: bounds.height - height, width: width, height: height)
+    }
+
+    init(
+        viewModel: LibraryViewModel,
+        exitTarget: AnyObject,
+        exitAction: Selector,
+        onStopPlayback: @escaping () -> Void
+    ) {
+        self.viewModel = viewModel
+        self.exitTarget = exitTarget
+        self.exitAction = exitAction
+        self.onStopPlayback = onStopPlayback
         timelineHost = NSHostingView(rootView: FullscreenTimelineOverlay(viewModel: viewModel))
+        trafficLightsHost = NSHostingView(
+            rootView: PlayerTrafficLights(
+                mode: .fullScreen,
+                onClose: {},
+                onYellow: {},
+                onGreen: {}
+            )
+        )
         super.init(frame: .zero)
 
         wantsLayer = true
@@ -47,6 +75,10 @@ final class FullscreenTransportChromeView: NSView {
         timelineHost.layer?.masksToBounds = false
         timelineHost.translatesAutoresizingMaskIntoConstraints = false
         addSubview(timelineHost)
+
+        trafficLightsHost.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(trafficLightsHost)
+        rebindTrafficLights()
 
         closeButton.bezelStyle = .accessoryBarAction
         closeButton.image = NSImage(
@@ -65,8 +97,11 @@ final class FullscreenTransportChromeView: NSView {
         NSLayoutConstraint.activate([
             timelineHost.leadingAnchor.constraint(equalTo: leadingAnchor),
             timelineHost.trailingAnchor.constraint(equalTo: trailingAnchor),
-            timelineHost.topAnchor.constraint(equalTo: topAnchor),
             timelineHost.bottomAnchor.constraint(equalTo: bottomAnchor),
+            timelineHost.heightAnchor.constraint(equalToConstant: Self.chromeHeight),
+
+            trafficLightsHost.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            trafficLightsHost.topAnchor.constraint(equalTo: topAnchor, constant: 14),
 
             closeButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
             closeButton.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
@@ -80,6 +115,28 @@ final class FullscreenTransportChromeView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    private func rebindTrafficLights() {
+        trafficLightsHost.rootView = PlayerTrafficLights(
+            mode: .fullScreen,
+            onClose: { [weak self] in
+                self?.onStopPlayback()
+            },
+            onYellow: { [weak self] in
+                guard let self else { return }
+                self.viewModel.playerSizeIsCompact = true
+                self.viewModel.playerLastWasFullScreen = false
+                self.viewModel.playerFloatingPosition = nil
+                _ = self.exitTarget?.perform(self.exitAction)
+            },
+            onGreen: { [weak self] in
+                guard let self else { return }
+                self.viewModel.playerSizeIsCompact = false
+                self.viewModel.playerLastWasFullScreen = false
+                _ = self.exitTarget?.perform(self.exitAction)
+            }
+        )
     }
 
     func beginIdleCycle() {
@@ -128,7 +185,7 @@ final class FullscreenTransportChromeView: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard isChromeVisible else { return nil }
-        guard barHitRect.contains(point) else { return nil }
+        guard barHitRect.contains(point) || trafficLightsHitRect.contains(point) else { return nil }
         return super.hitTest(point)
     }
 
@@ -167,18 +224,18 @@ final class FullscreenTransportChromeView: NSView {
 
     private func fireIdleHide() {
         hideWorkItem = nil
-        if wheelScrubActive || isPointerInsideBar() {
+        if wheelScrubActive || isPointerInsideChrome() {
             scheduleHide()
             return
         }
         applyVisible(false, animated: true)
     }
 
-    private func isPointerInsideBar() -> Bool {
+    private func isPointerInsideChrome() -> Bool {
         guard let window else { return false }
         let inWindow = window.convertPoint(fromScreen: NSEvent.mouseLocation)
         let local = convert(inWindow, from: nil)
-        return barHitRect.contains(local)
+        return barHitRect.contains(local) || trafficLightsHitRect.contains(local)
     }
 }
 

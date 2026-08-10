@@ -145,11 +145,52 @@ struct FloatingPlayerPanel: View {
             )
             .overlay(alignment: .top) {
                 // Interior title drag — inset so top edge/corners remain resize targets.
+                // Leave leading room for traffic lights (they sit above this layer).
                 titleBarDragArea
                     .padding(.top, Self.resizeEdgeThickness)
-                    .padding(.horizontal, Self.resizeCornerSize)
+                    .padding(.trailing, Self.resizeCornerSize)
+                    .padding(.leading, Self.resizeCornerSize + PlayerTrafficLights.leadingChromeWidth)
                     .opacity(effectiveControlsVisible ? 1 : 0)
                     .allowsHitTesting(effectiveControlsVisible)
+            }
+            .overlay(alignment: .topLeading) {
+                // Supplement to the bottom size cluster (kept in all modes).
+                PlayerTrafficLights(
+                    mode: viewModel.playerSizeIsCompact ? .compact : .windowed,
+                    onClose: { viewModel.isPlayingInline = false },
+                    onYellow: {
+                        if viewModel.playerSizeIsCompact {
+                            // Option A: no-op. Option B: step up to Windowed.
+                            guard PlayerTrafficLights.compactMapping == .optionB_compactLadder else { return }
+                            viewModel.playerSizeIsCompact = false
+                            viewModel.playerLastWasFullScreen = false
+                        } else {
+                            viewModel.playerSizeIsCompact = true
+                            viewModel.playerLastWasFullScreen = false
+                            viewModel.playerFloatingPosition = nil
+                        }
+                    },
+                    onGreen: {
+                        if viewModel.playerSizeIsCompact {
+                            switch PlayerTrafficLights.compactMapping {
+                            case .optionA_yellowNopGreenWindowed:
+                                viewModel.playerSizeIsCompact = false
+                                viewModel.playerLastWasFullScreen = false
+                            case .optionB_compactLadder:
+                                viewModel.playerSizeIsCompact = false
+                                viewModel.playerLastWasFullScreen = false
+                                viewModel.isPlayerFullScreen = true
+                            }
+                        } else {
+                            viewModel.isPlayerFullScreen = true
+                        }
+                    }
+                )
+                // Vertically center in the 30pt title bar (same band as the window title).
+                .frame(height: 30, alignment: .center)
+                .padding(.leading, PlayerTrafficLights.leadingInset)
+                .opacity(effectiveControlsVisible ? 1 : 0)
+                .allowsHitTesting(effectiveControlsVisible)
             }
             // Edge/corner resize — Windowed only (Compact stays locked to the inspector footprint).
             // Under size chrome so Compact/Windowed/Close keep priority in the bottom-trailing cluster.
