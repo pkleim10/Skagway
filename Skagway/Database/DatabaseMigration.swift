@@ -318,6 +318,15 @@ enum DatabaseMigration {
             }
         }
 
+        migrator.registerMigration("v19_excludedFolders") { db in
+            try db.create(table: "excluded_folder") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("folderPath", .text).notNull().unique()
+                t.column("name", .text).notNull()
+                t.column("dateAdded", .datetime).notNull()
+            }
+        }
+
         try migrator.migrate(pool)
     }
 }

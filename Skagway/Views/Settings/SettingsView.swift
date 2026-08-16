@@ -39,7 +39,8 @@ struct SettingsView: View {
     /// Data Sources sheet (wired to the open library’s `DatabasePool`).
     @State private var dataSources: [DataSource] = []
     @State private var hoveredDataSourceId: Int64?
-    @State private var dataSourcesLoading = false
+    @State private var excludedFolders: [ExcludedFolder] = []
+    @State private var hoveredExcludedFolderId: Int64?
 
     /// Tools sheet (FFmpeg path via `LibraryViewModel`).
     @State private var showingFFmpegFilePicker = false
@@ -621,52 +622,55 @@ struct SettingsView: View {
 
     private func dataSourcesSettingsContent(dbPool: DatabasePool) -> some View {
         let repository = DataSourceRepository(dbPool: dbPool)
+        let excludeRepo = ExcludedFolderRepository(dbPool: dbPool)
 
         return VStack(alignment: .leading, spacing: 20) {
             sectionBlock(title: "Folders") {
                 settingsCard {
-                    if dataSources.isEmpty && !dataSourcesLoading {
-                        VStack(spacing: 6) {
-                            Image(systemName: "folder.badge.questionmark")
-                                .font(.title2)
-                                .foregroundStyle(Color.secondary)
-                            Text("No data sources")
-                                .foregroundStyle(Color.secondary)
-                            Text("Add folders to watch for video files")
-                                .font(.caption)
-                                .foregroundStyle(Color.secondary)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 16)
-                    } else {
-                        ForEach(Array(dataSources.enumerated()), id: \.element.id) { index, source in
-                            if index > 0 { cardSeparator }
-                            dataSourceRow(source, repository: repository)
-                        }
-                    }
-                }
-            }
-
-            sectionBlock(title: "Manage") {
-                settingsCard {
                     describedTrailingRow(
-                        title: "Folders",
-                        description: "Folders that Skagway will scan when you import. Hover a folder and click Remove to drop it from the list (files on disk are not deleted)."
+                        title: "Scan these folders",
+                        description: "Used when you import or scan for new videos. Hover a folder to show it in Finder, exclude a subfolder from scans, or remove it from the list (files on disk are not deleted). Excluded subfolders appear under the folder they belong to."
                     ) {
                         Button("Add Folder…") {
                             addDataSourceFolder(repository: repository)
+                        }
+                    }
+                    if !dataSources.isEmpty {
+                        ForEach(dataSources) { source in
+                            cardSeparator
+                            dataSourceGroup(source, repository: repository, excludeRepo: excludeRepo)
                         }
                     }
                 }
             }
         }
         .task {
-            await loadDataSources(repository: repository)
+            await loadDataSources(repository: repository, excludeRepo: excludeRepo)
         }
     }
 
-    private func dataSourceRow(_ source: DataSource, repository: DataSourceRepository) -> some View {
+    @ViewBuilder
+    private func dataSourceGroup(
+        _ source: DataSource,
+        repository: DataSourceRepository,
+        excludeRepo: ExcludedFolderRepository
+    ) -> some View {
+        dataSourceRow(source, repository: repository, excludeRepo: excludeRepo)
+        ForEach(ExcludedFolderMatcher.excludes(
+            ownedBy: source,
+            from: excludedFolders,
+            sources: dataSources
+        )) { folder in
+            cardSeparator
+            excludedFolderRow(folder, repository: excludeRepo)
+        }
+    }
+
+    private func dataSourceRow(
+        _ source: DataSource,
+        repository: DataSourceRepository,
+        excludeRepo: ExcludedFolderRepository
+    ) -> some View {
         let isHovered = hoveredDataSourceId == source.id
         return HStack(spacing: 10) {
             Image(systemName: "folder.fill")
@@ -693,8 +697,17 @@ struct SettingsView: View {
                 .padding(.vertical, 4)
                 .background(Color.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
 
+                Button("Exclude…") {
+                    addExcludedFolder(of: source, repository: excludeRepo)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Color.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .help("Exclude a subfolder of this data source from scans")
+
                 Button("Remove") {
-                    removeDataSource(source, repository: repository)
+                    removeDataSource(source, repository: repository, excludeRepo: excludeRepo)
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, 10)
@@ -715,6 +728,60 @@ struct SettingsView: View {
                 hoveredDataSourceId = source.id
             } else if hoveredDataSourceId == source.id {
                 hoveredDataSourceId = nil
+            }
+        }
+    }
+
+    private func excludedFolderRow(_ folder: ExcludedFolder, repository: ExcludedFolderRepository) -> some View {
+        let isHovered = hoveredExcludedFolderId == folder.id
+        return HStack(spacing: 10) {
+            Image(systemName: "folder.badge.minus")
+                .foregroundStyle(Color.secondary)
+                .font(.title3)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(folder.name)
+                    .fontWeight(.medium)
+                Text(folder.folderPath)
+                    .font(.caption)
+                    .foregroundStyle(Color.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if isHovered {
+                Button("Show in Finder") {
+                    NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folder.folderPath)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Color.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+                Button("Remove") {
+                    removeExcludedFolder(folder, repository: repository)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Color.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            } else {
+                Text(folder.dateAdded, style: .date)
+                    .font(.caption)
+                    .foregroundStyle(Color.secondary)
+            }
+        }
+        .padding(.leading, 36)
+        .padding(.trailing, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            if hovering {
+                hoveredExcludedFolderId = folder.id
+            } else if hoveredExcludedFolderId == folder.id {
+                hoveredExcludedFolderId = nil
             }
         }
     }
@@ -741,25 +808,106 @@ struct SettingsView: View {
                         try? await repository.insert(source)
                     }
                 }
-                await loadDataSources(repository: repository)
+                if let pool = appState.dbManager?.dbPool {
+                    await loadDataSources(
+                        repository: repository,
+                        excludeRepo: ExcludedFolderRepository(dbPool: pool)
+                    )
+                }
             }
         }
     }
 
-    private func removeDataSource(_ source: DataSource, repository: DataSourceRepository) {
+    private func addExcludedFolder(of source: DataSource, repository: ExcludedFolderRepository) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.message = "Select a subfolder of “\(source.name)” to skip when scanning"
+        panel.prompt = "Exclude"
+        panel.directoryURL = source.url
+
+        guard panel.runModal() == .OK else { return }
+
+        Task {
+            var rejected: [String] = []
+            for url in panel.urls {
+                let path = ExcludedFolderMatcher.normalize(url.path)
+                guard ExcludedFolderMatcher.isValidExclusion(path: path, ofSource: source.folderPath) else {
+                    rejected.append(url.lastPathComponent)
+                    continue
+                }
+                let exists = (try? await repository.exists(folderPath: path)) ?? false
+                if !exists {
+                    let folder = ExcludedFolder(
+                        folderPath: path,
+                        name: url.lastPathComponent,
+                        dateAdded: Date()
+                    )
+                    try? await repository.insert(folder)
+                }
+            }
+            if let pool = appState.dbManager?.dbPool {
+                await loadDataSources(
+                    repository: DataSourceRepository(dbPool: pool),
+                    excludeRepo: repository
+                )
+            }
+            if !rejected.isEmpty {
+                presentInvalidExcludeAlert(sourceName: source.name, names: rejected)
+            }
+        }
+    }
+
+    private func presentInvalidExcludeAlert(sourceName: String, names: [String]) {
+        let alert = NSAlert()
+        alert.messageText = "Those folders are not inside “\(sourceName)”"
+        alert.informativeText = "Exclude only applies to subfolders of a scanned folder. The folder itself cannot be excluded — remove it from the list instead.\n\nSkipped: \(names.joined(separator: ", "))"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
+    private func removeDataSource(
+        _ source: DataSource,
+        repository: DataSourceRepository,
+        excludeRepo: ExcludedFolderRepository
+    ) {
         Task {
             try? await repository.delete(source)
             if hoveredDataSourceId == source.id {
                 hoveredDataSourceId = nil
             }
-            await loadDataSources(repository: repository)
+            let remaining = (try? await repository.fetchAll()) ?? []
+            let excludes = (try? await excludeRepo.fetchAll()) ?? []
+            for orphan in ExcludedFolderMatcher.orphanedExcludes(from: excludes, sources: remaining) {
+                try? await excludeRepo.delete(orphan)
+            }
+            await loadDataSources(repository: repository, excludeRepo: excludeRepo)
         }
     }
 
-    private func loadDataSources(repository: DataSourceRepository) async {
-        dataSourcesLoading = true
+    private func removeExcludedFolder(_ folder: ExcludedFolder, repository: ExcludedFolderRepository) {
+        Task {
+            try? await repository.delete(folder)
+            if hoveredExcludedFolderId == folder.id {
+                hoveredExcludedFolderId = nil
+            }
+            if let pool = appState.dbManager?.dbPool {
+                await loadDataSources(
+                    repository: DataSourceRepository(dbPool: pool),
+                    excludeRepo: repository
+                )
+            }
+        }
+    }
+
+    private func loadDataSources(
+        repository: DataSourceRepository,
+        excludeRepo: ExcludedFolderRepository
+    ) async {
         dataSources = (try? await repository.fetchAll()) ?? []
-        dataSourcesLoading = false
+        excludedFolders = (try? await excludeRepo.fetchAll()) ?? []
     }
 
     // MARK: - Tools

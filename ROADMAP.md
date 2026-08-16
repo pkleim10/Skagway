@@ -62,7 +62,7 @@ Only after this pass should sandboxing/distribution (Phase 4 below) be seriously
 ### Phase 2 — Power User & Organization Features
 - Advanced search (beyond filename FTS5)
 - Batch operations and multi-select power features
-- Import / library management improvements (auto-import from data sources?)
+- Import / library management improvements (auto-import from data sources; Data Sources can exclude folders from Scan)
 - Further organization tools (notes, auto-tagging ideas)
 
 ### Phase 3 — AI Augmentation (exploratory)

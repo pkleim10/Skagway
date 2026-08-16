@@ -21,7 +21,7 @@ enum SettingsSearchCatalog {
         // Sheets
         .init(id: "sheet.library", title: "Library", category: .library, keywords: ["settings"]),
         .init(id: "sheet.video", title: "Video", category: .video, keywords: ["settings"]),
-        .init(id: "sheet.dataSources", title: "Data Sources", category: .dataSources, keywords: ["folders", "scan", "import", "watch"]),
+        .init(id: "sheet.dataSources", title: "Data Sources", category: .dataSources, keywords: ["folders", "scan", "import", "watch", "exclude"]),
         .init(id: "sheet.fileExt", title: "Extensions", category: .fileExt, keywords: ["file ext", "formats", "mp4", "mov", "mkv"]),
         .init(id: "sheet.tools", title: "Tools", category: .tools, keywords: ["ffmpeg"]),
         .init(id: "sheet.customMetadata", title: "Custom Metadata", category: .customMetadata, keywords: ["fields", "inspector"]),
@@ -175,6 +175,12 @@ enum SettingsSearchCatalog {
             title: "Folders",
             category: .dataSources,
             keywords: ["data sources", "scan", "import", "watch", "add folder"]
+        ),
+        .init(
+            id: "dataSources.excludedFolders",
+            title: "Exclude a subfolder",
+            category: .dataSources,
+            keywords: ["data sources", "scan", "exclude", "skip", "ignore", "exclude folder", "hover"]
         ),
 
         // File Ext
