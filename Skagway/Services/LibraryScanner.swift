@@ -16,11 +16,13 @@ actor LibraryScanner {
     private let metadataExtractor = MetadataExtractor()
     private let thumbnailService: ThumbnailService
     private let videoRepo: VideoRepository
+    private let excludedFolderRepo: ExcludedFolderRepository
 
     init(dbPool: DatabasePool, thumbnailService: ThumbnailService) {
         self.dbPool = dbPool
         self.thumbnailService = thumbnailService
         self.videoRepo = VideoRepository(dbPool: dbPool)
+        self.excludedFolderRepo = ExcludedFolderRepository(dbPool: dbPool)
     }
 
     func scan(folder: URL) -> AsyncStream<ScanUpdate> {
@@ -36,7 +38,8 @@ actor LibraryScanner {
     }
 
     private func performScan(folder: URL, continuation: AsyncStream<ScanUpdate>.Continuation) async {
-        let videoFiles = discoverVideoFiles(in: folder)
+        let excludedRoots = await loadExcludedRoots()
+        let videoFiles = discoverVideoFiles(in: folder, excludedRoots: excludedRoots)
         continuation.yield(.started(total: videoFiles.count))
 
         let concurrencyLimit = 4
@@ -132,7 +135,8 @@ actor LibraryScanner {
     }
 
     private func performFilesScan(urls: [URL], continuation: AsyncStream<ScanUpdate>.Continuation) async {
-        let videoFiles = urls.filter { $0.isVideoFile }
+        let excludedRoots = await loadExcludedRoots()
+        let videoFiles = urls.filter { $0.isVideoFile && !ExcludedFolderMatcher.contains($0.path, excludedRoots: excludedRoots) }
         guard !videoFiles.isEmpty else {
             continuation.yield(.started(total: 0))
             continuation.yield(.completed)
@@ -195,9 +199,10 @@ actor LibraryScanner {
         knownPaths: Set<String>,
         continuation: AsyncStream<ScanUpdate>.Continuation
     ) async {
+        let excludedRoots = await loadExcludedRoots()
         var newFiles: [URL] = []
         for folder in folders {
-            for file in discoverVideoFiles(in: folder) where !knownPaths.contains(file.path) {
+            for file in discoverVideoFiles(in: folder, excludedRoots: excludedRoots) where !knownPaths.contains(file.path) {
                 newFiles.append(file)
             }
         }
@@ -288,16 +293,29 @@ actor LibraryScanner {
         }
     }
 
-    private func discoverVideoFiles(in folder: URL) -> [URL] {
+    private func loadExcludedRoots() async -> [String] {
+        (try? await excludedFolderRepo.fetchPaths()) ?? []
+    }
+
+    private func discoverVideoFiles(in folder: URL, excludedRoots: [String]) -> [URL] {
+        if ExcludedFolderMatcher.contains(folder.path, excludedRoots: excludedRoots) {
+            return []
+        }
+
         var results: [URL] = []
         guard let enumerator = FileManager.default.enumerator(
             at: folder,
-            includingPropertiesForKeys: [.isRegularFileKey],
+            includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         ) else { return results }
 
         while let url = enumerator.nextObject() as? URL {
-            if url.isVideoFile {
+            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+            if isDirectory, ExcludedFolderMatcher.contains(url.path, excludedRoots: excludedRoots) {
+                enumerator.skipDescendants()
+                continue
+            }
+            if url.isVideoFile, !ExcludedFolderMatcher.contains(url.path, excludedRoots: excludedRoots) {
                 results.append(url)
             }
         }

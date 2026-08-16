@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Data Sources: Exclude Folder** — Settings → Data Sources can list folders to skip. Scan, Scan for New Videos, Add Folder, and dropped files ignore those folders and their contents (enumerator skips the subtree). Videos already in the library are left alone. Hover a data source for Exclude… (opens the picker at that folder).
+
 ## 0.77.0 (build 983) - 2026-08-09
 
 - **Per-library thumbnail cache** — Each library stores its cache location in the DB (`library_cache`), so opening LibB never depends on Enc’s cache from LibA. Startup: Use standard location (App Support + system Caches), or Choose Folder… then pick co-locate / system default / custom folder, then remember vs ask-each-launch. Settings/File → Change Thumbnail Cache Location… retargets the open library only (Settings shows the current path above the button). Save Copy keeps the original cache pointer. Legacy app-wide cache prefs are seed-only and only adopted when they clearly belong to that library.
