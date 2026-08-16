@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Import Metadata writes Plays and Resume Position** — Those columns are now importable: play count is set (not incremented), and resume seconds are restored on the matched video’s current path. Empty cells still leave the current value alone. Last Played stays export-only.
+
 ## 0.77.0 (build 983) - 2026-08-09
 
 - **Per-library thumbnail cache** — Each library stores its cache location in the DB (`library_cache`), so opening LibB never depends on Enc’s cache from LibA. Startup: Use standard location (App Support + system Caches), or Choose Folder… then pick co-locate / system default / custom folder, then remember vs ask-each-launch. Settings/File → Change Thumbnail Cache Location… retargets the open library only (Settings shows the current path above the button). Save Copy keeps the original cache pointer. Legacy app-wide cache prefs are seed-only and only adopted when they clearly belong to that library.

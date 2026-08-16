@@ -1105,6 +1105,14 @@ final class LibraryViewModel {
         let customDefs = customMetadataFieldDefinitions
         let videoRepo = videoRepo
         let tagRepo = tagRepo
+        var resumeById: [Int64: Double] = [:]
+        resumeById.reserveCapacity(videosSnapshot.count)
+        for v in videosSnapshot {
+            guard let id = v.databaseId,
+                  let seconds = PlaybackPositionStore.loadSeconds(filePath: v.filePath)
+            else { continue }
+            resumeById[id] = seconds
+        }
 
         metadataApplyProgress = (0, 1)
         metadataApplyTask = Task { [weak self] in
@@ -1135,7 +1143,8 @@ final class LibraryViewModel {
                     videos: videosSnapshot,
                     tagsByVideoId: tagsSnapshot,
                     customByVideoId: customSnapshot,
-                    customFieldDefinitions: customDefs
+                    customFieldDefinitions: customDefs,
+                    resumeSecondsByVideoId: resumeById
                 )
                 let pass1 = try MetadataApplier.pass1(
                     rows: rows,
@@ -1157,6 +1166,10 @@ final class LibraryViewModel {
                     let subtitleBulk = pass1.subtitleUpdates.map { (videoId: $0.key, presence: $0.value) }
                     try? await videoRepo.updateSubtitlePresence(updates: subtitleBulk)
                 }
+                if !pass1.playCountUpdates.isEmpty {
+                    let playCountBulk = pass1.playCountUpdates.map { (videoId: $0.key, playCount: $0.value) }
+                    try? await videoRepo.updatePlayCount(updates: playCountBulk)
+                }
                 for (fieldId, byVideo) in pass1.customUpdates {
                     for (dbId, value) in byVideo {
                         try? await videoRepo.upsertCustomMetadata(videoId: dbId, fieldId: fieldId, value: value)
@@ -1172,8 +1185,12 @@ final class LibraryViewModel {
 
                 await MainActor.run {
                     guard let self else { return }
-                    // Reflect rating / title / subtitle updates in memory
-                    if !pass1.ratingUpdates.isEmpty || !pass1.titleUpdates.isEmpty || !pass1.subtitleUpdates.isEmpty {
+                    // Reflect rating / title / subtitle / play-count updates in memory
+                    if !pass1.ratingUpdates.isEmpty
+                        || !pass1.titleUpdates.isEmpty
+                        || !pass1.subtitleUpdates.isEmpty
+                        || !pass1.playCountUpdates.isEmpty
+                    {
                         var updated = self.videos
                         for i in updated.indices {
                             guard let id = updated[i].databaseId else { continue }
@@ -1186,8 +1203,23 @@ final class LibraryViewModel {
                             if let s = pass1.subtitleUpdates[id] {
                                 updated[i].subtitlePresence = s
                             }
+                            if let c = pass1.playCountUpdates[id] {
+                                updated[i].playCount = c
+                            }
                         }
                         self.videos = updated
+                    }
+                    if !pass1.resumeUpdates.isEmpty {
+                        var byPath: [String: Double] = [:]
+                        byPath.reserveCapacity(pass1.resumeUpdates.count)
+                        for video in self.videos {
+                            guard let id = video.databaseId,
+                                  let seconds = pass1.resumeUpdates[id]
+                            else { continue }
+                            byPath[video.filePath] = seconds
+                        }
+                        PlaybackPositionStore.saveSecondsBatch(byPath)
+                        self.notifyResumePositionsChanged()
                     }
                     for (fieldId, byVideo) in pass1.customUpdates {
                         for (dbId, value) in byVideo {

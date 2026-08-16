@@ -223,6 +223,19 @@ struct VideoRepository {
         }
     }
 
+    /// Bulk set of play counts (Import Metadata). Does not touch `lastPlayed`.
+    func updatePlayCount(updates: [(videoId: Int64, playCount: Int)]) async throws {
+        guard !updates.isEmpty else { return }
+        try await dbPool.write { db in
+            for (id, count) in updates {
+                try db.execute(
+                    sql: "UPDATE video SET playCount = ? WHERE id = ?",
+                    arguments: [count, id]
+                )
+            }
+        }
+    }
+
     func updateTitle(videoId: Int64, title: String) async throws {
         try await dbPool.write { db in
             try db.execute(

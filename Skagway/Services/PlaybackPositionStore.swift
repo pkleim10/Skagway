@@ -19,7 +19,15 @@ enum PlaybackPositionStore {
     }
 
     static func saveSeconds(_ seconds: Double, filePath: String) {
-        cache[filePath] = seconds
+        saveSecondsBatch([filePath: seconds])
+    }
+
+    /// Write many paths in one UserDefaults round-trip (Import Metadata).
+    static func saveSecondsBatch(_ updates: [String: Double]) {
+        guard !updates.isEmpty else { return }
+        for (path, seconds) in updates {
+            cache[path] = seconds
+        }
         defaults.set(cache, forKey: key)
     }
 

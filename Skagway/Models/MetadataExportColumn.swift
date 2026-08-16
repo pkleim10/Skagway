@@ -75,7 +75,7 @@ struct MetadataExportColumn: Identifiable, Equatable, Sendable {
 enum MetadataExportColumnKind: Int, CaseIterable, Comparable, Sendable {
     /// Path / Content Fingerprint — used to find videos; not written.
     case matchKey = 0
-    /// Rating, Tags, custom fields — written by Import Metadata.
+    /// Rating, Tags, Title, Subtitles, Plays, Resume Position, custom fields — written by Import Metadata.
     case importable = 1
     /// Size, duration, codec, … — informational; Import Metadata ignores.
     case exportOnly = 2
@@ -128,7 +128,7 @@ enum MetadataExportColumnRegistry {
         .init(id: "lastPlayed", label: "Last Played", defaultIncluded: false),
         .init(id: "hasSubtitles", label: "Subtitles", defaultIncluded: false),
         .init(id: "contentFingerprint", label: "Content Fingerprint", defaultIncluded: false),
-        .init(id: "resumePositionSeconds", label: "Resume Position (seconds)", defaultIncluded: false),
+        .init(id: "resumePositionSeconds", label: "Resume Position (seconds)", defaultIncluded: true),
         .init(id: "isCorrupt", label: "Corrupt", defaultIncluded: false),
         .init(id: "isMissing", label: "Missing File", defaultIncluded: false),
         .init(id: "isDuplicate", label: "Duplicate", defaultIncluded: false),
@@ -138,8 +138,10 @@ enum MetadataExportColumnRegistry {
 
     static var builtinIDs: Set<String> { Set(builtins.map(\.id)) }
 
-    /// Columns Apply can write in v1.
-    static let writableColumnIDs: Set<String> = ["rating", "tags", "title", "hasSubtitles"]
+    /// Columns Import Metadata can write.
+    static let writableColumnIDs: Set<String> = [
+        "rating", "tags", "title", "hasSubtitles", "playCount", "resumePositionSeconds",
+    ]
 
     static func isWritableColumnID(_ id: String) -> Bool {
         if writableColumnIDs.contains(id) { return true }

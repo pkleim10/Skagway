@@ -343,6 +343,81 @@ final class MetadataApplyTests: XCTestCase {
         XCTAssertEqual(result.updatedVideoCount, 1)
     }
 
+    func testPass1_playCountAndResume() throws {
+        XCTAssertEqual(MetadataExportColumnRegistry.kind(forColumnID: "playCount"), .importable)
+        XCTAssertEqual(MetadataExportColumnRegistry.kind(forColumnID: "resumePositionSeconds"), .importable)
+        XCTAssertEqual(MetadataExportColumnRegistry.kind(forColumnID: "lastPlayed"), .exportOnly)
+
+        let video = sampleVideo(id: 1, path: "/a.mp4", fp: nil, rating: 0, playCount: 2)
+        let index = MetadataApplier.buildIndex(
+            videos: [video],
+            tagsByVideoId: [:],
+            customByVideoId: [:],
+            customFieldDefinitions: [],
+            resumeSecondsByVideoId: [1: 12.5]
+        )
+        let rows = [
+            MetadataApplyRow(lineNumber: 2, values: [
+                "filePath": "/a.mp4",
+                "playCount": "7",
+                "resumePositionSeconds": "45.25",
+            ]),
+        ]
+        let result = try MetadataApplier.pass1(
+            rows: rows,
+            resolvedColumnIDs: ["filePath", "playCount", "resumePositionSeconds"],
+            skippedUnknownColumns: [],
+            index: index
+        )
+        XCTAssertEqual(result.playCountUpdates[1], 7)
+        XCTAssertEqual(result.resumeUpdates[1], 45.25)
+        XCTAssertTrue(result.ignoredReadOnlyColumns.isEmpty)
+        XCTAssertEqual(result.updatedVideoCount, 1)
+    }
+
+    func testPass1_playCountResumeEmptyIdenticalAndInvalid() throws {
+        let video = sampleVideo(id: 1, path: "/a.mp4", fp: nil, rating: 0, playCount: 4)
+        let index = MetadataApplier.buildIndex(
+            videos: [video],
+            tagsByVideoId: [:],
+            customByVideoId: [:],
+            customFieldDefinitions: [],
+            resumeSecondsByVideoId: [1: 10]
+        )
+        let rows = [
+            MetadataApplyRow(lineNumber: 2, values: [
+                "filePath": "/a.mp4",
+                "playCount": "4",
+                "resumePositionSeconds": "10",
+            ]),
+            MetadataApplyRow(lineNumber: 3, values: [
+                "filePath": "/a.mp4",
+                "playCount": "",
+                "resumePositionSeconds": "",
+            ]),
+            MetadataApplyRow(lineNumber: 4, values: [
+                "filePath": "/a.mp4",
+                "playCount": "-1",
+                "resumePositionSeconds": "nope",
+            ]),
+            MetadataApplyRow(lineNumber: 5, values: [
+                "filePath": "/a.mp4",
+                "playCount": "3.0",
+            ]),
+        ]
+        let result = try MetadataApplier.pass1(
+            rows: rows,
+            resolvedColumnIDs: ["filePath", "playCount", "resumePositionSeconds"],
+            skippedUnknownColumns: [],
+            index: index
+        )
+        XCTAssertTrue(result.playCountUpdates[1] == 3)
+        XCTAssertTrue(result.resumeUpdates.isEmpty)
+        XCTAssertTrue(result.rowErrors.contains(where: { $0.contains("invalid play count") }))
+        XCTAssertTrue(result.rowErrors.contains(where: { $0.contains("invalid resume position") }))
+        XCTAssertEqual(result.updatedVideoCount, 1)
+    }
+
     func testPass2_collectsUnmatchedOnly() {
         let video = sampleVideo(id: 1, path: "/a.mp4", fp: nil, rating: 0)
         let index = MetadataApplier.buildIndex(
@@ -360,7 +435,7 @@ final class MetadataApplyTests: XCTestCase {
         XCTAssertEqual(unmatched[0].filePath, "/missing.mp4")
     }
 
-    private func sampleVideo(id: Int64, path: String, fp: String?, rating: Int) -> Video {
+    private func sampleVideo(id: Int64, path: String, fp: String?, rating: Int, playCount: Int = 0) -> Video {
         Video(
             databaseId: id,
             filePath: path,
@@ -376,7 +451,7 @@ final class MetadataApplyTests: XCTestCase {
             rating: rating,
             thumbnailPath: nil,
             lastPlayed: nil,
-            playCount: 0,
+            playCount: playCount,
             subtitlePresence: .none,
             contentFingerprint: fp
         )

@@ -18,6 +18,10 @@ struct MetadataApplyPass1Result: Sendable {
     var subtitleUpdates: [Int64: SubtitlePresence]
     /// videoDatabaseId → tag names to merge (add)
     var tagMerges: [Int64: [String]]
+    /// videoDatabaseId → new play count (set, not increment)
+    var playCountUpdates: [Int64: Int]
+    /// videoDatabaseId → resume position seconds (written to `PlaybackPositionStore` on the matched path)
+    var resumeUpdates: [Int64: Double]
     var rowErrors: [String]
 }
 
@@ -51,13 +55,16 @@ enum MetadataApplier {
         var tagsByVideoId: [Int64: [Tag]]
         var customByVideoId: [Int64: [UUID: String]]
         var customFields: [UUID: CustomMetadataFieldDefinition]
+        /// Current resume seconds keyed by video database id (from `PlaybackPositionStore`).
+        var resumeSecondsByVideoId: [Int64: Double]
     }
 
     static func buildIndex(
         videos: [Video],
         tagsByVideoId: [Int64: [Tag]],
         customByVideoId: [Int64: [UUID: String]],
-        customFieldDefinitions: [CustomMetadataFieldDefinition]
+        customFieldDefinitions: [CustomMetadataFieldDefinition],
+        resumeSecondsByVideoId: [Int64: Double] = [:]
     ) -> LibraryIndex {
         var byPath: [String: Video] = [:]
         var byFingerprint: [String: [Video]] = [:]
@@ -72,7 +79,8 @@ enum MetadataApplier {
             byFingerprint: byFingerprint,
             tagsByVideoId: tagsByVideoId,
             customByVideoId: customByVideoId,
-            customFields: Dictionary(uniqueKeysWithValues: customFieldDefinitions.map { ($0.id, $0) })
+            customFields: Dictionary(uniqueKeysWithValues: customFieldDefinitions.map { ($0.id, $0) }),
+            resumeSecondsByVideoId: resumeSecondsByVideoId
         )
     }
 
@@ -102,6 +110,8 @@ enum MetadataApplier {
         var titleUpdates: [Int64: String] = [:]
         var subtitleUpdates: [Int64: SubtitlePresence] = [:]
         var tagMerges: [Int64: [String]] = [:]
+        var playCountUpdates: [Int64: Int] = [:]
+        var resumeUpdates: [Int64: Double] = [:]
         var rowErrors: [String] = []
 
         for row in rows {
@@ -167,6 +177,36 @@ enum MetadataApplier {
                 }
             }
 
+            if let raw = row.values["playCount"] {
+                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    if let count = parseNonNegativeInt(trimmed) {
+                        if video.playCount != count {
+                            playCountUpdates[dbId] = count
+                            didUpdate = true
+                        }
+                    } else {
+                        rowErrors.append("Line \(row.lineNumber): invalid play count “\(trimmed)”")
+                    }
+                }
+            }
+
+            if let raw = row.values["resumePositionSeconds"] {
+                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    if let seconds = Double(trimmed), seconds.isFinite, seconds >= 0 {
+                        let current = index.resumeSecondsByVideoId[dbId]
+                        let isSame = current.map { abs($0 - seconds) < 0.0005 } ?? false
+                        if !isSame {
+                            resumeUpdates[dbId] = seconds
+                            didUpdate = true
+                        }
+                    } else {
+                        rowErrors.append("Line \(row.lineNumber): invalid resume position “\(trimmed)”")
+                    }
+                }
+            }
+
             for (columnId, raw) in row.values {
                 guard let fieldUUID = MetadataExportColumn.customFieldUUID(fromColumnId: columnId) else { continue }
                 guard index.customFields[fieldUUID] != nil else { continue }
@@ -212,6 +252,8 @@ enum MetadataApplier {
             titleUpdates: titleUpdates,
             subtitleUpdates: subtitleUpdates,
             tagMerges: tagMerges,
+            playCountUpdates: playCountUpdates,
+            resumeUpdates: resumeUpdates,
             rowErrors: rowErrors
         )
     }
@@ -261,5 +303,14 @@ enum MetadataApplier {
         raw.split(separator: Character(MetadataExportRowBuilder.tagsCSVSeparator), omittingEmptySubsequences: false)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+    }
+
+    /// Whole numbers only (`3`, `3.0`); rejects negatives and fractions.
+    private static func parseNonNegativeInt(_ raw: String) -> Int? {
+        if let n = Int(raw), n >= 0 { return n }
+        guard let d = Double(raw), d.isFinite, d >= 0, d.rounded() == d, d <= Double(Int.max) else {
+            return nil
+        }
+        return Int(d)
     }
 }
