@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.78.0 (build 988) - 2026-08-15
+
 - **Data Sources: Exclude Folder** — Hover a scanned folder and choose Exclude… to skip a subfolder (and its contents) during Scan, Scan for New Videos, Add Folder, and dropped files. Excludes nest under the deepest matching include; removing an include deletes excludes that no longer sit under any source. The source folder itself cannot be excluded. Videos already in the library are left alone.
 - **Import Metadata writes Plays and Resume Position** — Those columns are now importable: play count is set (not incremented), and resume seconds are restored on the matched video’s current path. Empty cells still leave the current value alone. Last Played stays export-only.
 
