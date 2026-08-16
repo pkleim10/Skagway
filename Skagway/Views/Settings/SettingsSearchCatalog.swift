@@ -178,9 +178,9 @@ enum SettingsSearchCatalog {
         ),
         .init(
             id: "dataSources.excludedFolders",
-            title: "Excluded Folders",
+            title: "Exclude a subfolder",
             category: .dataSources,
-            keywords: ["data sources", "scan", "exclude", "skip", "ignore", "exclude folder"]
+            keywords: ["data sources", "scan", "exclude", "skip", "ignore", "exclude folder", "hover"]
         ),
 
         // File Ext

@@ -41,7 +41,6 @@ struct SettingsView: View {
     @State private var hoveredDataSourceId: Int64?
     @State private var excludedFolders: [ExcludedFolder] = []
     @State private var hoveredExcludedFolderId: Int64?
-    @State private var dataSourcesLoading = false
 
     /// Tools sheet (FFmpeg path via `LibraryViewModel`).
     @State private var showingFFmpegFilePicker = false
@@ -628,71 +627,18 @@ struct SettingsView: View {
         return VStack(alignment: .leading, spacing: 20) {
             sectionBlock(title: "Folders") {
                 settingsCard {
-                    if dataSources.isEmpty && !dataSourcesLoading {
-                        VStack(spacing: 6) {
-                            Image(systemName: "folder.badge.questionmark")
-                                .font(.title2)
-                                .foregroundStyle(Color.secondary)
-                            Text("No data sources")
-                                .foregroundStyle(Color.secondary)
-                            Text("Add folders to watch for video files")
-                                .font(.caption)
-                                .foregroundStyle(Color.secondary)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 16)
-                    } else {
-                        ForEach(Array(dataSources.enumerated()), id: \.element.id) { index, source in
-                            if index > 0 { cardSeparator }
-                            dataSourceRow(source, repository: repository, excludeRepo: excludeRepo)
-                        }
-                    }
-                }
-            }
-
-            sectionBlock(title: "Excluded Folders") {
-                settingsCard {
-                    if excludedFolders.isEmpty && !dataSourcesLoading {
-                        VStack(spacing: 6) {
-                            Image(systemName: "folder.badge.minus")
-                                .font(.title2)
-                                .foregroundStyle(Color.secondary)
-                            Text("No excluded folders")
-                                .foregroundStyle(Color.secondary)
-                            Text("Excluded folders and their contents are skipped when scanning")
-                                .font(.caption)
-                                .foregroundStyle(Color.secondary)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 16)
-                    } else {
-                        ForEach(Array(excludedFolders.enumerated()), id: \.element.id) { index, folder in
-                            if index > 0 { cardSeparator }
-                            excludedFolderRow(folder, repository: excludeRepo)
-                        }
-                    }
-                }
-            }
-
-            sectionBlock(title: "Manage") {
-                settingsCard {
                     describedTrailingRow(
-                        title: "Folders",
-                        description: "Folders that Skagway will scan when you import. Hover a folder and click Remove to drop it from the list (files on disk are not deleted)."
+                        title: "Scan these folders",
+                        description: "Used when you import or scan for new videos. Hover a folder to show it in Finder, exclude a subfolder from scans, or remove it from the list (files on disk are not deleted). Excluded subfolders appear under the folder they belong to."
                     ) {
                         Button("Add Folder…") {
                             addDataSourceFolder(repository: repository)
                         }
                     }
-                    cardSeparator
-                    describedTrailingRow(
-                        title: "Excluded folders",
-                        description: "Skip these folders (and everything inside them) during Scan, Scan for New Videos, Add Folder, and dropped files. Videos already in the library are not removed."
-                    ) {
-                        Button("Exclude Folder…") {
-                            addExcludedFolder(repository: excludeRepo)
+                    if !dataSources.isEmpty {
+                        ForEach(dataSources) { source in
+                            cardSeparator
+                            dataSourceGroup(source, repository: repository, excludeRepo: excludeRepo)
                         }
                     }
                 }
@@ -700,6 +646,23 @@ struct SettingsView: View {
         }
         .task {
             await loadDataSources(repository: repository, excludeRepo: excludeRepo)
+        }
+    }
+
+    @ViewBuilder
+    private func dataSourceGroup(
+        _ source: DataSource,
+        repository: DataSourceRepository,
+        excludeRepo: ExcludedFolderRepository
+    ) -> some View {
+        dataSourceRow(source, repository: repository, excludeRepo: excludeRepo)
+        ForEach(ExcludedFolderMatcher.excludes(
+            ownedBy: source,
+            from: excludedFolders,
+            sources: dataSources
+        )) { folder in
+            cardSeparator
+            excludedFolderRow(folder, repository: excludeRepo)
         }
     }
 
@@ -735,7 +698,7 @@ struct SettingsView: View {
                 .background(Color.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
 
                 Button("Exclude…") {
-                    addExcludedFolder(repository: excludeRepo, startingAt: source.url)
+                    addExcludedFolder(of: source, repository: excludeRepo)
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, 10)
@@ -809,7 +772,8 @@ struct SettingsView: View {
                     .foregroundStyle(Color.secondary)
             }
         }
-        .padding(.horizontal, 14)
+        .padding(.leading, 36)
+        .padding(.trailing, 14)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
@@ -854,39 +818,54 @@ struct SettingsView: View {
         }
     }
 
-    private func addExcludedFolder(repository: ExcludedFolderRepository, startingAt startURL: URL? = nil) {
+    private func addExcludedFolder(of source: DataSource, repository: ExcludedFolderRepository) {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = true
-        panel.message = "Select folders to skip when scanning"
+        panel.message = "Select a subfolder of “\(source.name)” to skip when scanning"
         panel.prompt = "Exclude"
-        if let startURL {
-            panel.directoryURL = startURL
-        }
+        panel.directoryURL = source.url
 
-        if panel.runModal() == .OK {
-            Task {
-                for url in panel.urls {
-                    let path = ExcludedFolderMatcher.normalize(url.path)
-                    let exists = (try? await repository.exists(folderPath: path)) ?? false
-                    if !exists {
-                        let folder = ExcludedFolder(
-                            folderPath: path,
-                            name: url.lastPathComponent,
-                            dateAdded: Date()
-                        )
-                        try? await repository.insert(folder)
-                    }
+        guard panel.runModal() == .OK else { return }
+
+        Task {
+            var rejected: [String] = []
+            for url in panel.urls {
+                let path = ExcludedFolderMatcher.normalize(url.path)
+                guard ExcludedFolderMatcher.isValidExclusion(path: path, ofSource: source.folderPath) else {
+                    rejected.append(url.lastPathComponent)
+                    continue
                 }
-                if let pool = appState.dbManager?.dbPool {
-                    await loadDataSources(
-                        repository: DataSourceRepository(dbPool: pool),
-                        excludeRepo: repository
+                let exists = (try? await repository.exists(folderPath: path)) ?? false
+                if !exists {
+                    let folder = ExcludedFolder(
+                        folderPath: path,
+                        name: url.lastPathComponent,
+                        dateAdded: Date()
                     )
+                    try? await repository.insert(folder)
                 }
             }
+            if let pool = appState.dbManager?.dbPool {
+                await loadDataSources(
+                    repository: DataSourceRepository(dbPool: pool),
+                    excludeRepo: repository
+                )
+            }
+            if !rejected.isEmpty {
+                presentInvalidExcludeAlert(sourceName: source.name, names: rejected)
+            }
         }
+    }
+
+    private func presentInvalidExcludeAlert(sourceName: String, names: [String]) {
+        let alert = NSAlert()
+        alert.messageText = "Those folders are not inside “\(sourceName)”"
+        alert.informativeText = "Exclude only applies to subfolders of a scanned folder. The folder itself cannot be excluded — remove it from the list instead.\n\nSkipped: \(names.joined(separator: ", "))"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     private func removeDataSource(
@@ -898,6 +877,11 @@ struct SettingsView: View {
             try? await repository.delete(source)
             if hoveredDataSourceId == source.id {
                 hoveredDataSourceId = nil
+            }
+            let remaining = (try? await repository.fetchAll()) ?? []
+            let excludes = (try? await excludeRepo.fetchAll()) ?? []
+            for orphan in ExcludedFolderMatcher.orphanedExcludes(from: excludes, sources: remaining) {
+                try? await excludeRepo.delete(orphan)
             }
             await loadDataSources(repository: repository, excludeRepo: excludeRepo)
         }
@@ -922,10 +906,8 @@ struct SettingsView: View {
         repository: DataSourceRepository,
         excludeRepo: ExcludedFolderRepository
     ) async {
-        dataSourcesLoading = true
         dataSources = (try? await repository.fetchAll()) ?? []
         excludedFolders = (try? await excludeRepo.fetchAll()) ?? []
-        dataSourcesLoading = false
     }
 
     // MARK: - Tools

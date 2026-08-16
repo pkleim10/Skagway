@@ -48,4 +48,35 @@ enum ExcludedFolderMatcher {
         let sep = path[path.index(path.startIndex, offsetBy: root.count)]
         return sep == "/"
     }
+
+    /// A scan exclude must be a descendant of the data source, not the source folder itself.
+    static func isValidExclusion(path: String, ofSource sourcePath: String) -> Bool {
+        let p = normalize(path)
+        let r = normalize(sourcePath)
+        guard p.caseInsensitiveCompare(r) != .orderedSame else { return false }
+        return isUnder(root: r, path: p)
+    }
+
+    /// Deepest data source whose folder contains `path` (path-length wins when sources nest).
+    static func owningSource(of path: String, among sources: [DataSource]) -> DataSource? {
+        let p = normalize(path)
+        return sources
+            .filter { isUnder(root: normalize($0.folderPath), path: p) }
+            .max { normalize($0.folderPath).count < normalize($1.folderPath).count }
+    }
+
+    static func excludes(
+        ownedBy source: DataSource,
+        from excludes: [ExcludedFolder],
+        sources: [DataSource]
+    ) -> [ExcludedFolder] {
+        excludes.filter { owningSource(of: $0.folderPath, among: sources)?.id == source.id }
+    }
+
+    static func orphanedExcludes(
+        from excludes: [ExcludedFolder],
+        sources: [DataSource]
+    ) -> [ExcludedFolder] {
+        excludes.filter { owningSource(of: $0.folderPath, among: sources) == nil }
+    }
 }
