@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+## 0.79.0 (build 999) - 2026-08-26
+
 - **Play All + album playlists** — **Play All** (⌘⇧P) plays the current view (album, smart collection, tags, search, etc.) from the first video. Auto-advance and **Loop Play All** only run during that session; stopping playback or playing a single video ends it. Loop is off by default (toolbar, View menu, Settings). Albums still keep a saved order with drag-and-drop; that reorder is album-only. Missing files are skipped.
 - **Album order + drag-and-drop** — Albums keep a saved playlist order. Viewing an album shows that order (Sort menu: Album Order) and an accent grip on each thumbnail. Click-and-drag a card (or list row) onto another to reorder — no special modifier key. Dropping on a later card inserts after it. Multi-select moves as a block. Added videos append at the end.
 
