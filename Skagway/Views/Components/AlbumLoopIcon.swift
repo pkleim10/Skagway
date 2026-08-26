@@ -2,45 +2,45 @@ import SwiftUI
 
 /// Outline of two semi-circular arrows chasing each other. Used for Loop Album in the header.
 struct AlbumLoopIcon: View {
+    /// Optical size of neighboring header SF Symbols (`shuffle`, `play.fill`).
+    private static let side: CGFloat = 13
+
     var body: some View {
-        // Size to the same slot as neighboring SF Symbols (shuffle, play).
-        ZStack {
-            Image(systemName: "circle")
-                .opacity(0)
-            Canvas { context, size in
-                let inset = max(1.1, min(size.width, size.height) * 0.08)
-                let rect = CGRect(origin: .zero, size: size).insetBy(dx: inset, dy: inset)
-                let radius = min(rect.width, rect.height) / 2
-                let center = CGPoint(x: rect.midX, y: rect.midY)
-                let lineWidth = max(1.25, radius * 0.26)
+        Canvas { context, size in
+            let inset = max(0.9, min(size.width, size.height) * 0.08)
+            let rect = CGRect(origin: .zero, size: size).insetBy(dx: inset, dy: inset)
+            let radius = min(rect.width, rect.height) / 2
+            let center = CGPoint(x: rect.midX, y: rect.midY)
+            let lineWidth = max(1.15, radius * 0.24)
 
-                var strokes = Path()
-                var heads = Path()
-                addChasingArrow(
-                    strokes: &strokes,
-                    heads: &heads,
-                    center: center,
-                    radius: radius,
-                    startDegrees: -32,
-                    endDegrees: 122
-                )
-                addChasingArrow(
-                    strokes: &strokes,
-                    heads: &heads,
-                    center: center,
-                    radius: radius,
-                    startDegrees: 148,
-                    endDegrees: 302
-                )
+            var strokes = Path()
+            var heads = Path()
+            addChasingArrow(
+                strokes: &strokes,
+                heads: &heads,
+                center: center,
+                radius: radius,
+                startDegrees: -32,
+                endDegrees: 122
+            )
+            addChasingArrow(
+                strokes: &strokes,
+                heads: &heads,
+                center: center,
+                radius: radius,
+                startDegrees: 148,
+                endDegrees: 302
+            )
 
-                context.stroke(
-                    strokes,
-                    with: .foreground,
-                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
-                )
-                context.fill(heads, with: .foreground)
-            }
+            context.stroke(
+                strokes,
+                with: .foreground,
+                style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+            )
+            context.fill(heads, with: .foreground)
         }
+        .frame(width: Self.side, height: Self.side)
+        .fixedSize()
         .accessibilityHidden(true)
     }
 }
