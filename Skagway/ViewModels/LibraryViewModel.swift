@@ -537,15 +537,23 @@ final class LibraryViewModel {
     var pendingBookmarkTitleFocusId: Int64?
 
     /// True while a video is playing in the resizable player. The player never reshapes the wall, so
-    /// this no longer needs a didSet (the full-screen-exit grid repaint lives in ContentView).
-    var isPlayingInline: Bool = false
+    /// this no longer needs a layout didSet (the full-screen-exit grid repaint lives in ContentView).
+    var isPlayingInline: Bool = false {
+        didSet {
+            if oldValue && !isPlayingInline {
+                isPlayAllSession = false
+            }
+        }
+    }
     /// Set before `isPlayingInline = true` on filmstrip tap; consumed when creating the inline player (Space leaves nil → start at 0).
     var pendingFilmstripSeekSeconds: Double?
     /// Set before `isPlayingInline = true` on ⌥-Space ("Play from Beginning"); consumed when creating the player to skip the saved resume position.
     var pendingIgnoreResumeOnNextStart: Bool = false
     var pendingAutoPlay: Bool = false
-    /// True while playlist-advancing so the Inspector's selection-change handler does not stop playback.
-    var isAdvancingAlbumPlaylist: Bool = false
+    /// True while queue-advancing so the Inspector's selection-change handler does not stop playback.
+    var isAdvancingPlayAllQueue: Bool = false
+    /// Play All session: auto-advance and loop apply only while this is true.
+    var isPlayAllSession: Bool = false
     /// Bumped when the inline player instance is replaced (playlist advance) so full-screen can retarget.
     private(set) var playbackItemEpoch: Int = 0
     func notifyPlaybackItemChanged() {
@@ -1688,7 +1696,7 @@ final class LibraryViewModel {
     private static let lastAppliedFilmstripRowsKey = "Skagway.lastAppliedFilmstripRows"
     private static let lastAppliedFilmstripColumnsKey = "Skagway.lastAppliedFilmstripColumns"
     private static let surpriseMeAutoPlaysKey = "Skagway.surpriseMeAutoPlays"
-    private static let albumPlaylistLoopsKey = "Skagway.albumPlaylistLoops"
+    private static let playAllLoopsKey = "Skagway.playAllLoops"
     private static let gridHoverPreviewEnabledKey = "Skagway.gridHoverPreviewEnabled"
     private static let playerFloatingWidthKey = "Skagway.playerFloatingWidth"
     private static let playerFloatingHeightKey = "Skagway.playerFloatingHeight"
@@ -1856,10 +1864,10 @@ final class LibraryViewModel {
         }
     }
 
-    /// When true, finishing the last album video starts the first one again. Album-only.
-    var albumPlaylistLoops: Bool = false {
+    /// When true, a Play All session wraps from the last video back to the first. Ignored unless Play All is running.
+    var playAllLoops: Bool = false {
         didSet {
-            UserDefaults.standard.set(albumPlaylistLoops, forKey: Self.albumPlaylistLoopsKey)
+            UserDefaults.standard.set(playAllLoops, forKey: Self.playAllLoopsKey)
         }
     }
 
@@ -2390,7 +2398,8 @@ final class LibraryViewModel {
         excludeCorrupt = defaults.bool(forKey: Self.excludeCorruptKey)
         confirmDeletions = defaults.object(forKey: Self.confirmDeletionsKey) as? Bool ?? true
         surpriseMeAutoPlays = defaults.object(forKey: Self.surpriseMeAutoPlaysKey) as? Bool ?? true
-        albumPlaylistLoops = defaults.bool(forKey: Self.albumPlaylistLoopsKey)
+        playAllLoops = defaults.object(forKey: Self.playAllLoopsKey) as? Bool
+            ?? defaults.bool(forKey: "Skagway.albumPlaylistLoops")
         gridHoverPreviewEnabled = defaults.object(forKey: Self.gridHoverPreviewEnabledKey) as? Bool ?? true
         if let w = defaults.object(forKey: Self.playerFloatingWidthKey) as? Double, w > 0,
            let h = defaults.object(forKey: Self.playerFloatingHeightKey) as? Double, h > 0 {
@@ -3627,18 +3636,18 @@ final class LibraryViewModel {
         scrollToVideoId = random.id
     }
 
-    /// Play the album from the first visible video, ignoring resume. No-op unless an album is selected.
-    func playAlbumFromStart() {
-        guard isViewingAlbum else { return }
+    /// Play the current filtered view from the first playable video, ignoring resume.
+    func playAllFromStart() {
         guard let first = firstPlayableFilteredVideo() else { return }
-        selectedVideoIds = [first.id]
+        isPlayAllSession = true
         lastSelectedVideoId = first.id
         scrollToVideoId = first.id
         pendingFilmstripSeekSeconds = nil
         pendingIgnoreResumeOnNextStart = true
         if isPlayingInline {
-            playAlbumSuccessor(first)
+            playQueueSuccessor(first)
         } else {
+            selectedVideoIds = [first.id]
             pendingAutoPlay = true
         }
     }
@@ -5699,11 +5708,9 @@ final class LibraryViewModel {
         recomputeFilteredVideos()
     }
 
-    /// Called when the current item finishes. If an album is the active filter, play the next
-    /// visible video from the beginning. At the end, loop to the first video when `albumPlaylistLoops`
-    /// is on; otherwise stay ended.
-    func advanceAlbumPlaylistIfNeeded() {
-        guard isViewingAlbum else { return }
+    /// Called when the current item finishes. Auto-advance and loop only run during a Play All session.
+    func advancePlayAllIfNeeded() {
+        guard isPlayAllSession else { return }
         let currentPath = playback.currentVideo?.filePath
             ?? lastSelectedVideoId
             ?? selectedVideoIds.first
@@ -5716,24 +5723,27 @@ final class LibraryViewModel {
         while nextIdx < filteredVideos.count {
             let next = filteredVideos[nextIdx]
             if FileManager.default.fileExists(atPath: next.filePath) {
-                playAlbumSuccessor(next)
+                playQueueSuccessor(next)
                 return
             }
             nextIdx += 1
         }
 
-        guard albumPlaylistLoops, let first = firstPlayableFilteredVideo() else { return }
-        playAlbumSuccessor(first)
+        if playAllLoops, let first = firstPlayableFilteredVideo() {
+            playQueueSuccessor(first)
+            return
+        }
+        isPlayAllSession = false
     }
 
-    private func playAlbumSuccessor(_ video: Video) {
-        isAdvancingAlbumPlaylist = true
+    private func playQueueSuccessor(_ video: Video) {
+        isAdvancingPlayAllQueue = true
         pendingFilmstripSeekSeconds = nil
         pendingIgnoreResumeOnNextStart = true
         selectedVideoIds = [video.id]
         playback.start(video: video, at: 0, ignoreResume: true)
         DispatchQueue.main.async { [weak self] in
-            self?.isAdvancingAlbumPlaylist = false
+            self?.isAdvancingPlayAllQueue = false
         }
     }
 

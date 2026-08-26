@@ -329,29 +329,29 @@ private struct LibraryContentView: View {
             .keyboardShortcut("r", modifiers: [.command, .shift])
             .keyboardShortcut("s", modifiers: [.command, .shift])
 
-            if vm.isViewingAlbum {
-                Button {
-                    vm.playAlbumFromStart()
-                } label: {
-                    Image(systemName: "play.fill")
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.appTextSecondary)
-                .disabled(vm.filteredVideos.isEmpty)
-                .help("Play All — start this album from the first video (⌘⇧P)")
-                .keyboardShortcut("p", modifiers: [.command, .shift])
-
-                Button {
-                    vm.albumPlaylistLoops.toggle()
-                } label: {
-                    Image(systemName: "repeat")
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(vm.albumPlaylistLoops ? Color.appAccent : Color.appTextSecondary)
-                .help(vm.albumPlaylistLoops
-                      ? "Loop Album — on; after the last video, start again from the first"
-                      : "Loop Album — off; the last video ends without restarting")
+            Button {
+                vm.playAllFromStart()
+            } label: {
+                Image(systemName: "play.fill")
             }
+            .buttonStyle(.plain)
+            .foregroundStyle(vm.isPlayAllSession ? Color.appAccent : Color.appTextSecondary)
+            .disabled(vm.filteredVideos.isEmpty)
+            .help(vm.isPlayAllSession
+                  ? "Play All — playing this view in order (⌘⇧P restarts from the first video)"
+                  : "Play All — play this view from the first video (⌘⇧P)")
+            .keyboardShortcut("p", modifiers: [.command, .shift])
+
+            Button {
+                vm.playAllLoops.toggle()
+            } label: {
+                Image(systemName: "repeat")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(vm.playAllLoops ? Color.appAccent : Color.appTextSecondary)
+            .help(vm.playAllLoops
+                  ? "Loop Play All — on; after the last video, start again from the first"
+                  : "Loop Play All — off; Play All stops after the last video")
 
             Divider().frame(height: 16)
 

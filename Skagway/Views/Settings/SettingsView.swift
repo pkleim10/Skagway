@@ -432,9 +432,9 @@ struct SettingsView: View {
                 )
                 cardSeparator
                 describedToggleRow(
-                    title: "Loop album playlist",
-                    description: "When an album is selected, finishing the last video starts the first one again. Also available as a toolbar toggle while viewing an album.",
-                    isOn: $viewModel.albumPlaylistLoops
+                    title: "Loop Play All",
+                    description: "While Play All is running, finishing the last video in the current view starts the first one again. Has no effect when you play a single video. Also in the toolbar and View menu.",
+                    isOn: $viewModel.playAllLoops
                 )
                 cardSeparator
                 describedToggleRow(

@@ -519,7 +519,7 @@ final class InlinePlaybackController {
             PlaybackPositionStore.clear(filePath: video.filePath)
             viewModel.notifyResumePositionsChanged()
         }
-        viewModel.advanceAlbumPlaylistIfNeeded()
+        viewModel.advancePlayAllIfNeeded()
     }
 
     private func detachEndObserver() {

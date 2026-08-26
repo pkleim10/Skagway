@@ -89,7 +89,7 @@ struct CuratedWallInspector: View {
         .frame(minWidth: 300)
         .onChange(of: video?.filePath) { _, _ in
             // Selection changed: stop any in-progress playback and refresh hero assets.
-            if viewModel.isPlayingInline, !viewModel.isAdvancingAlbumPlaylist {
+            if viewModel.isPlayingInline, !viewModel.isAdvancingPlayAllQueue {
                 viewModel.isPlayingInline = false
             }
             loadCustomFieldValues()

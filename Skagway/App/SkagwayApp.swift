@@ -59,15 +59,14 @@ struct SkagwayApp: App {
                 .disabled(appState.libraryViewModel?.filteredVideos.isEmpty ?? true)
 
                 Button("Play All") {
-                    appState.libraryViewModel?.playAlbumFromStart()
+                    appState.libraryViewModel?.playAllFromStart()
                 }
                 .keyboardShortcut("p", modifiers: [.command, .shift])
-                .disabled(!(appState.libraryViewModel?.isViewingAlbum ?? false)
-                    || (appState.libraryViewModel?.filteredVideos.isEmpty ?? true))
+                .disabled(appState.libraryViewModel?.filteredVideos.isEmpty ?? true)
 
-                Toggle("Loop Album", isOn: Binding(
-                    get: { appState.libraryViewModel?.albumPlaylistLoops ?? false },
-                    set: { appState.libraryViewModel?.albumPlaylistLoops = $0 }
+                Toggle("Loop Play All", isOn: Binding(
+                    get: { appState.libraryViewModel?.playAllLoops ?? false },
+                    set: { appState.libraryViewModel?.playAllLoops = $0 }
                 ))
                 .disabled(!appState.hasLibrary)
 
