@@ -2,34 +2,40 @@ import XCTest
 @testable import Skagway
 
 final class AlbumPlaylistOrderTests: XCTestCase {
-    func testMoveSingleBeforeLaterItem() {
-        let result = AlbumPlaylistOrder.moving([1], before: 3, in: [1, 2, 3, 4])
-        XCTAssertEqual(result, [2, 1, 3, 4])
+    func testDropOnNextItemMovesAfter() {
+        // Dragging onto the neighbor used to be a no-op with insert-before.
+        XCTAssertEqual(AlbumPlaylistOrder.moving([1], onto: 2, in: [1, 2, 3, 4]), [2, 1, 3, 4])
     }
 
-    func testMoveSingleBeforeEarlierItem() {
-        let result = AlbumPlaylistOrder.moving([3], before: 1, in: [1, 2, 3, 4])
-        XCTAssertEqual(result, [3, 1, 2, 4])
+    func testDropOnLaterItemMovesAfter() {
+        XCTAssertEqual(AlbumPlaylistOrder.moving([1], onto: 3, in: [1, 2, 3, 4]), [2, 3, 1, 4])
+    }
+
+    func testDropOnLastItemMovesToEnd() {
+        XCTAssertEqual(AlbumPlaylistOrder.moving([1], onto: 4, in: [1, 2, 3, 4]), [2, 3, 4, 1])
+    }
+
+    func testDropOnEarlierItemMovesBefore() {
+        XCTAssertEqual(AlbumPlaylistOrder.moving([3], onto: 1, in: [1, 2, 3, 4]), [3, 1, 2, 4])
+    }
+
+    func testDropOnPreviousItemSwaps() {
+        XCTAssertEqual(AlbumPlaylistOrder.moving([3], onto: 2, in: [1, 2, 3, 4]), [1, 3, 2, 4])
     }
 
     func testMoveBlockPreservesRelativeOrder() {
-        let result = AlbumPlaylistOrder.moving([3, 1], before: 4, in: [1, 2, 3, 4])
-        XCTAssertEqual(result, [2, 1, 3, 4])
+        XCTAssertEqual(AlbumPlaylistOrder.moving([1, 3], onto: 4, in: [1, 2, 3, 4]), [2, 4, 1, 3])
     }
 
     func testDropOnMovedItemIsNoOp() {
-        XCTAssertNil(AlbumPlaylistOrder.moving([1, 2], before: 2, in: [1, 2, 3]))
+        XCTAssertNil(AlbumPlaylistOrder.moving([1, 2], onto: 2, in: [1, 2, 3]))
     }
 
     func testMissingTargetIsNoOp() {
-        XCTAssertNil(AlbumPlaylistOrder.moving([1], before: 99, in: [1, 2, 3]))
+        XCTAssertNil(AlbumPlaylistOrder.moving([1], onto: 99, in: [1, 2, 3]))
     }
 
     func testEmptyMovingIsNoOp() {
-        XCTAssertNil(AlbumPlaylistOrder.moving([], before: 2, in: [1, 2, 3]))
-    }
-
-    func testAlreadyInPlaceIsNoOp() {
-        XCTAssertNil(AlbumPlaylistOrder.moving([2], before: 3, in: [1, 2, 3]))
+        XCTAssertNil(AlbumPlaylistOrder.moving([], onto: 2, in: [1, 2, 3]))
     }
 }

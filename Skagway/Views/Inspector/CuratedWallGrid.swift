@@ -120,12 +120,7 @@ struct CuratedWallGrid: View {
                         )
                         .id(video.id)
                         .contentShape(Rectangle())
-                        .onTapGesture {
-                            handleSelection(video)
-                        }
-                        .simultaneousGesture(TapGesture(count: 2).onEnded {
-                            viewModel.isPlayingInline = true
-                        })
+                        .modifier(albumSelectionGestures(for: video))
                         .onDrop(of: [.fileURL], isTargeted: Binding(
                             get: { posterDropTargetId == video.id },
                             set: { hovering in
@@ -408,6 +403,24 @@ struct CuratedWallGrid: View {
                 Text("\(viewModel.pendingDeleteIds.count) files will be moved to Trash.")
             }
         }
+    }
+
+    private struct AlbumSelectionGestures: ViewModifier {
+        let onSelect: () -> Void
+        let onPlay: () -> Void
+
+        func body(content: Content) -> some View {
+            content
+                .simultaneousGesture(TapGesture().onEnded(onSelect))
+                .simultaneousGesture(TapGesture(count: 2).onEnded(onPlay))
+        }
+    }
+
+    private func albumSelectionGestures(for video: Video) -> AlbumSelectionGestures {
+        AlbumSelectionGestures(
+            onSelect: { handleSelection(video) },
+            onPlay: { viewModel.isPlayingInline = true }
+        )
     }
 
     private func handleSelection(_ video: Video) {

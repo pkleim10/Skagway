@@ -5662,7 +5662,7 @@ final class LibraryViewModel {
         let movingDb = movingPaths.compactMap { videosByPath[$0]?.databaseId }
         guard let targetDb = videosByPath[ontoPathId]?.databaseId else { return }
         let current = cachedAlbumVideoIds[albumId] ?? []
-        guard let newOrder = AlbumPlaylistOrder.moving(movingDb, before: targetDb, in: current) else { return }
+        guard let newOrder = AlbumPlaylistOrder.moving(movingDb, onto: targetDb, in: current) else { return }
         try? await collectionRepo.replaceAlbumOrder(for: albumId, videoIds: newOrder)
         cachedAlbumVideoIds[albumId] = newOrder
         usesAlbumManualOrder = true
