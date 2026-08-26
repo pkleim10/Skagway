@@ -344,7 +344,7 @@ private struct LibraryContentView: View {
                 Button {
                     vm.albumPlaylistLoops.toggle()
                 } label: {
-                    Image(systemName: vm.albumPlaylistLoops ? "repeat.circle.fill" : "repeat.circle")
+                    AlbumLoopIcon()
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(vm.albumPlaylistLoops ? Color.appAccent : Color.appTextSecondary)
