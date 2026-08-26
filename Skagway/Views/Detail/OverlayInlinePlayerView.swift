@@ -81,7 +81,7 @@ struct OverlayInlinePlayerView: View {
             // Match traffic-light leading inset + cluster + gap (lights drawn in FloatingPlayerPanel).
             Color.clear
                 .frame(width: PlayerTrafficLights.leadingChromeWidth)
-            Text(video.displayTitle)
+            Text((playback.currentVideo ?? video).displayTitle)
                 // 14pt / 30pt bar — 25% larger than the original 11pt / 24pt, matching the
                 // size-control buttons in FloatingPlayerPanel.
                 .font(.system(size: 14, weight: .medium))

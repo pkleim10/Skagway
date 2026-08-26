@@ -327,6 +327,35 @@ enum DatabaseMigration {
             }
         }
 
+        migrator.registerMigration("v20_albumSortIndex") { db in
+            // Albums are playlists: persist a stable per-album order. Existing memberships keep
+            // dateAdded order so current albums don't reshuffle under the user.
+            try db.alter(table: "collection_video") { t in
+                t.add(column: "sortIndex", .integer).notNull().defaults(to: 0)
+            }
+            try db.execute(sql: """
+                WITH numbered AS (
+                    SELECT videoId, collectionId,
+                           (ROW_NUMBER() OVER (
+                               PARTITION BY collectionId
+                               ORDER BY dateAdded ASC, videoId ASC
+                           ) - 1) AS idx
+                    FROM collection_video
+                )
+                UPDATE collection_video
+                SET sortIndex = (
+                    SELECT idx FROM numbered
+                    WHERE numbered.videoId = collection_video.videoId
+                      AND numbered.collectionId = collection_video.collectionId
+                )
+                """)
+            try db.create(
+                index: "idx_collection_video_collectionId_sortIndex",
+                on: "collection_video",
+                columns: ["collectionId", "sortIndex"]
+            )
+        }
+
         try migrator.migrate(pool)
     }
 }

@@ -129,13 +129,15 @@ struct CollectionRepository {
 
     // MARK: - Album membership (manual collections)
 
-    /// All album memberships: collectionId → set of video database ids.
-    func fetchAllAlbumMemberships() async throws -> [Int64: Set<Int64>] {
+    /// All album memberships: collectionId → video database ids in playlist order.
+    func fetchAllAlbumMemberships() async throws -> [Int64: [Int64]] {
         try await dbPool.read { db in
-            let rows = try CollectionVideo.fetchAll(db)
-            var map: [Int64: Set<Int64>] = [:]
+            let rows = try CollectionVideo
+                .order(Column("collectionId").asc, Column("sortIndex").asc, Column("videoId").asc)
+                .fetchAll(db)
+            var map: [Int64: [Int64]] = [:]
             for row in rows {
-                map[row.collectionId, default: []].insert(row.videoId)
+                map[row.collectionId, default: []].append(row.videoId)
             }
             return map
         }
@@ -145,9 +147,27 @@ struct CollectionRepository {
         guard !videoIds.isEmpty else { return }
         let now = Date()
         try await dbPool.write { db in
-            for videoId in videoIds {
-                var row = CollectionVideo(videoId: videoId, collectionId: collectionId, dateAdded: now)
+            let existing = try Int64.fetchAll(
+                db,
+                sql: "SELECT videoId FROM collection_video WHERE collectionId = ?",
+                arguments: [collectionId]
+            )
+            let existingSet = Set(existing)
+            let maxIndex = try Int.fetchOne(
+                db,
+                sql: "SELECT COALESCE(MAX(sortIndex), -1) FROM collection_video WHERE collectionId = ?",
+                arguments: [collectionId]
+            ) ?? -1
+            var nextIndex = maxIndex + 1
+            for videoId in videoIds where !existingSet.contains(videoId) {
+                var row = CollectionVideo(
+                    videoId: videoId,
+                    collectionId: collectionId,
+                    dateAdded: now,
+                    sortIndex: nextIndex
+                )
                 try row.insert(db, onConflict: .ignore)
+                nextIndex += 1
             }
         }
     }
@@ -163,15 +183,37 @@ struct CollectionRepository {
     }
 
     /// Replaces album membership with exactly `videoIds` (used when creating from selection).
+    /// `videoIds` order becomes the playlist order.
     func replaceAlbumMembership(for collectionId: Int64, videoIds: [Int64]) async throws {
         let now = Date()
         try await dbPool.write { db in
             try CollectionVideo
                 .filter(Column("collectionId") == collectionId)
                 .deleteAll(db)
-            for videoId in videoIds {
-                var row = CollectionVideo(videoId: videoId, collectionId: collectionId, dateAdded: now)
+            for (index, videoId) in videoIds.enumerated() {
+                var row = CollectionVideo(
+                    videoId: videoId,
+                    collectionId: collectionId,
+                    dateAdded: now,
+                    sortIndex: index
+                )
                 try row.insert(db)
+            }
+        }
+    }
+
+    /// Writes playlist order for an existing album. `videoIds` must be the full membership list.
+    func replaceAlbumOrder(for collectionId: Int64, videoIds: [Int64]) async throws {
+        try await dbPool.write { db in
+            for (index, videoId) in videoIds.enumerated() {
+                try db.execute(
+                    sql: """
+                        UPDATE collection_video
+                        SET sortIndex = ?
+                        WHERE collectionId = ? AND videoId = ?
+                        """,
+                    arguments: [index, collectionId, videoId]
+                )
             }
         }
     }

@@ -89,7 +89,9 @@ struct CuratedWallInspector: View {
         .frame(minWidth: 300)
         .onChange(of: video?.filePath) { _, _ in
             // Selection changed: stop any in-progress playback and refresh hero assets.
-            if viewModel.isPlayingInline { viewModel.isPlayingInline = false }
+            if viewModel.isPlayingInline, !viewModel.isAdvancingAlbumPlaylist {
+                viewModel.isPlayingInline = false
+            }
             loadCustomFieldValues()
             hero = nil
             filmstrip = nil

@@ -135,6 +135,13 @@ final class FullscreenInlinePlayerWindowController: NSObject, NSWindowDelegate {
         chromeView?.beginIdleCycle()
     }
 
+    /// Playlist advance replaces the `AVPlayer` instance; retarget the fullscreen view without
+    /// tearing down the window.
+    func updatePlayback(player: AVPlayer, title: String) {
+        playerView.player = player
+        window?.title = title
+    }
+
     private func embedFullSize(_ child: NSView, in parent: NSView) {
         child.translatesAutoresizingMaskIntoConstraints = true
         child.frame = parent.bounds

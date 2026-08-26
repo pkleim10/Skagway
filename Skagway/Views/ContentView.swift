@@ -214,18 +214,34 @@ private struct LibraryContentView: View {
         let isAscending = isCustomSort ? vm.customSortAscending : (vm.tableSortOrder.first?.order == .forward)
         // While shuffled, none of the built-in/custom sorts are actually "active" — show Random
         // in the label and skip the checkmarks below rather than pointing at stale prior state.
-        let sortLabel = vm.isRandomOrder ? "Random" : (currentCustomField?.name ?? currentBuiltinSort.displayName)
+        let sortLabel: String = {
+            if vm.isRandomOrder { return "Random" }
+            if vm.isShowingAlbumOrder { return "Album Order" }
+            return currentCustomField?.name ?? currentBuiltinSort.displayName
+        }()
         let sortableCustomFields = vm.customMetadataFieldDefinitions
             .filter { $0.valueType != .text }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
         return HStack(spacing: 4) {
             Menu {
+                if vm.isViewingAlbum {
+                    Button {
+                        vm.selectAlbumOrder()
+                    } label: {
+                        if vm.isShowingAlbumOrder {
+                            Label("Album Order", systemImage: "checkmark")
+                        } else {
+                            Text("Album Order")
+                        }
+                    }
+                    Divider()
+                }
                 ForEach(VideoSort.allCases) { sort in
                     Button {
                         vm.selectBuiltinSort(sort, ascending: isAscending)
                     } label: {
-                        if !isCustomSort && !vm.isRandomOrder && sort == currentBuiltinSort {
+                        if !isCustomSort && !vm.isRandomOrder && !vm.isShowingAlbumOrder && sort == currentBuiltinSort {
                             Label(sort.displayName, systemImage: "checkmark")
                         } else {
                             Text(sort.displayName)
@@ -238,7 +254,7 @@ private struct LibraryContentView: View {
                         Button {
                             vm.selectCustomSort(fieldId: field.id, ascending: isAscending)
                         } label: {
-                            if !vm.isRandomOrder && vm.customSortFieldId == field.id {
+                            if !vm.isRandomOrder && !vm.isShowingAlbumOrder && vm.customSortFieldId == field.id {
                                 Label(field.name, systemImage: "checkmark")
                             } else {
                                 Text(field.name)
@@ -255,8 +271,8 @@ private struct LibraryContentView: View {
             .menuIndicator(.hidden)
             .fixedSize()
 
-            // Ascending/descending has no meaning for a shuffled order.
-            if !vm.isRandomOrder {
+            // Ascending/descending has no meaning for a shuffled order or album playlist order.
+            if !vm.isRandomOrder && !vm.isShowingAlbumOrder {
                 Button {
                     if isCustomSort, let fieldId = vm.customSortFieldId {
                         vm.selectCustomSort(fieldId: fieldId, ascending: !isAscending)
@@ -660,6 +676,11 @@ private struct LibraryContentView: View {
                     vm.pendingFilmstripSeekSeconds = nil
                     vm.isPlayingInline = true
                 }
+            }
+            .onChange(of: vm.playbackItemEpoch) { _, _ in
+                guard vm.isPlayerFullScreen, let player = vm.playback.player else { return }
+                let title = vm.playback.currentVideo?.displayTitle ?? selectedVideo?.displayTitle ?? ""
+                fullScreenController?.updatePlayback(player: player, title: title)
             }
             // Enter/leave true full-screen by moving the *same* player into a borderless window.
             .onChange(of: vm.isPlayerFullScreen) { _, isFS in

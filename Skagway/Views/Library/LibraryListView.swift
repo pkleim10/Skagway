@@ -144,6 +144,7 @@ struct LibraryListView: View {
     @FocusState private var isRenameFocused: Bool
     @State private var scrollToRow: Int?
     @State private var thumbnailPopoverVideoId: String?
+    @State private var albumReorderTargetId: String?
 
     var body: some View {
         Table(
@@ -156,7 +157,7 @@ struct LibraryListView: View {
             // without touching the real value; a real column click still writes through normally,
             // which correctly exits random order via `tableSortOrder`'s own didSet.
             sortOrder: Binding(
-                get: { viewModel.isRandomOrder ? [] : viewModel.tableSortOrder },
+                get: { (viewModel.isRandomOrder || viewModel.isShowingAlbumOrder) ? [] : viewModel.tableSortOrder },
                 set: { viewModel.tableSortOrder = $0 }
             ),
             columnCustomization: $viewModel.columnCustomization
@@ -652,6 +653,27 @@ struct LibraryListView: View {
                 }
             }
         }
+        .overlay {
+            if albumReorderTargetId == video.id {
+                RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                    .strokeBorder(Color.appAccent, lineWidth: 2)
+                    .allowsHitTesting(false)
+            }
+        }
+        .modifier(AlbumCardReorderModifier(
+            enabled: viewModel.isViewingAlbum,
+            videoId: video.id,
+            title: video.displayTitle,
+            targetId: $albumReorderTargetId,
+            onReorder: { draggedId in
+                Task {
+                    await viewModel.reorderAlbumDrop(
+                        draggingPathId: draggedId,
+                        ontoPathId: video.id
+                    )
+                }
+            }
+        ))
     }
 
     private var ffmpegPath: String? { viewModel.resolvedFFmpegPath }

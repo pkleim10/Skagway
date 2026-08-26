@@ -103,23 +103,29 @@ final class LibraryViewModel {
     }
     var tableSortOrder: [KeyPathComparator<Video>] = [KeyPathComparator(\Video.dateAdded, order: .reverse)] {
         didSet {
-            // Any explicit sort action (column header click, sort menu) exits random order.
+            // Any explicit sort action (column header click, sort menu) exits random order
+            // and album playlist order.
             let wasRandomOrder = isRandomOrder
+            let leavingAlbumOrder = isShowingAlbumOrder
             isRandomOrder = false
             defer {
                 // The branches below only recompute when the *target* sort actually differs from
                 // what was active before — correct when coming from a real sort, but exiting random
-                // order needs a re-sort even if the picked sort happens to match whatever was
-                // active before the shuffle (e.g. sorted by Name, shuffled, then clicked Name
-                // again), since `filteredVideos` is still sitting in the stale shuffled order.
+                // order (or album order) needs a re-sort even if the picked sort happens to match
+                // whatever was active before (e.g. sorted by Name, shuffled, then clicked Name
+                // again), since `filteredVideos` is still sitting in the stale shuffled/album order.
                 // Deferred so it sees the branches' final state (e.g. `customSortFieldId`), not the
                 // value present when this didSet started.
-                if wasRandomOrder { recomputeFilteredVideos() }
+                if wasRandomOrder || leavingAlbumOrder { recomputeFilteredVideos() }
             }
 
             // Ignore programmatic updates from selectCustomSort (which sets a sentinel to show the caret)
             // and from loadPreferences (which must restore descending as saved).
             guard !_settingCustomSortOrder, !_loadingSortPreferences else { return }
+
+            if isViewingAlbum {
+                usesAlbumManualOrder = false
+            }
 
             let ascending = tableSortOrder.first?.order == .forward
 
@@ -189,6 +195,11 @@ final class LibraryViewModel {
     /// "Surprise Me", shuffling is a "for right now" action, not a durable preference.
     var isRandomOrder: Bool = false
 
+    /// When viewing an album, show the album's playlist order instead of the library sort.
+    /// Cleared by picking a sort from the menu / column header; restored by drag-reorder or
+    /// choosing **Album Order**. Entering an album turns it back on.
+    var usesAlbumManualOrder: Bool = true
+
     /// Per-video random rank backing the current shuffle, keyed by `filePath` (matches `Video.id`).
     /// Regenerated fresh on every `shuffleOrder()` call so the order stays *stable* across the many
     /// unrelated `recomputeFilteredVideos()` calls that happen during normal use (selection, tag
@@ -222,11 +233,30 @@ final class LibraryViewModel {
     }
     var sidebarFilter: SidebarFilter? = .all {
         didSet {
+            if case .collection(let collection) = sidebarFilter, collection.isAlbum {
+                usesAlbumManualOrder = true
+            }
             recomputeFilteredVideos()
             if case .missing = sidebarFilter, !isRefreshingMissing {
                 Task { await refreshMissingCount() }
             }
         }
+    }
+
+    /// True when the Quick Filter sidebar is showing an Album.
+    var isViewingAlbum: Bool {
+        if case .collection(let collection) = sidebarFilter { return collection.isAlbum }
+        return false
+    }
+
+    /// True when viewing an album, using its playlist order, and not shuffled.
+    var isShowingAlbumOrder: Bool {
+        isViewingAlbum && usesAlbumManualOrder && !isRandomOrder
+    }
+
+    var activeAlbum: VideoCollection? {
+        if case .collection(let collection) = sidebarFilter, collection.isAlbum { return collection }
+        return nil
     }
     var selectedTagIds: Set<Int64> = [] {
         didSet { recomputeFilteredVideos() }
@@ -514,6 +544,13 @@ final class LibraryViewModel {
     /// Set before `isPlayingInline = true` on ⌥-Space ("Play from Beginning"); consumed when creating the player to skip the saved resume position.
     var pendingIgnoreResumeOnNextStart: Bool = false
     var pendingAutoPlay: Bool = false
+    /// True while playlist-advancing so the Inspector's selection-change handler does not stop playback.
+    var isAdvancingAlbumPlaylist: Bool = false
+    /// Bumped when the inline player instance is replaced (playlist advance) so full-screen can retarget.
+    private(set) var playbackItemEpoch: Int = 0
+    func notifyPlaybackItemChanged() {
+        playbackItemEpoch &+= 1
+    }
     var isEditingText: Bool = false
     var renamingVideoId: String?
     var renameText: String = ""
@@ -1410,8 +1447,8 @@ final class LibraryViewModel {
     var libraryCounts = LibraryCounts()
     private var cachedCollectionRules: [Int64: [CollectionRule]] = [:]
     private var cachedCollectionRuleGroups: [Int64: [CollectionRuleGroup]] = [:]
-    /// Album membership: collectionId → video database ids.
-    private var cachedAlbumVideoIds: [Int64: Set<Int64>] = [:]
+    /// Album membership in playlist order: collectionId → video database ids.
+    private var cachedAlbumVideoIds: [Int64: [Int64]] = [:]
     private var collectionCountTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
     private var ftsMatchIds: Set<String>?
@@ -2286,9 +2323,20 @@ final class LibraryViewModel {
         tableSortOrder = sort.comparators(ascending: ascending)
     }
 
+    /// Restore the album's saved playlist order (and exit Shuffle).
+    func selectAlbumOrder() {
+        guard isViewingAlbum else { return }
+        usesAlbumManualOrder = true
+        isRandomOrder = false
+        recomputeFilteredVideos()
+    }
+
     func selectCustomSort(fieldId: UUID, ascending: Bool) {
         let slot = allCustomFieldsForList.firstIndex { $0.id == fieldId } ?? 0
         pendingScrollAfterSortId = selectedVideoIds.count == 1 ? selectedVideoIds.first : nil
+        if isViewingAlbum {
+            usesAlbumManualOrder = false
+        }
         // Update tableSortOrder to show the caret on the correct custom column, suppressing didSet side-effects.
         _settingCustomSortOrder = true
         tableSortOrder = [KeyPathComparator(Video.customSortKeyPath(slot: slot), order: ascending ? .forward : .reverse)]
@@ -2697,7 +2745,8 @@ final class LibraryViewModel {
             customSortAscending: customSortAscending,
             listCustomMetadataByVideoId: listCustomMetadataByVideoId,
             isRandomOrder: isRandomOrder,
-            randomOrderRanks: randomOrderRanks
+            randomOrderRanks: randomOrderRanks,
+            usesAlbumManualOrder: usesAlbumManualOrder && isViewingAlbum
         )
         let repo = collectionRepo
 
@@ -2716,7 +2765,7 @@ final class LibraryViewModel {
         let tagsByVideoId: [Int64: [Tag]]
         let cachedCollectionRules: [Int64: [CollectionRule]]
         let cachedCollectionRuleGroups: [Int64: [CollectionRuleGroup]]
-        let cachedAlbumVideoIds: [Int64: Set<Int64>]
+        let cachedAlbumVideoIds: [Int64: [Int64]]
         let sidebarFilter: SidebarFilter?
         let selectedTagIds: Set<Int64>
         let tagFilterMode: MatchMode
@@ -2744,6 +2793,7 @@ final class LibraryViewModel {
         let listCustomMetadataByVideoId: [Int64: [UUID: String]]
         let isRandomOrder: Bool
         let randomOrderRanks: [String: Double]
+        let usesAlbumManualOrder: Bool
     }
 
     /// Multiple star levels are OR’d: video is included if its rating is in the selected set.
@@ -2768,6 +2818,20 @@ final class LibraryViewModel {
     /// jitter around on every unrelated re-render instead of holding still until the next shuffle.
     private nonisolated static func sortByRandomOrder(_ videos: [Video], ranks: [String: Double]) -> [Video] {
         videos.sorted { (ranks[$0.filePath] ?? 2) < (ranks[$1.filePath] ?? 2) }
+    }
+
+    private nonisolated static func sortByAlbumOrder(_ videos: [Video], order: [Int64]) -> [Video] {
+        var indexById: [Int64: Int] = [:]
+        indexById.reserveCapacity(order.count)
+        for (idx, id) in order.enumerated() {
+            indexById[id] = idx
+        }
+        return videos.sorted { a, b in
+            let ia = a.databaseId.flatMap { indexById[$0] } ?? Int.max
+            let ib = b.databaseId.flatMap { indexById[$0] } ?? Int.max
+            if ia != ib { return ia < ib }
+            return a.filePath < b.filePath
+        }
     }
 
     /// Concrete, fast replacement for `result.sort(using: [KeyPathComparator])`. The KeyPathComparator path
@@ -3016,7 +3080,7 @@ final class LibraryViewModel {
                 return ([], [:])
             }
             if collection.kind == .album {
-                let members = snapshot.cachedAlbumVideoIds[collectionId] ?? []
+                let members = Set(snapshot.cachedAlbumVideoIds[collectionId] ?? [])
                 baseResult = baseResult.filter { video in
                     guard let dbId = video.databaseId else { return false }
                     return members.contains(dbId)
@@ -3085,6 +3149,12 @@ final class LibraryViewModel {
 
         if snapshot.isRandomOrder {
             result = Self.sortByRandomOrder(result, ranks: snapshot.randomOrderRanks)
+        } else if snapshot.usesAlbumManualOrder,
+                  case .collection(let collection) = snapshot.sidebarFilter,
+                  collection.isAlbum,
+                  let collectionId = collection.id
+        {
+            result = Self.sortByAlbumOrder(result, order: snapshot.cachedAlbumVideoIds[collectionId] ?? [])
         } else if snapshot.sidebarFilter == .recentlyPlayed {
             result = result.sorted { ($0.lastPlayed ?? .distantPast) > ($1.lastPlayed ?? .distantPast) }
         } else if snapshot.sidebarFilter == .recentlyConverted {
@@ -3343,7 +3413,7 @@ final class LibraryViewModel {
         case .collection(let collection):
             guard let collectionId = collection.id else { return [] }
             if collection.kind == .album {
-                let members = cachedAlbumVideoIds[collectionId] ?? []
+                let members = Set(cachedAlbumVideoIds[collectionId] ?? [])
                 result = result.filter { video in
                     guard let dbId = video.databaseId else { return false }
                     return members.contains(dbId)
@@ -5482,7 +5552,7 @@ final class LibraryViewModel {
             for collection in cols {
                 guard let id = collection.id else { continue }
                 if collection.kind == .album {
-                    let members = albumMembers[id] ?? []
+                    let members = Set(albumMembers[id] ?? [])
                     counts[id] = baseVideos.filter { video in
                         guard let dbId = video.databaseId else { return false }
                         return members.contains(dbId)
@@ -5524,7 +5594,11 @@ final class LibraryViewModel {
     func createAlbum(name: String, fromVideoPaths paths: Set<String>) async -> Bool {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
-        let dbIds = paths.compactMap { videosByPath[$0]?.databaseId }
+        // Preserve the current view order so "New Album from Selection" becomes a playlist.
+        var dbIds = filteredVideos.filter { paths.contains($0.id) }.compactMap(\.databaseId)
+        if dbIds.isEmpty {
+            dbIds = paths.compactMap { videosByPath[$0]?.databaseId }
+        }
         guard !dbIds.isEmpty else { return false }
 
         let album = VideoCollection(name: trimmed, dateCreated: Date(), matchMode: .all, kind: .album)
@@ -5553,7 +5627,15 @@ final class LibraryViewModel {
 
     func addVideos(paths: Set<String>, toAlbum album: VideoCollection) async {
         guard album.isAlbum, let albumId = album.id else { return }
-        let dbIds = paths.compactMap { videosByPath[$0]?.databaseId }
+        var dbIds = filteredVideos.filter { paths.contains($0.id) }.compactMap(\.databaseId)
+        if dbIds.count != paths.count {
+            let seen = Set(dbIds)
+            for path in paths {
+                if let dbId = videosByPath[path]?.databaseId, !seen.contains(dbId) {
+                    dbIds.append(dbId)
+                }
+            }
+        }
         guard !dbIds.isEmpty else { return }
         try? await collectionRepo.addVideos(dbIds, toAlbum: albumId)
         await loadCollections()
@@ -5565,6 +5647,61 @@ final class LibraryViewModel {
         guard !dbIds.isEmpty else { return }
         try? await collectionRepo.removeVideos(dbIds, fromAlbum: albumId)
         await loadCollections()
+    }
+
+    /// Drag-and-drop playlist reorder: move the dragged video (or the whole selection if it includes
+    /// the dragged video) so they sit immediately before `ontoPathId` in the album.
+    func reorderAlbumDrop(draggingPathId: String, ontoPathId: String) async {
+        guard let album = activeAlbum, let albumId = album.id else { return }
+        let movingPaths: [String]
+        if selectedVideoIds.contains(draggingPathId) {
+            movingPaths = filteredVideos.filter { selectedVideoIds.contains($0.id) }.map(\.id)
+        } else {
+            movingPaths = [draggingPathId]
+        }
+        let movingDb = movingPaths.compactMap { videosByPath[$0]?.databaseId }
+        guard let targetDb = videosByPath[ontoPathId]?.databaseId else { return }
+        let current = cachedAlbumVideoIds[albumId] ?? []
+        guard let newOrder = AlbumPlaylistOrder.moving(movingDb, before: targetDb, in: current) else { return }
+        try? await collectionRepo.replaceAlbumOrder(for: albumId, videoIds: newOrder)
+        cachedAlbumVideoIds[albumId] = newOrder
+        usesAlbumManualOrder = true
+        isRandomOrder = false
+        recomputeFilteredVideos()
+    }
+
+    /// Called when the current item finishes. If an album is the active filter, play the next
+    /// visible video from the beginning. Last video stays ended (no loop).
+    func advanceAlbumPlaylistIfNeeded() {
+        guard isViewingAlbum else { return }
+        let currentPath = playback.currentVideo?.filePath
+            ?? lastSelectedVideoId
+            ?? selectedVideoIds.first
+        guard let currentPath else { return }
+        let idx = filteredIndexByPath[currentPath]
+            ?? filteredVideos.firstIndex(where: { $0.id == currentPath })
+        guard let idx else { return }
+
+        var nextIdx = idx + 1
+        while nextIdx < filteredVideos.count {
+            let next = filteredVideos[nextIdx]
+            if FileManager.default.fileExists(atPath: next.filePath) {
+                playAlbumSuccessor(next)
+                return
+            }
+            nextIdx += 1
+        }
+    }
+
+    private func playAlbumSuccessor(_ video: Video) {
+        isAdvancingAlbumPlaylist = true
+        pendingFilmstripSeekSeconds = nil
+        pendingIgnoreResumeOnNextStart = true
+        selectedVideoIds = [video.id]
+        playback.start(video: video, at: 0, ignoreResume: true)
+        DispatchQueue.main.async { [weak self] in
+            self?.isAdvancingAlbumPlaylist = false
+        }
     }
 
     func renameCollection(_ collection: VideoCollection, to name: String) async {

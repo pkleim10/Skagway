@@ -55,6 +55,8 @@ struct CollectionVideo: Codable, Equatable {
     var videoId: Int64
     var collectionId: Int64
     var dateAdded: Date
+    /// Playlist order within the album (0-based). Independent of library sort.
+    var sortIndex: Int
 }
 
 extension CollectionVideo: FetchableRecord, PersistableRecord {

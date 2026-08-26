@@ -58,6 +58,8 @@ struct CuratedWallGrid: View {
     @State private var filmstripSession: FilmstripModifySession?
     /// Card id currently targeted by an image/video file drag (poster drop highlight).
     @State private var posterDropTargetId: String?
+    /// Card id currently targeted by an in-album reorder drag.
+    @State private var albumReorderTargetId: String?
 
     // Max from the full-window mock; live `columns` is the source of truth for ↑/↓ row steps
     // in ContentView and for scroll-to-row math below.
@@ -137,13 +139,27 @@ struct CuratedWallGrid: View {
                             handleCardFileDrop(providers, onto: video)
                         }
                         .overlay {
-                            if posterDropTargetId == video.id {
+                            if posterDropTargetId == video.id || albumReorderTargetId == video.id {
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                                     .strokeBorder(Color.appAccent, lineWidth: 2)
                                     .padding(4)
                                     .allowsHitTesting(false)
                             }
                         }
+                        .modifier(AlbumCardReorderModifier(
+                            enabled: viewModel.isViewingAlbum,
+                            videoId: video.id,
+                            title: video.displayTitle,
+                            targetId: $albumReorderTargetId,
+                            onReorder: { draggedId in
+                                Task {
+                                    await viewModel.reorderAlbumDrop(
+                                        draggingPathId: draggedId,
+                                        ontoPathId: video.id
+                                    )
+                                }
+                            }
+                        ))
                         .contextMenu {
                             Button("Play in External Player") { play(video) }
                             Button("Show in Finder") {

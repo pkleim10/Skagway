@@ -57,8 +57,9 @@ final class InlinePlaybackController {
 
     @ObservationIgnored private var statusTask: Task<Void, Never>?
     @ObservationIgnored private var resumeBannerFadeTask: Task<Void, Never>?
-    @ObservationIgnored private var timeObserverToken: Any?
+        @ObservationIgnored private var timeObserverToken: Any?
     @ObservationIgnored private var timeControlObservation: NSKeyValueObservation?
+    @ObservationIgnored private var endObserver: NSObjectProtocol?
     /// Last non-zero volume; used when unmuting after the slider hit zero.
     @ObservationIgnored private var lastAudibleVolume: Float = 1.0
 
@@ -129,6 +130,7 @@ final class InlinePlaybackController {
             detachTimelineObservers()
             player?.pause()
             player = newPlayer
+            viewModel.notifyPlaybackItemChanged()
             applyVolumeToPlayer(newPlayer)
             subtitleTrack.attach(to: newPlayer)
             attachTimelineObservers(to: newPlayer, fallbackDuration: video.duration)
@@ -492,6 +494,39 @@ final class InlinePlaybackController {
                 self?.isPlaying = player.timeControlStatus == .playing
             }
         }
+
+        if let item = newPlayer.currentItem {
+            attachEndObserver(for: item)
+        }
+    }
+
+    private func attachEndObserver(for item: AVPlayerItem) {
+        detachEndObserver()
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.handleItemDidPlayToEnd()
+            }
+        }
+    }
+
+    private func handleItemDidPlayToEnd() {
+        isPlaying = false
+        if let video = currentVideo {
+            PlaybackPositionStore.clear(filePath: video.filePath)
+            viewModel.notifyResumePositionsChanged()
+        }
+        viewModel.advanceAlbumPlaylistIfNeeded()
+    }
+
+    private func detachEndObserver() {
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+            self.endObserver = nil
+        }
     }
 
     private func detachTimelineObservers() {
@@ -501,6 +536,7 @@ final class InlinePlaybackController {
         timeObserverToken = nil
         timeControlObservation?.invalidate()
         timeControlObservation = nil
+        detachEndObserver()
     }
 
     // MARK: - Internals
