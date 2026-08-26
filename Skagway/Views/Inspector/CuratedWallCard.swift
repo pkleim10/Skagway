@@ -20,6 +20,8 @@ struct CuratedWallCard: View {
     var resumeFraction: Double? = nil
     /// When false (e.g. main floating player is open), skip live hover scrub to avoid fighting AVFoundation.
     var hoverPreviewEnabled: Bool = true
+    /// Accent grip drawn on the thumbnail while an album is the active filter (visual only).
+    var showAlbumReorderHandle: Bool = false
     var renameFocus: FocusState<Bool>.Binding
     var onCommitRename: () -> Void
     var onCancelRename: () -> Void
@@ -81,6 +83,12 @@ struct CuratedWallCard: View {
                                 .foregroundStyle(.white, Color.appAccent)
                                 .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
                                 .padding(6)
+                        }
+                    }
+                    .overlay(alignment: .topLeading) {
+                        if showAlbumReorderHandle {
+                            AlbumReorderHandleBadge()
+                                .padding(.top, isSelected ? 26 : 0)
                         }
                     }
                     .overlay(alignment: .bottom) {

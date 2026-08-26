@@ -111,6 +111,7 @@ struct CuratedWallGrid: View {
                             isMoving: isMoving,
                             resumeFraction: resumeFraction(for: video),
                             hoverPreviewEnabled: viewModel.gridHoverPreviewEnabled && !viewModel.isPlayingInline,
+                            showAlbumReorderHandle: viewModel.isViewingAlbum,
                             renameFocus: $renameFocus,
                             onCommitRename: { commitRename(video) },
                             onCancelRename: cancelRename,
@@ -120,7 +121,11 @@ struct CuratedWallGrid: View {
                         )
                         .id(video.id)
                         .contentShape(Rectangle())
-                        .modifier(albumSelectionGestures(for: video))
+                        .modifier(AlbumSelectionGestures(
+                            enabled: !viewModel.isViewingAlbum,
+                            onSelect: { handleSelection(video) },
+                            onPlay: { viewModel.isPlayingInline = true }
+                        ))
                         .onDrop(of: [.fileURL], isTargeted: Binding(
                             get: { posterDropTargetId == video.id },
                             set: { hovering in
@@ -134,6 +139,31 @@ struct CuratedWallGrid: View {
                             handleCardFileDrop(providers, onto: video)
                         }
                         .overlay {
+                            if viewModel.isViewingAlbum {
+                                AlbumReorderInteractionOverlay(
+                                    videoId: video.id,
+                                    title: video.displayTitle,
+                                    onClick: { flags in handleSelection(video, flags: flags) },
+                                    onDoubleClick: { viewModel.isPlayingInline = true },
+                                    onTargeted: { hovering in
+                                        if hovering {
+                                            albumReorderTargetId = video.id
+                                        } else if albumReorderTargetId == video.id {
+                                            albumReorderTargetId = nil
+                                        }
+                                    },
+                                    onReorder: { draggedId in
+                                        Task {
+                                            await viewModel.reorderAlbumDrop(
+                                                draggingPathId: draggedId,
+                                                ontoPathId: video.id
+                                            )
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                        .overlay {
                             if posterDropTargetId == video.id || albumReorderTargetId == video.id {
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                                     .strokeBorder(Color.appAccent, lineWidth: 2)
@@ -141,20 +171,6 @@ struct CuratedWallGrid: View {
                                     .allowsHitTesting(false)
                             }
                         }
-                        .modifier(AlbumCardReorderModifier(
-                            enabled: viewModel.isViewingAlbum,
-                            videoId: video.id,
-                            title: video.displayTitle,
-                            targetId: $albumReorderTargetId,
-                            onReorder: { draggedId in
-                                Task {
-                                    await viewModel.reorderAlbumDrop(
-                                        draggingPathId: draggedId,
-                                        ontoPathId: video.id
-                                    )
-                                }
-                            }
-                        ))
                         .contextMenu {
                             Button("Play in External Player") { play(video) }
                             Button("Show in Finder") {
@@ -406,25 +422,22 @@ struct CuratedWallGrid: View {
     }
 
     private struct AlbumSelectionGestures: ViewModifier {
+        var enabled: Bool
         let onSelect: () -> Void
         let onPlay: () -> Void
 
         func body(content: Content) -> some View {
-            content
-                .simultaneousGesture(TapGesture().onEnded(onSelect))
-                .simultaneousGesture(TapGesture(count: 2).onEnded(onPlay))
+            if enabled {
+                content
+                    .onTapGesture(perform: onSelect)
+                    .simultaneousGesture(TapGesture(count: 2).onEnded(onPlay))
+            } else {
+                content
+            }
         }
     }
 
-    private func albumSelectionGestures(for video: Video) -> AlbumSelectionGestures {
-        AlbumSelectionGestures(
-            onSelect: { handleSelection(video) },
-            onPlay: { viewModel.isPlayingInline = true }
-        )
-    }
-
-    private func handleSelection(_ video: Video) {
-        let flags = NSEvent.modifierFlags
+    private func handleSelection(_ video: Video, flags: NSEvent.ModifierFlags = NSEvent.modifierFlags) {
         let newIds: Set<String>
         if flags.contains(.command) {
             var ids = viewModel.selectedVideoIds

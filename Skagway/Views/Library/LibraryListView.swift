@@ -563,6 +563,13 @@ struct LibraryListView: View {
     @ViewBuilder
     private func nameRowView(for video: Video) -> some View {
         HStack(spacing: AppSpacing.sm) {
+            if viewModel.isViewingAlbum {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.appAccent)
+                    .help("Drag to reorder this album")
+                    .allowsHitTesting(false)
+            }
             AsyncThumbnailView(
                 filePath: video.filePath,
                 thumbnailService: thumbnailService,
@@ -654,26 +661,39 @@ struct LibraryListView: View {
             }
         }
         .overlay {
+            if viewModel.isViewingAlbum {
+                AlbumReorderInteractionOverlay(
+                    videoId: video.id,
+                    title: video.displayTitle,
+                    onClick: { _ in
+                        viewModel.selectedVideoIds = [video.id]
+                    },
+                    onDoubleClick: { viewModel.isPlayingInline = true },
+                    onTargeted: { hovering in
+                        if hovering {
+                            albumReorderTargetId = video.id
+                        } else if albumReorderTargetId == video.id {
+                            albumReorderTargetId = nil
+                        }
+                    },
+                    onReorder: { draggedId in
+                        Task {
+                            await viewModel.reorderAlbumDrop(
+                                draggingPathId: draggedId,
+                                ontoPathId: video.id
+                            )
+                        }
+                    }
+                )
+            }
+        }
+        .overlay {
             if albumReorderTargetId == video.id {
                 RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
                     .strokeBorder(Color.appAccent, lineWidth: 2)
                     .allowsHitTesting(false)
             }
         }
-        .modifier(AlbumCardReorderModifier(
-            enabled: viewModel.isViewingAlbum,
-            videoId: video.id,
-            title: video.displayTitle,
-            targetId: $albumReorderTargetId,
-            onReorder: { draggedId in
-                Task {
-                    await viewModel.reorderAlbumDrop(
-                        draggingPathId: draggedId,
-                        ontoPathId: video.id
-                    )
-                }
-            }
-        ))
     }
 
     private var ffmpegPath: String? { viewModel.resolvedFFmpegPath }
