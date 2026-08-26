@@ -432,6 +432,12 @@ struct SettingsView: View {
                 )
                 cardSeparator
                 describedToggleRow(
+                    title: "Loop album playlist",
+                    description: "When an album is selected, finishing the last video starts the first one again. Also available as a toolbar toggle while viewing an album.",
+                    isOn: $viewModel.albumPlaylistLoops
+                )
+                cardSeparator
+                describedToggleRow(
                     title: "Hover preview on Grid cards",
                     description: "Plays a muted cycling scrub when the pointer rests on a Grid card (disabled automatically while the floating player is open).",
                     isOn: $viewModel.gridHoverPreviewEnabled

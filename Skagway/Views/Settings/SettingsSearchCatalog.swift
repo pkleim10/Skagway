@@ -133,6 +133,12 @@ enum SettingsSearchCatalog {
             keywords: ["surprise", "autoplay", "random"]
         ),
         .init(
+            id: "video.albumLoop",
+            title: "Loop album playlist",
+            category: .video,
+            keywords: ["album", "loop", "playlist", "repeat"]
+        ),
+        .init(
             id: "video.hoverPreview",
             title: "Hover preview on Grid cards",
             category: .video,

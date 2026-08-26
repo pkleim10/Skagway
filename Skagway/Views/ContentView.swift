@@ -329,6 +329,30 @@ private struct LibraryContentView: View {
             .keyboardShortcut("r", modifiers: [.command, .shift])
             .keyboardShortcut("s", modifiers: [.command, .shift])
 
+            if vm.isViewingAlbum {
+                Button {
+                    vm.playAlbumFromStart()
+                } label: {
+                    Image(systemName: "play.fill")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.appTextSecondary)
+                .disabled(vm.filteredVideos.isEmpty)
+                .help("Play All — start this album from the first video (⌘⇧P)")
+                .keyboardShortcut("p", modifiers: [.command, .shift])
+
+                Button {
+                    vm.albumPlaylistLoops.toggle()
+                } label: {
+                    Image(systemName: "repeat")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(vm.albumPlaylistLoops ? Color.appAccent : Color.appTextSecondary)
+                .help(vm.albumPlaylistLoops
+                      ? "Loop Album — on; after the last video, start again from the first"
+                      : "Loop Album — off; the last video ends without restarting")
+            }
+
             Divider().frame(height: 16)
 
             AppSegmentedControl(

@@ -1688,6 +1688,7 @@ final class LibraryViewModel {
     private static let lastAppliedFilmstripRowsKey = "Skagway.lastAppliedFilmstripRows"
     private static let lastAppliedFilmstripColumnsKey = "Skagway.lastAppliedFilmstripColumns"
     private static let surpriseMeAutoPlaysKey = "Skagway.surpriseMeAutoPlays"
+    private static let albumPlaylistLoopsKey = "Skagway.albumPlaylistLoops"
     private static let gridHoverPreviewEnabledKey = "Skagway.gridHoverPreviewEnabled"
     private static let playerFloatingWidthKey = "Skagway.playerFloatingWidth"
     private static let playerFloatingHeightKey = "Skagway.playerFloatingHeight"
@@ -1852,6 +1853,13 @@ final class LibraryViewModel {
     var surpriseMeAutoPlays: Bool = true {
         didSet {
             UserDefaults.standard.set(surpriseMeAutoPlays, forKey: Self.surpriseMeAutoPlaysKey)
+        }
+    }
+
+    /// When true, finishing the last album video starts the first one again. Album-only.
+    var albumPlaylistLoops: Bool = false {
+        didSet {
+            UserDefaults.standard.set(albumPlaylistLoops, forKey: Self.albumPlaylistLoopsKey)
         }
     }
 
@@ -2382,6 +2390,7 @@ final class LibraryViewModel {
         excludeCorrupt = defaults.bool(forKey: Self.excludeCorruptKey)
         confirmDeletions = defaults.object(forKey: Self.confirmDeletionsKey) as? Bool ?? true
         surpriseMeAutoPlays = defaults.object(forKey: Self.surpriseMeAutoPlaysKey) as? Bool ?? true
+        albumPlaylistLoops = defaults.bool(forKey: Self.albumPlaylistLoopsKey)
         gridHoverPreviewEnabled = defaults.object(forKey: Self.gridHoverPreviewEnabledKey) as? Bool ?? true
         if let w = defaults.object(forKey: Self.playerFloatingWidthKey) as? Double, w > 0,
            let h = defaults.object(forKey: Self.playerFloatingHeightKey) as? Double, h > 0 {
@@ -3616,6 +3625,26 @@ final class LibraryViewModel {
         lastSelectedVideoId = random.id
         pendingAutoPlay = surpriseMeAutoPlays
         scrollToVideoId = random.id
+    }
+
+    /// Play the album from the first visible video, ignoring resume. No-op unless an album is selected.
+    func playAlbumFromStart() {
+        guard isViewingAlbum else { return }
+        guard let first = firstPlayableFilteredVideo() else { return }
+        selectedVideoIds = [first.id]
+        lastSelectedVideoId = first.id
+        scrollToVideoId = first.id
+        pendingFilmstripSeekSeconds = nil
+        pendingIgnoreResumeOnNextStart = true
+        if isPlayingInline {
+            playAlbumSuccessor(first)
+        } else {
+            pendingAutoPlay = true
+        }
+    }
+
+    private func firstPlayableFilteredVideo() -> Video? {
+        filteredVideos.first { FileManager.default.fileExists(atPath: $0.filePath) }
     }
 
     /// Grid keyboard navigation: move selection along `filteredVideos` (same order as list). List relies on `Table` arrow handling.
@@ -5671,7 +5700,8 @@ final class LibraryViewModel {
     }
 
     /// Called when the current item finishes. If an album is the active filter, play the next
-    /// visible video from the beginning. Last video stays ended (no loop).
+    /// visible video from the beginning. At the end, loop to the first video when `albumPlaylistLoops`
+    /// is on; otherwise stay ended.
     func advanceAlbumPlaylistIfNeeded() {
         guard isViewingAlbum else { return }
         let currentPath = playback.currentVideo?.filePath
@@ -5691,6 +5721,9 @@ final class LibraryViewModel {
             }
             nextIdx += 1
         }
+
+        guard albumPlaylistLoops, let first = firstPlayableFilteredVideo() else { return }
+        playAlbumSuccessor(first)
     }
 
     private func playAlbumSuccessor(_ video: Video) {

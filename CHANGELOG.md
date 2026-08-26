@@ -31,7 +31,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
-- **Albums play as a playlist** — When an album is selected, finishing a video starts the next one in the album from the beginning (windowed, compact, and full screen). The last video ends without looping. Missing files are skipped.
+- **Albums play as a playlist** — When an album is selected, finishing a video starts the next one in the album from the beginning (windowed, compact, and full screen). Missing files are skipped. **Play All** (⌘⇧P) starts the first video from the beginning. **Loop Album** (toolbar, View menu, or Settings) restarts the first video after the last one; off by default.
 - **Album order + drag-and-drop** — Albums keep a saved playlist order. Viewing an album shows that order (Sort menu: Album Order) and an accent grip on each thumbnail. Click-and-drag a card (or list row) onto another to reorder — no special modifier key. Dropping on a later card inserts after it. Multi-select moves as a block. Added videos append at the end.
 
 ## 0.78.0 (build 988) - 2026-08-15
