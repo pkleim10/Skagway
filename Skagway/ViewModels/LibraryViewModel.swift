@@ -269,9 +269,9 @@ final class LibraryViewModel {
         didSet { recomputeFilteredVideos() }
     }
     /// When true, the Quick Filter rating match is "this star or higher" instead of exact.
+    /// Session-only, like the other Quick Filters — not persisted.
     var ratingFilterOrHigher: Bool = false {
         didSet {
-            UserDefaults.standard.set(ratingFilterOrHigher, forKey: Self.ratingFilterOrHigherKey)
             if ratingFilterOrHigher != oldValue {
                 recomputeFilteredVideos()
             }
@@ -314,7 +314,7 @@ final class LibraryViewModel {
     func clearQuickFilters() {
         sidebarFilter = .all
         selectedTagIds = []
-        selectedRatingStars = []
+        clearRatingFilter()
         minDurationSeconds = nil
         maxDurationSeconds = nil
         selectedQualityBuckets = []
@@ -1706,7 +1706,6 @@ final class LibraryViewModel {
     private static let lastAppliedFilmstripColumnsKey = "Skagway.lastAppliedFilmstripColumns"
     private static let surpriseMeAutoPlaysKey = "Skagway.surpriseMeAutoPlays"
     private static let playAllLoopsKey = "Skagway.playAllLoops"
-    private static let ratingFilterOrHigherKey = "Skagway.ratingFilterOrHigher"
     private static let gridHoverPreviewEnabledKey = "Skagway.gridHoverPreviewEnabled"
     private static let playerFloatingWidthKey = "Skagway.playerFloatingWidth"
     private static let playerFloatingHeightKey = "Skagway.playerFloatingHeight"
@@ -2410,7 +2409,6 @@ final class LibraryViewModel {
         surpriseMeAutoPlays = defaults.object(forKey: Self.surpriseMeAutoPlaysKey) as? Bool ?? true
         playAllLoops = defaults.object(forKey: Self.playAllLoopsKey) as? Bool
             ?? defaults.bool(forKey: "Skagway.albumPlaylistLoops")
-        ratingFilterOrHigher = defaults.bool(forKey: Self.ratingFilterOrHigherKey)
         gridHoverPreviewEnabled = defaults.object(forKey: Self.gridHoverPreviewEnabledKey) as? Bool ?? true
         if let w = defaults.object(forKey: Self.playerFloatingWidthKey) as? Double, w > 0,
            let h = defaults.object(forKey: Self.playerFloatingHeightKey) as? Double, h > 0 {
@@ -5495,6 +5493,7 @@ final class LibraryViewModel {
 
     /// Clears the per-star rating filter (filter strip → Rating).
     func clearRatingFilter() {
+        ratingFilterOrHigher = false
         selectedRatingStars = []
     }
 
@@ -5521,7 +5520,7 @@ final class LibraryViewModel {
     func resetAllFilters() {
         sidebarFilter = .all
         selectedTagIds = []
-        selectedRatingStars = []
+        clearRatingFilter()
         minDurationSeconds = nil
         maxDurationSeconds = nil
         selectedQualityBuckets = []

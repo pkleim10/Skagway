@@ -520,21 +520,22 @@ struct CuratedWallFiltersDrawer: View {
             let orHigher = viewModel.ratingFilterOrHigher
             let orHigherEnabled = !isUnratedSelected
 
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Button {
-                        if isUnratedSelected {
-                            viewModel.clearRatingFilter()
-                        } else {
-                            viewModel.selectedRatingStars = [0]
-                        }
-                        hoverRating = nil
-                    } label: {
-                        ratingCapsule(title: "No Stars", isOn: isUnratedSelected)
+            HStack(spacing: 6) {
+                Button {
+                    if isUnratedSelected {
+                        viewModel.clearRatingFilter()
+                    } else {
+                        viewModel.selectedRatingStars = [0]
                     }
-                    .buttonStyle(.plain)
-                    .help("Unrated videos only")
+                    hoverRating = nil
+                } label: {
+                    ratingCapsule(title: "No Stars", isOn: isUnratedSelected)
+                }
+                .buttonStyle(.plain)
+                .fixedSize()
+                .help("Unrated videos only")
 
+                HStack(spacing: 2) {
                     ForEach(1...5, id: \.self) { star in
                         let isActive = preview > 0 && star <= preview
                         Button {
@@ -546,7 +547,7 @@ struct CuratedWallFiltersDrawer: View {
                             hoverRating = nil
                         } label: {
                             Image(systemName: isActive ? "star.fill" : "star")
-                                .font(.system(size: 20))
+                                .font(.system(size: 16))
                                 .foregroundStyle(isActive ? .yellow : Color.appTextSecondary)
                         }
                         .buttonStyle(.plain)
@@ -556,7 +557,8 @@ struct CuratedWallFiltersDrawer: View {
                         }
                     }
                 }
-                .padding(.horizontal, 4)
+
+                Spacer(minLength: 4)
 
                 Button {
                     viewModel.ratingFilterOrHigher.toggle()
@@ -564,12 +566,15 @@ struct CuratedWallFiltersDrawer: View {
                     ratingCapsule(title: "Or Higher", isOn: orHigher && orHigherEnabled)
                 }
                 .buttonStyle(.plain)
+                .fixedSize()
+                .layoutPriority(1)
                 .disabled(!orHigherEnabled)
                 .opacity(orHigherEnabled ? 1 : 0.4)
                 .help(orHigherEnabled
                       ? "When on, the selected star includes that rating and every higher one (4 → 4 and 5). When off, only the exact rating matches."
                       : "Or Higher doesn’t apply to unrated videos")
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -578,7 +583,7 @@ struct CuratedWallFiltersDrawer: View {
         Text(title)
             .font(.caption)
             .foregroundStyle(.white)
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 6)
             .padding(.vertical, 4)
             .background(
                 Capsule().fill(isOn ? Color.white.opacity(0.32) : Color.clear)
