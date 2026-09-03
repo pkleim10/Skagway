@@ -29,7 +29,7 @@ struct ActiveFilterPills: View {
                         if let rating = viewModel.selectedRatingStars.min() {
                             let text: String = {
                                 if rating == 0 { return "No stars" }
-                                if viewModel.ratingFilterOrHigher { return "Rating \(rating)+" }
+                                if viewModel.ratingFilterOrHigher, rating < 5 { return "Rating \(rating)+" }
                                 return "Rating \(rating)"
                             }()
                             pill(text: text, systemImage: rating == 0 ? "star.slash" : "star") {

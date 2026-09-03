@@ -518,7 +518,7 @@ struct CuratedWallFiltersDrawer: View {
             let level = viewModel.selectedRatingStars.first { $0 > 0 } ?? 0
             let preview = hoverRating ?? level
             let orHigher = viewModel.ratingFilterOrHigher
-            let orHigherEnabled = !isUnratedSelected
+            let orHigherEnabled = !isUnratedSelected && level != 5
 
             HStack(spacing: 6) {
                 Button {
@@ -572,7 +572,9 @@ struct CuratedWallFiltersDrawer: View {
                 .opacity(orHigherEnabled ? 1 : 0.4)
                 .help(orHigherEnabled
                       ? "When on, the selected star includes that rating and every higher one (4 → 4 and 5). When off, only the exact rating matches."
-                      : "Or Higher doesn’t apply to unrated videos")
+                      : (isUnratedSelected
+                         ? "Or Higher doesn’t apply to unrated videos"
+                         : "Or Higher doesn’t apply to a 5-star filter"))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

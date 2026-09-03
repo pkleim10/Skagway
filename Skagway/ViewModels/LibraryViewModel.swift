@@ -2833,7 +2833,7 @@ final class LibraryViewModel {
         base: [Video]
     ) -> [Video] {
         guard let floor = selectedStars.min() else { return base }
-        if orHigher, floor > 0 {
+        if orHigher, floor > 0, floor < 5 {
             return base.filter { $0.rating >= floor }
         }
         return base.filter { selectedStars.contains($0.rating) }
