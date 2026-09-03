@@ -268,6 +268,15 @@ final class LibraryViewModel {
     var selectedRatingStars: Set<Int> = [] {
         didSet { recomputeFilteredVideos() }
     }
+    /// When true, the Quick Filter rating match is "this star or higher" instead of exact.
+    var ratingFilterOrHigher: Bool = false {
+        didSet {
+            UserDefaults.standard.set(ratingFilterOrHigher, forKey: Self.ratingFilterOrHigherKey)
+            if ratingFilterOrHigher != oldValue {
+                recomputeFilteredVideos()
+            }
+        }
+    }
 
     /// Duration range filter (in seconds). nil means no bound. Live updates wall.
     var minDurationSeconds: Double? = nil {
@@ -1697,6 +1706,7 @@ final class LibraryViewModel {
     private static let lastAppliedFilmstripColumnsKey = "Skagway.lastAppliedFilmstripColumns"
     private static let surpriseMeAutoPlaysKey = "Skagway.surpriseMeAutoPlays"
     private static let playAllLoopsKey = "Skagway.playAllLoops"
+    private static let ratingFilterOrHigherKey = "Skagway.ratingFilterOrHigher"
     private static let gridHoverPreviewEnabledKey = "Skagway.gridHoverPreviewEnabled"
     private static let playerFloatingWidthKey = "Skagway.playerFloatingWidth"
     private static let playerFloatingHeightKey = "Skagway.playerFloatingHeight"
@@ -2400,6 +2410,7 @@ final class LibraryViewModel {
         surpriseMeAutoPlays = defaults.object(forKey: Self.surpriseMeAutoPlaysKey) as? Bool ?? true
         playAllLoops = defaults.object(forKey: Self.playAllLoopsKey) as? Bool
             ?? defaults.bool(forKey: "Skagway.albumPlaylistLoops")
+        ratingFilterOrHigher = defaults.bool(forKey: Self.ratingFilterOrHigherKey)
         gridHoverPreviewEnabled = defaults.object(forKey: Self.gridHoverPreviewEnabledKey) as? Bool ?? true
         if let w = defaults.object(forKey: Self.playerFloatingWidthKey) as? Double, w > 0,
            let h = defaults.object(forKey: Self.playerFloatingHeightKey) as? Double, h > 0 {
@@ -2741,6 +2752,7 @@ final class LibraryViewModel {
             selectedTagIds: selectedTagIds,
             tagFilterMode: tagFilterMode,
             selectedRatingStars: selectedRatingStars,
+            ratingFilterOrHigher: ratingFilterOrHigher,
             tableSortOrder: tableSortOrder,
             excludeCorrupt: excludeCorrupt,
             thumbnailsSettled: thumbnailsSettled,
@@ -2788,6 +2800,7 @@ final class LibraryViewModel {
         let selectedTagIds: Set<Int64>
         let tagFilterMode: MatchMode
         let selectedRatingStars: Set<Int>
+        let ratingFilterOrHigher: Bool
         let tableSortOrder: [KeyPathComparator<Video>]
         let excludeCorrupt: Bool
         let thumbnailsSettled: Bool
@@ -2814,9 +2827,16 @@ final class LibraryViewModel {
         let usesAlbumManualOrder: Bool
     }
 
-    /// Multiple star levels are OR’d: video is included if its rating is in the selected set.
-    private nonisolated static func applyRatingFilter(selectedStars: Set<Int>, base: [Video]) -> [Video] {
-        guard !selectedStars.isEmpty else { return base }
+    /// Exact match, or "this rating or higher" when `orHigher` is set. Unrated (0) never matches a star filter.
+    private nonisolated static func applyRatingFilter(
+        selectedStars: Set<Int>,
+        orHigher: Bool,
+        base: [Video]
+    ) -> [Video] {
+        guard let floor = selectedStars.min() else { return base }
+        if orHigher {
+            return base.filter { $0.rating >= floor }
+        }
         return base.filter { selectedStars.contains($0.rating) }
     }
 
@@ -3127,7 +3147,11 @@ final class LibraryViewModel {
             break
         }
 
-        baseResult = Self.applyRatingFilter(selectedStars: snapshot.selectedRatingStars, base: baseResult)
+        baseResult = Self.applyRatingFilter(
+            selectedStars: snapshot.selectedRatingStars,
+            orHigher: snapshot.ratingFilterOrHigher,
+            base: baseResult
+        )
 
         // Duration range (seconds). Applied after rating for consistency with other independent filters.
         if let minD = snapshot.minDurationSeconds {
@@ -3455,7 +3479,11 @@ final class LibraryViewModel {
         default:
             break
         }
-        result = Self.applyRatingFilter(selectedStars: selectedRatingStars, base: result)
+        result = Self.applyRatingFilter(
+            selectedStars: selectedRatingStars,
+            orHigher: ratingFilterOrHigher,
+            base: result
+        )
 
         if let minD = minDurationSeconds {
             result = result.filter { ($0.duration ?? 0) >= minD }

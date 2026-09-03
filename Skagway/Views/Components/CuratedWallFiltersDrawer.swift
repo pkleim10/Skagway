@@ -513,13 +513,22 @@ struct CuratedWallFiltersDrawer: View {
     }
 
     private var ratingCard: some View {
-        makeFilterCard(title: "RATING") {
-            let level = viewModel.selectedRatingStars.first ?? 0
+        makeFilterCard(title: "RATING", accessory: {
+            Toggle("or higher", isOn: $viewModel.ratingFilterOrHigher)
+                .toggleStyle(.checkbox)
+                .font(.caption)
+                .help("When on, the selected star includes that rating and every higher one (4 → 4 and 5). When off, only the exact rating matches.")
+        }) {
+            let level = viewModel.selectedRatingStars.min() ?? 0
             let preview = hoverRating ?? level
+            let orHigher = viewModel.ratingFilterOrHigher
 
             HStack(spacing: 12) {
                 ForEach(1...5, id: \.self) { star in
-                    let isActive = preview > 0 && star <= preview
+                    let isActive: Bool = {
+                        guard preview > 0 else { return false }
+                        return orHigher ? star >= preview : star == preview
+                    }()
                     Button {
                         if star == level {
                             viewModel.clearRatingFilter()
@@ -533,7 +542,7 @@ struct CuratedWallFiltersDrawer: View {
                             .foregroundStyle(isActive ? .yellow : Color.appTextSecondary)
                     }
                     .buttonStyle(.plain)
-                    .help("Rating \(star)")
+                    .help(orHigher ? "\(star) stars or higher" : "Rating \(star) only")
                     .onHover { hovering in
                         hoverRating = hovering ? star : nil
                     }

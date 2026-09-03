@@ -31,6 +31,8 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **Quick Filter rating: “or higher”** — The Rating card has an **or higher** checkbox. Off (default) matches only the star you click. On, that rating and every higher one match (4 → 4 and 5). The lit stars and the filter pill (`Rating 4` vs `Rating 4+`) follow the mode.
+
 ## 0.79.0 (build 999) - 2026-08-26
 
 - **Play All + album playlists** — **Play All** (⌘⇧P) plays the current view (album, smart collection, tags, search, etc.) from the first video. Auto-advance and **Loop Play All** only run during that session; stopping playback or playing a single video ends it. Loop is off by default (toolbar, View menu, Settings). Albums still keep a saved order with drag-and-drop; that reorder is album-only. Missing files are skipped.
