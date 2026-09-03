@@ -521,10 +521,7 @@ struct CuratedWallFiltersDrawer: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 12) {
                     ForEach(1...5, id: \.self) { star in
-                        let isActive: Bool = {
-                            guard preview > 0 else { return false }
-                            return orHigher ? star >= preview : star == preview
-                        }()
+                        let isActive = preview > 0 && star <= preview
                         Button {
                             if star == level {
                                 viewModel.clearRatingFilter()
@@ -555,11 +552,11 @@ struct CuratedWallFiltersDrawer: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(
-                            Capsule().fill(orHigher ? Color.appSurface : Color.clear)
+                            Capsule().fill(orHigher ? Color.appAccent.opacity(0.18) : Color.clear)
                         )
                         .overlay(
                             Capsule().stroke(
-                                orHigher ? Color.appTextSecondary : Color.white.opacity(0.45),
+                                orHigher ? Color.appAccent.opacity(0.5) : Color.white.opacity(0.45),
                                 lineWidth: 1
                             )
                         )
