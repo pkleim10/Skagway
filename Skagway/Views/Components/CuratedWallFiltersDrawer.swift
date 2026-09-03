@@ -513,42 +513,61 @@ struct CuratedWallFiltersDrawer: View {
     }
 
     private var ratingCard: some View {
-        makeFilterCard(title: "RATING", accessory: {
-            Toggle("or higher", isOn: $viewModel.ratingFilterOrHigher)
-                .toggleStyle(.checkbox)
-                .font(.caption)
-                .help("When on, the selected star includes that rating and every higher one (4 → 4 and 5). When off, only the exact rating matches.")
-        }) {
+        makeFilterCard(title: "RATING") {
             let level = viewModel.selectedRatingStars.min() ?? 0
             let preview = hoverRating ?? level
             let orHigher = viewModel.ratingFilterOrHigher
 
-            HStack(spacing: 12) {
-                ForEach(1...5, id: \.self) { star in
-                    let isActive: Bool = {
-                        guard preview > 0 else { return false }
-                        return orHigher ? star >= preview : star == preview
-                    }()
-                    Button {
-                        if star == level {
-                            viewModel.clearRatingFilter()
-                        } else {
-                            viewModel.selectedRatingStars = [star]
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 12) {
+                    ForEach(1...5, id: \.self) { star in
+                        let isActive: Bool = {
+                            guard preview > 0 else { return false }
+                            return orHigher ? star >= preview : star == preview
+                        }()
+                        Button {
+                            if star == level {
+                                viewModel.clearRatingFilter()
+                            } else {
+                                viewModel.selectedRatingStars = [star]
+                            }
+                            hoverRating = nil
+                        } label: {
+                            Image(systemName: isActive ? "star.fill" : "star")
+                                .font(.system(size: 20))
+                                .foregroundStyle(isActive ? .yellow : Color.appTextSecondary)
                         }
-                        hoverRating = nil
-                    } label: {
-                        Image(systemName: isActive ? "star.fill" : "star")
-                            .font(.system(size: 20))
-                            .foregroundStyle(isActive ? .yellow : Color.appTextSecondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help(orHigher ? "\(star) stars or higher" : "Rating \(star) only")
-                    .onHover { hovering in
-                        hoverRating = hovering ? star : nil
+                        .buttonStyle(.plain)
+                        .help(orHigher ? "\(star) stars or higher" : "Rating \(star) only")
+                        .onHover { hovering in
+                            hoverRating = hovering ? star : nil
+                        }
                     }
                 }
+                .padding(.horizontal, 4)
+
+                Button {
+                    viewModel.ratingFilterOrHigher.toggle()
+                } label: {
+                    Text("Or Higher")
+                        .font(.caption)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule().fill(orHigher ? Color.appSurface : Color.clear)
+                        )
+                        .overlay(
+                            Capsule().stroke(
+                                orHigher ? Color.appTextSecondary : Color.white.opacity(0.45),
+                                lineWidth: 1
+                            )
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("When on, the selected star includes that rating and every higher one (4 → 4 and 5). When off, only the exact rating matches.")
             }
-            .padding(.horizontal, 4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

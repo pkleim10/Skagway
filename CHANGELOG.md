@@ -31,7 +31,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
-- **Quick Filter rating: “or higher”** — The Rating card has an **or higher** checkbox. Off (default) matches only the star you click. On, that rating and every higher one match (4 → 4 and 5). The lit stars and the filter pill (`Rating 4` vs `Rating 4+`) follow the mode.
+- **Quick Filter rating: “Or Higher”** — The Rating card has an outline **Or Higher** pill (same shape as Duration’s Any). Off (default) matches only the star you click. On, the pill fills grey and that rating plus every higher one match (4 → 4 and 5). The lit stars and the filter pill (`Rating 4` vs `Rating 4+`) follow the mode.
 
 ## 0.79.0 (build 999) - 2026-08-26
 
