@@ -547,7 +547,7 @@ struct CuratedWallFiltersDrawer: View {
                             hoverRating = nil
                         } label: {
                             Image(systemName: isActive ? "star.fill" : "star")
-                                .font(.system(size: 16))
+                                .font(.system(size: 18))
                                 .foregroundStyle(isActive ? .yellow : Color.appTextSecondary)
                         }
                         .buttonStyle(.plain)
