@@ -552,11 +552,11 @@ struct CuratedWallFiltersDrawer: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(
-                            Capsule().fill(orHigher ? Color.appAccent.opacity(0.18) : Color.clear)
+                            Capsule().fill(orHigher ? Color.white.opacity(0.32) : Color.clear)
                         )
                         .overlay(
                             Capsule().stroke(
-                                orHigher ? Color.appAccent.opacity(0.5) : Color.white.opacity(0.45),
+                                orHigher ? Color.white.opacity(0.75) : Color.white.opacity(0.45),
                                 lineWidth: 1
                             )
                         )
