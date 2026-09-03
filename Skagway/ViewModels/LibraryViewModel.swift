@@ -2827,14 +2827,15 @@ final class LibraryViewModel {
         let usesAlbumManualOrder: Bool
     }
 
-    /// Exact match, or "this rating or higher" when `orHigher` is set. Unrated (0) never matches a star filter.
+    /// Exact match, or "this rating or higher" when `orHigher` is set.
+    /// `0` means unrated; Or Higher is ignored for that selection.
     private nonisolated static func applyRatingFilter(
         selectedStars: Set<Int>,
         orHigher: Bool,
         base: [Video]
     ) -> [Video] {
         guard let floor = selectedStars.min() else { return base }
-        if orHigher {
+        if orHigher, floor > 0 {
             return base.filter { $0.rating >= floor }
         }
         return base.filter { selectedStars.contains($0.rating) }

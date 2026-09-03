@@ -514,12 +514,27 @@ struct CuratedWallFiltersDrawer: View {
 
     private var ratingCard: some View {
         makeFilterCard(title: "RATING") {
-            let level = viewModel.selectedRatingStars.min() ?? 0
+            let isUnratedSelected = viewModel.selectedRatingStars.contains(0)
+            let level = viewModel.selectedRatingStars.first { $0 > 0 } ?? 0
             let preview = hoverRating ?? level
             let orHigher = viewModel.ratingFilterOrHigher
+            let orHigherEnabled = !isUnratedSelected
 
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 12) {
+                HStack(spacing: 8) {
+                    Button {
+                        if isUnratedSelected {
+                            viewModel.clearRatingFilter()
+                        } else {
+                            viewModel.selectedRatingStars = [0]
+                        }
+                        hoverRating = nil
+                    } label: {
+                        ratingCapsule(title: "No Stars", isOn: isUnratedSelected)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Unrated videos only")
+
                     ForEach(1...5, id: \.self) { star in
                         let isActive = preview > 0 && star <= preview
                         Button {
@@ -535,7 +550,7 @@ struct CuratedWallFiltersDrawer: View {
                                 .foregroundStyle(isActive ? .yellow : Color.appTextSecondary)
                         }
                         .buttonStyle(.plain)
-                        .help(orHigher ? "\(star) stars or higher" : "Rating \(star) only")
+                        .help(orHigher && orHigherEnabled ? "\(star) stars or higher" : "Rating \(star) only")
                         .onHover { hovering in
                             hoverRating = hovering ? star : nil
                         }
@@ -546,27 +561,35 @@ struct CuratedWallFiltersDrawer: View {
                 Button {
                     viewModel.ratingFilterOrHigher.toggle()
                 } label: {
-                    Text("Or Higher")
-                        .font(.caption)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule().fill(orHigher ? Color.white.opacity(0.32) : Color.clear)
-                        )
-                        .overlay(
-                            Capsule().stroke(
-                                orHigher ? Color.white.opacity(0.75) : Color.white.opacity(0.45),
-                                lineWidth: 1
-                            )
-                        )
-                        .contentShape(Rectangle())
+                    ratingCapsule(title: "Or Higher", isOn: orHigher && orHigherEnabled)
                 }
                 .buttonStyle(.plain)
-                .help("When on, the selected star includes that rating and every higher one (4 → 4 and 5). When off, only the exact rating matches.")
+                .disabled(!orHigherEnabled)
+                .opacity(orHigherEnabled ? 1 : 0.4)
+                .help(orHigherEnabled
+                      ? "When on, the selected star includes that rating and every higher one (4 → 4 and 5). When off, only the exact rating matches."
+                      : "Or Higher doesn’t apply to unrated videos")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func ratingCapsule(title: String, isOn: Bool) -> some View {
+        Text(title)
+            .font(.caption)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule().fill(isOn ? Color.white.opacity(0.32) : Color.clear)
+            )
+            .overlay(
+                Capsule().stroke(
+                    isOn ? Color.white.opacity(0.75) : Color.white.opacity(0.45),
+                    lineWidth: 1
+                )
+            )
+            .contentShape(Rectangle())
     }
 
     private var durationCard: some View {

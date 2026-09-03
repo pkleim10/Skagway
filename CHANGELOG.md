@@ -31,7 +31,7 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
-- **Quick Filter rating: “Or Higher”** — The Rating card has an outline **Or Higher** pill. Off (default) matches only the star you click. On, the pill fills a clearly visible light grey and that rating plus every higher one match (4 → 4 and 5). The star row still fills 1 through the clicked star; Or Higher does not light stars above it. The filter pill reads `Rating 4` vs `Rating 4+`.
+- **Quick Filter rating: “Or Higher” and “No Stars”** — The Rating card has an outline **Or Higher** pill. Off (default) matches only the star you click. On, the pill fills a clearly visible light grey and that rating plus every higher one match (4 → 4 and 5). The star row still fills 1 through the clicked star; Or Higher does not light stars above it. A **No Stars** capsule on the same row filters unrated videos and disables Or Higher. The filter pill reads `Rating 4`, `Rating 4+`, or `No stars`.
 
 ## 0.79.0 (build 999) - 2026-08-26
 

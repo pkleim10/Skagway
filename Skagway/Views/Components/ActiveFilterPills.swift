@@ -27,10 +27,12 @@ struct ActiveFilterPills: View {
 
                         // Rating
                         if let rating = viewModel.selectedRatingStars.min() {
-                            let text = viewModel.ratingFilterOrHigher
-                                ? "Rating \(rating)+"
-                                : "Rating \(rating)"
-                            pill(text: text, systemImage: "star") {
+                            let text: String = {
+                                if rating == 0 { return "No stars" }
+                                if viewModel.ratingFilterOrHigher { return "Rating \(rating)+" }
+                                return "Rating \(rating)"
+                            }()
+                            pill(text: text, systemImage: rating == 0 ? "star.slash" : "star") {
                                 viewModel.clearRatingFilter()
                             }
                         }
