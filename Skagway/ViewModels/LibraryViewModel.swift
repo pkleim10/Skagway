@@ -2727,8 +2727,7 @@ final class LibraryViewModel {
     // MARK: - Cached Filter/Sort
 
     private static func isCorrupt(_ video: Video, thumbnailsSettled: Bool) -> Bool {
-        video.duration == nil && video.width == nil && video.height == nil
-            || (thumbnailsSettled && video.thumbnailPath == nil)
+        VideoIntegrity.isCorrupt(video, thumbnailsSettled: thumbnailsSettled)
     }
 
     private func recomputeFilteredVideos() {
@@ -2825,18 +2824,12 @@ final class LibraryViewModel {
         let usesAlbumManualOrder: Bool
     }
 
-    /// Exact match, or "this rating or higher" when `orHigher` is set.
-    /// `0` means unrated; Or Higher is ignored for that selection.
     private nonisolated static func applyRatingFilter(
         selectedStars: Set<Int>,
         orHigher: Bool,
         base: [Video]
     ) -> [Video] {
-        guard let floor = selectedStars.min() else { return base }
-        if orHigher, floor > 0, floor < 5 {
-            return base.filter { $0.rating >= floor }
-        }
-        return base.filter { selectedStars.contains($0.rating) }
+        RatingQuickFilter.apply(selectedStars: selectedStars, orHigher: orHigher, base: base)
     }
 
     /// Quality buckets are OR’d: video matches if its `resolutionLabel` is in the selected set.
@@ -5747,21 +5740,17 @@ final class LibraryViewModel {
             ?? filteredVideos.firstIndex(where: { $0.id == currentPath })
         guard let idx else { return }
 
-        var nextIdx = idx + 1
-        while nextIdx < filteredVideos.count {
-            let next = filteredVideos[nextIdx]
-            if FileManager.default.fileExists(atPath: next.filePath) {
-                playQueueSuccessor(next)
-                return
-            }
-            nextIdx += 1
-        }
-
-        if playAllLoops, let first = firstPlayableFilteredVideo() {
-            playQueueSuccessor(first)
+        let paths = filteredVideos.map(\.filePath)
+        guard let nextIdx = PlayAllAdvance.nextIndex(
+            after: idx,
+            paths: paths,
+            loop: playAllLoops,
+            fileExists: { FileManager.default.fileExists(atPath: $0) }
+        ) else {
+            isPlayAllSession = false
             return
         }
-        isPlayAllSession = false
+        playQueueSuccessor(filteredVideos[nextIdx])
     }
 
     private func playQueueSuccessor(_ video: Video) {
@@ -5813,7 +5802,7 @@ final class LibraryViewModel {
         let groups = cachedCollectionRuleGroups[id] ?? []
         let rules = cachedCollectionRules[id] ?? []
         let rulesByGroup = Dictionary(grouping: rules, by: \.groupId)
-        let group = collectionRepo.filterGroup(for: collection, groups: groups, rulesByGroup: rulesByGroup)
+        let group = CollectionRepository.filterGroup(for: collection, groups: groups, rulesByGroup: rulesByGroup)
         guard !group.isEmpty else { return }
 
         clearQuickFilters()

@@ -31,10 +31,10 @@ AI would translate to `CollectionRule` attributes and values.
 
 ### 4. Video Notes / Descriptions
 
-A notes / long description field has been discussed as a future feature. AI could:
-- Suggest notes from filenames and metadata
+There is no built-in notes field; users who want one add a custom **Text** field. AI could:
+- Suggest text for that field from filenames and metadata
 - Summarize content from thumbnails or keyframes
-- Make notes searchable and usable in collections
+- Use that custom text in search and collections (already supported for custom fields)
 
 ### 5. Duplicate Detection
 

@@ -1,23 +1,11 @@
 # Skagway User Guide
 
-**Status: Intentionally minimal**
+The user-facing manual lives in the **machii-labs** site, not in this repo.
 
-A full, production-quality user guide (with screenshots, detailed workflows, keyboard reference, glossary, etc.) will be written when Skagway is closer to a public / production release.
+- Live: [https://machiilabs.com/skagway/manual](https://machiilabs.com/skagway/manual)
+- Source: `machii-labs/src/app/skagway/manual/` (`manual.ts` + page components)
+- Screenshots: `machii-labs/public/skagway/manual/`
 
-## For now
+Do not grow a second full guide here. Documentation readiness for v1.0 is “is the machii-labs manual accurate enough vs the shipped app?” — see `docs/v1.0-readiness-checklist.md` §6.
 
-- Explore the app directly: toolbar, menus, Settings (⌘,), context menus, and keyboard shortcuts.
-- Many features are discoverable via the in-app UI and tooltips.
-- For high-level direction and planned work, see [ROADMAP.md](../ROADMAP.md).
-
-## Deferred
-
-- Comprehensive onboarding and reference content
-- Up-to-date screenshots
-- Glossary and advanced usage sections
-
-When the time comes, this file will be expanded (or replaced) with a proper guide. The `docs/images/` folder contains an aspirational shot list for future use.
-
----
-
-*Last cleared: June 2026*
+In-app UI, menus, Settings, and tooltips remain the day-to-day reference while the site manual is updated.

@@ -226,7 +226,7 @@ extension CollectionRepository {
     /// whose nodes are one sub-group per rule group (in `orderIndex` order), each holding its rules
     /// as conditions. This single representation is what the shared `FilterMatcher` compiles, so
     /// Collections and (Phase 3) the live advanced filter run through the exact same engine.
-    func filterGroup(
+    static func filterGroup(
         for collection: VideoCollection,
         groups: [CollectionRuleGroup],
         rulesByGroup: [Int64: [CollectionRule]]
@@ -251,7 +251,7 @@ extension CollectionRepository {
         customFields: [UUID: CustomMetadataFieldDefinition] = [:]
     ) -> FilterMatcher {
         FilterMatcher(
-            group: filterGroup(for: collection, groups: groups, rulesByGroup: rulesByGroup),
+            group: Self.filterGroup(for: collection, groups: groups, rulesByGroup: rulesByGroup),
             customFields: customFields
         )
     }

@@ -34,7 +34,7 @@ Files stay where you put them. Skagway indexes and enhances; it does not own you
 | **[XcodeGen](https://github.com/yonaskolb/XcodeGen)** | Regenerates `Skagway.xcodeproj` from `project.yml` |
 | **ffmpeg** (optional) | Required only for re-encode; path configurable in Settings → Tools |
 
-The app is **not sandboxed** (`Skagway.entitlements`) so it can browse arbitrary folders and run tools like ffmpeg. Treat that as intentional for a local library manager, not a shipping App Store configuration yet.
+The app is **not sandboxed** (`Skagway.entitlements`) so it can browse arbitrary folders and run tools like ffmpeg. That is intentional. Skagway ships as a Developer ID–signed DMG and is **not** going on the Mac App Store.
 
 ---
 
@@ -123,13 +123,13 @@ Release history and Unreleased notes live in [`CHANGELOG.md`](CHANGELOG.md). Hig
 | [`GRID-PERFORMANCE.md`](GRID-PERFORMANCE.md) | Grid / filtering performance notes |
 | [`Skagway/Design/README.md`](Skagway/Design/README.md) | Design system (dark cinematic blue) |
 
-A full end-user guide is intentionally light for now; use the in-app UI, menus, and Settings day to day. Broader user docs are planned closer to a public release.
+The user manual is on the Mach II Labs site: [machiilabs.com/skagway/manual](https://machiilabs.com/skagway/manual). Use the in-app UI, menus, and Settings day to day as well.
 
 ---
 
 ## Status
 
-Skagway is under active development toward a **v1.0** readiness pass (regression coverage, performance audit, polish). It is a personal / local library tool first — not yet a sandboxed Mac App Store product.
+Skagway is under active development toward a **v1.0** readiness pass (regression coverage, performance audit, polish). It is a personal / local library tool, distributed as a notarized DMG.
 
 ---
 

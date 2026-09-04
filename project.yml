@@ -27,7 +27,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.machiilabs.skagway
         PRODUCT_NAME: Skagway
         MARKETING_VERSION: "0.80.0"
-        CURRENT_PROJECT_VERSION: "1011"
+        CURRENT_PROJECT_VERSION: "1013"
         GENERATE_INFOPLIST_FILE: "YES"
         INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
         INFOPLIST_KEY_CFBundleDisplayName: Skagway
@@ -73,6 +73,8 @@ targets:
       - path: SkagwayTests
     dependencies:
       - target: Skagway
+      - package: GRDB
+        product: GRDB
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.machiilabs.skagway.tests

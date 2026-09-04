@@ -14,39 +14,51 @@ Key qualities:
 - Respect for the user's existing folder structure
 - High-quality inline playback + useful organization tools (ratings, tags, collections, custom metadata)
 
-## Current State (as of v0.28.0)
+## Current State (as of v0.80.0)
 
-**Core experience is solid and considerably deepened since v0.13**:
-- **Curated Wall**: unified grid + Inspector + collapsible, responsive filters drawer (Smart Libraries, Collections, Rating/Duration, Tags), replacing the old nav-bar/detail-pane split; wall and drawer regions are user-resizable and persist their size
-- **Unified playback engine**: one resizable floating player (Compact / Windowed / Full screen) backed by a single shared `InlinePlaybackController`; true full-screen carry-across (no restart); resume positions with a visible "continue watching" progress bar on grid cards; sidecar subtitle support; Play / Play-from-Beginning
-- **Collections** (rule-based smart folders) now support **two-level AND/OR grouping** — rules cluster into groups (ALL/ANY within a group), groups combine via an outer ALL/ANY toggle, e.g. `(Tag=Vacation AND Rating≥4) OR Tag=Favorite`
-- **Duplicates smart library** rebuilt on content fingerprinting (SHA-256 of file size + first/last bytes) instead of size+duration heuristics, with background backfill + progress and sticky per-pair "Not a Duplicate" marking
-- **Re-encode queue**: crash-safe MP4 conversion (temp file + kept backup, promoted only on success), full queue manager (abort / reorder / restore / retry), persists across relaunch
-- **Move queue**: crash-safe cross-volume moves (temp + size-verify + promote before deleting source), queue manager, per-video UI lockout while a move is in flight
-- **Tags**: standalone creation, rename/delete from the filters drawer, stable (non-reshuffling) assignment list, live per-tag counts
-- **Custom metadata** fields integrated into sort menu and List View columns (typed comparators, no per-row parsing)
-- **Thumbnail tools**: Regenerate Thumbnail, Make Thumbnail from Current Frame, Modify Filmstrip…
-- **Video bookmarks**: named timestamps with frame stills (Inspector list; ⌥⌘B while playing); resume position remains separate
-- **Keyboard-driven workflow**: Home/End (go to first/last), arrow-key grid navigation, a rationalized app-wide modifier scheme (⌃ = OS fullscreen only, ⌥ = alternate action, ⇧ = reveals/adds UI), ⌘F search focus
-- Smart libraries for Missing (filesystem check, with a manual rescan affordance) and Corrupt (computed live from in-library metadata, plus an automatic per-selection recheck) files
-- Drag-and-drop import (files and folders) onto the main window
+**v1.0 candidate surface is shipped.** Feature audit (2026-09-03): no half-finished items in this set. Remaining 1.0 work is the readiness pass (tests expansion, 10k perf, review, security), not new features. Tracker: [`docs/v1.0-readiness-checklist.md`](docs/v1.0-readiness-checklist.md).
 
-**Known architectural strengths**:
-- Careful performance work around SwiftUI diffing and large datasets (compiled-predicate rule matching, off-main filter/count computation, os_signpost instrumentation)
-- Clean separation via ViewModel + Repository pattern, GRDB-backed persistence with sequential migrations
-- Layout persistence that handles browsing vs. playback modes
+**Browsing & organization**
+- **Curated Wall**: grid + Inspector + collapsible filters drawer (smart libraries, collections, rating/duration, tags, quality chips); wall and drawer sizes persist
+- **Quick Filter**: rating (exact / Or Higher / No Stars), duration, tags, quality; filter pills; save/apply as collections
+- **Collections**: two-level AND/OR grouping
+- **Albums**: saved playlist order (`sortIndex`), drag-and-drop reorder in grid and list (album-only)
+- **Duplicates**: `ContentFingerprint` (size + first/last bytes) with “Not a Duplicate”
+- **Tags** and **custom metadata** (per-library; sort and list columns)
+- **Search** across title, file name, original file name, tags, and custom fields
+- Smart libraries: **Missing** (manual filesystem refresh) and **Corrupt** (metadata + recheck on select)
+- Drag-and-drop import; empty-library invite; **exclude folders** from Scan; Last Added
+- Library titles; Bulk Rename; library home + **per-library** thumbnail/filmstrip cache
+
+**Playback**
+- One floating player (Compact / Windowed / Full) via `InlinePlaybackController`; sidecar SRT; resume on cards; Play from Beginning
+- **Play All** (⌘⇧P) plays the **current filtered view** from the first video; auto-advance and **Loop** only while that session is active
+- Bookmarks (⌥⌘B); import play counts + resume; four-value subtitle presence
+
+**Queues & files**
+- Crash-safe **re-encode** and **move** queues (abort, persist, pills)
+- Thumbnail tools including Set Poster from Image
+
+**Keyboard & chrome**
+- Home/End, grid arrows, shortcut rationalization, Help URL, activity strip
+- Sparkle in-app (feed publish is GTM, not a 1.0 feature gap)
+
+**Architecture**
+- ViewModel + Repository, GRDB sequential migrations (no `eraseDatabaseOnSchemaChange`)
+- Large-library filter/count work off-main; `filteredVideos` single recompute path
+- `os_signpost` is **not** currently in source (perf audit must add timing or use another method)
 
 ## Path to v1.0
 
-The current state (v0.28.0, `feature/curated-wall`) is the **v1.0 candidate**, pending a deliberate readiness pass rather than new features. That pass covers:
+**v0.80.0 on `main`** is the **v1.0 candidate**, pending a readiness pass rather than new features:
 
-1. **Regression test suite** — no automated tests exist today (`project.yml` has no test target). Priority is ViewModel + Repository logic coverage (filtering, collections matching, migrations, duplicates) since it's testable without driving the GUI; full UI automation (XCUITest) is a separate, higher-effort tier.
-2. **Performance audit** — reusing the `os_signpost`/unified-log instrumentation approach already established this cycle; validate behavior at large library sizes (10k+ videos).
-3. **Feature audit against this roadmap** — confirm what's actually shipped and working matches what's documented here, and flag anything half-finished.
-4. **Code review** — a full-branch pass (e.g. `/code-review ultra`) before calling the branch done.
-5. **Security audit** — scoped to what's actually relevant for a local-only, unsandboxed (`app-sandbox: false`) file browser/player: filesystem-handling safety (path handling, no injection in `Process`/ffmpeg invocations), safe import/move/re-encode error paths — not a general web-app checklist.
+1. **Regression tests** — **done** 2026-09-03. `SkagwayTests`: **107 passing** (rating Quick Filter, collection AND/OR, Play All advance, corrupt heuristic, fingerprints, migrations). XCUITest is a later tier.
+2. **Performance audit** — 10k+ videos (cold start, filter, scroll, playback). Do **not** assume existing `os_signpost` (none in tree).
+3. **Feature audit vs this roadmap** — **done** 2026-09-03. Current State matches v0.80.0; nothing 1.0-critical is half-finished. See checklist §3.
+4. **Code review** — **done** 2026-09-03. No outstanding feature branches; Bugbot on `main` (focus list) found no bugs. Use `skagway-code-review` on future branches.
+5. **Security audit** — **done** 2026-09-03. See `docs/v1.0-security-audit.md`. No medium+ issues; no default telemetry.
 
-Only after this pass should sandboxing/distribution (Phase 4 below) be seriously scoped.
+Distribution stays Developer ID DMG. **No Mac App Store** — do not scope MAS/sandbox as future work.
 
 ## Major Themes / Phases (High Level)
 
@@ -60,20 +72,18 @@ Only after this pass should sandboxing/distribution (Phase 4 below) be seriously
 - Remaining polish surfaces primarily through the v1.0 readiness pass above, not a fixed backlog
 
 ### Phase 2 — Power User & Organization Features
-- Advanced search (beyond filename FTS5)
-- Batch operations and multi-select power features
-- Import / library management improvements (auto-import from data sources; Data Sources can exclude folders from Scan)
-- Further organization tools (notes, auto-tagging ideas)
+- **Done (landed before 1.0, not a 1.0 blocker):** search beyond filename; exclude folders from Scan; Bulk Rename and other multi-select batch actions
+- **Still Phase 2 (not required for 1.0):** auto-import / watch folders; auto-tagging ideas
+- **Notes:** do **not** add a built-in notes field. Users who want one create a custom **Text** field (multiline). That type already sorts, filters, searches, and exports.
 
 ### Phase 3 — AI Augmentation (exploratory)
 - See `AI-IMPROVEMENTS.md`
 - Potential areas: semantic search, smart tagging, content-aware suggestions, duplicate detection
 
 ### Phase 4 — Distribution & Longevity
-- **Locked launch path:** direct download via **Developer ID + notarized DMG** (`scripts/package_dmg.sh` → `dist/Skagway.dmg`). Not Mac App Store first; stay unsandboxed so arbitrary folders + optional ffmpeg work.
+- **Locked path:** direct download via **Developer ID + notarized DMG** (`scripts/package_dmg.sh` → `dist/Skagway.dmg`). Stay unsandboxed so arbitrary folders + optional ffmpeg work. **Not going on the Mac App Store** — do not plan a sandbox/MAS variant.
 - Host DMG on downloads.machiilabs.com; Sparkle in-app is implemented — publish `Skagway.appcast.xml` alongside `Skagway.dmg` when downloads go live (`docs/SPARKLE.md`).
-- Long-term maintainability and documentation
-- Full user + developer documentation (web-based) when closer to public release
+- **User manual (source of truth):** [machii-labs `/skagway/manual`](https://machiilabs.com/skagway/manual) — `machii-labs/src/app/skagway/manual/`. Repo stub `docs/USER_GUIDE.md` only points there. Completeness is a docs-readiness item, not a Skagway feature.
 
 ## Guiding Principles
 
@@ -91,4 +101,4 @@ Only after this pass should sandboxing/distribution (Phase 4 below) be seriously
 
 ---
 
-*Last significant update: v0.28.0 (2026-07-04) — refreshed to reflect Curated Wall, unified playback, Duplicates rework, and Collections grouping; added the v1.0 readiness pass.*
+*Last significant update: v0.80.0 (2026-09-03) — Current State rewritten; feature audit complete; no built-in notes; manual is machii-labs; MAS dropped.*

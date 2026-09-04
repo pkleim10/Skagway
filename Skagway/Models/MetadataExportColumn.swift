@@ -481,8 +481,7 @@ enum MetadataExportRowBuilder {
     }
 
     private static func isCorrupt(_ video: Video, thumbnailsSettled: Bool) -> Bool {
-        video.duration == nil && video.width == nil && video.height == nil
-            || (thumbnailsSettled && video.thumbnailPath == nil)
+        VideoIntegrity.isCorrupt(video, thumbnailsSettled: thumbnailsSettled)
     }
 
     /// CSV cell string for a value (null → empty).

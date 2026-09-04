@@ -31,6 +31,13 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
+- **v1.0 feature audit** — `ROADMAP.md` Current State is now as of v0.80.0. No built-in notes field (custom Text covers it). User manual is machii-labs `/skagway/manual`. Mac App Store dropped. `os_signpost` explained as optional profiling, not shipped instrumentation.
+- **v1.0 perf audit** — 12,174-video pass recorded in `docs/v1.0-perf-audit.md` (counts/timings only). Watch: sort ~2–2.5 s.
+- **v1.0 regression tests** — Unit coverage for rating Quick Filter, collection AND/OR (`FilterMatcher`), Play All advance (skip missing / loop), corrupt heuristic, content fingerprints, and latest-schema migrations. **107 tests, 0 failures.**
+- **v1.0 code review skill** — `.cursor/skills/skagway-code-review` launches Bugbot with Skagway focus (filters, Play All, albums, `filteredVideos`, queues). First pass on `main`: no bugs reported.
+- **v1.0 security audit** — Local FS / Process / ffmpeg / no-telemetry pass in `docs/v1.0-security-audit.md`. No medium+ issues; unsandboxed + user ffmpeg path remain intentional.
+- **v1.0 manual catch-up** — machii-labs `/skagway/manual` updated for 0.80 (search fields, rating Or Higher / No Stars, album order + Play All/Loop, exclude folders, Bulk Rename, Set Poster, Boolean fields, per-library cache).
+
 ## 0.80.0 (build 1011) - 2026-09-03
 
 - **Quick Filter rating: “Or Higher” and “No Stars”** — The Rating card is one row: **No Stars**, then 1–5, then **Or Higher** on the right. Off (default) matches only the star you click. On, the Or Higher pill fills a clearly visible light grey and that rating plus every higher one match (4 → 4 and 5). The star row still fills 1 through the clicked star; Or Higher does not light stars above it. **No Stars** and **5 stars** disable Or Higher. Or Higher is session-only (not persisted). The filter pill reads `Rating 4`, `Rating 4+`, or `No stars`.

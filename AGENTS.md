@@ -88,7 +88,7 @@ This document defines how AI agents (Cursor, Claude, etc.) should work on the Sk
   - Maintained live: agents add high-level change summaries to the `## Unreleased` section as work is committed.
   - Consolidated on release: Unreleased content is turned into a dated `## X.Y.Z (build NNN)` entry and the Unreleased section is cleared.
   - This is mandatory (see Core Workflow Rules and release process).
-- **User-facing documentation**: Currently minimal. A full user guide will be written closer to a production release. For now, rely on in-app UI, menus, Settings, and tooltips.
+- **User-facing documentation**: The manual is **machii-labs** `/skagway/manual` ([live](https://machiilabs.com/skagway/manual)). `docs/USER_GUIDE.md` only points there. In-app UI, menus, Settings, and tooltips still matter for day-to-day use.
 - **Technical history / performance notes**: `GRID-PERFORMANCE.md`
 
 When making significant changes, update the relevant document(s).

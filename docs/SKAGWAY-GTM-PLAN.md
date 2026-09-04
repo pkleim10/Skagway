@@ -73,7 +73,7 @@
 - **Do not** style the public studio brand as “Machii” (one word) — always **Mach II**
 - **Before ship:** light USPTO / handle pass on Skagway
 
-**Distribution (locked):** Direct download via **Developer ID + notarized DMG** — not Mac App Store first. App is unsandboxed ([`Skagway.entitlements`](../Skagway/Skagway.entitlements)) so it can browse arbitrary folders and optionally use ffmpeg. MAS would require a separate sandboxing project ([`ROADMAP.md`](../ROADMAP.md) Phase 4) and would lower power-user appeal; **do not** pursue MAS for the free-forever launch. Keep ffmpeg as the re-encode engine (no AVFoundation-only replacement as the sole path).
+**Distribution (locked):** Direct download via **Developer ID + notarized DMG**. **Not the Mac App Store** — no MAS/sandbox variant is planned. App is unsandboxed ([`Skagway.entitlements`](../Skagway/Skagway.entitlements)) so it can browse arbitrary folders and optionally use ffmpeg. Keep ffmpeg as the re-encode engine (no AVFoundation-only replacement as the sole path).
 
 Defaults:
 - **Studio domain:** `machiilabs.com` (Cloudflare DNS/nameservers) — sole public web presence
@@ -116,7 +116,8 @@ Out of scope as revenue. Optional “Support Mach II Labs” link later only.
 
 Hobby-framed pages already live at:
 - [`/other-fun-stuff/Skagway`](file:///Volumes/SSD/CursorProjects/kleimeyer-dot-com/src/app/other-fun-stuff/Skagway/page.jsx) — overview + Download
-- [`/other-fun-stuff/Skagway/guide`](file:///Volumes/SSD/CursorProjects/kleimeyer-dot-com/src/app/other-fun-stuff/Skagway/guide/page.jsx) — user guide
+- Current manual: [machiilabs.com/skagway/manual](https://machiilabs.com/skagway/manual) (`machii-labs/src/app/skagway/manual/`)
+- Legacy hobby page: [`/other-fun-stuff/Skagway/guide`](file:///Volumes/SSD/CursorProjects/kleimeyer-dot-com/src/app/other-fun-stuff/Skagway/guide/page.jsx)
 - DMG href in [`constants.js`](file:///Volumes/SSD/CursorProjects/kleimeyer-dot-com/src/app/other-fun-stuff/Skagway/constants.js)
 
 That is **not** a product site yet (buried under “other fun stuff,” personal-site chrome).
@@ -125,7 +126,7 @@ That is **not** a product site yet (buried under “other fun stuff,” personal
 
 1. **Studio domain (owned):** `machiilabs.com` via Cloudflare Registrar + Cloudflare nameservers.  
 2. **Hosting** — same Next.js app on Vercel; add `machiilabs.com` (and `www`) in Vercel; in Cloudflare DNS create Vercel’s records with **DNS only** (grey cloud).  
-3. **App routes** — on the Mach II Labs host: `/` = studio home, `/skagway` = product, `/skagway/guide` = docs (middleware when `Host` is `machiilabs.com`).  
+3. **App routes** — on the Mach II Labs host: `/` = studio home, `/skagway` = product, `/skagway/manual` = docs.  
 4. **Redirects** — `/other-fun-stuff/Skagway*` on kleimeyer.com → `https://machiilabs.com/skagway` (301).  
 5. **Standalone product chrome** — no personal-site / OFS nav; wordmark **Mach II Labs** + **Skagway**.  
 6. **CTAs:** primary **Download free**; secondary **User guide**. Pricing section = **Free forever** (one line, unambiguous).  
@@ -353,7 +354,7 @@ Priority polish that makes “best” believable:
 5. **Richer search** — beyond filename FTS5: tags, notes, custom fields, path (even before full semantic AI)
 6. **Batch power** — multi-select operations feel inevitable, not bolted on
 7. **Library/cache on encrypted volumes** — document Choose Folder… (Part D); no in-app Library Lock
-8. **Real user guide** — stub [`docs/USER_GUIDE.md`](USER_GUIDE.md) → product-grade guide on site
+8. **User manual** — [machiilabs.com/skagway/manual](https://machiilabs.com/skagway/manual) (source: `machii-labs/src/app/skagway/manual/`). Catch up to 0.80; do not write a second guide in this repo.
 
 ### Track B — Pretty library look (revised 2026-07-11)
 

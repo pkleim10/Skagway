@@ -1,8 +1,8 @@
 # User guide screenshots (aspirational)
 
-The main user guide (`../USER_GUIDE.md`) is currently cleared / on hold. A full production user guide will be written closer to release.
+The live manual is **machii-labs** `/skagway/manual` (screenshots live in that project’s `public/skagway/manual/`). `../USER_GUIDE.md` only points there.
 
-These images and the shot list below are preserved for when the guide is revived. Until then, the guide itself uses minimal placeholder text.
+The shot list below is leftover from an older in-repo guide idea. Prefer updating the machii-labs pages when docs change.
 
 ## How to capture
 

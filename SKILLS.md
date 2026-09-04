@@ -60,11 +60,12 @@ These are examples of when to invoke more focused agents (using Cursor's subagen
 | Writing or updating rules    | `create-rule` style skill             | Keep rules high-quality and minimal |
 | Creating project skills      | `create-skill` style skill            | Build reusable project capabilities |
 | Competitor / market research | `competitor-research` skill           | Feature, performance, and cost comparisons vs peers |
-| Code review before commit    | Review subagent (bugbot or general)   | Catch issues the main agent may have introduced |
+| Code review / v1.0 Step 4    | `skagway-code-review` (Bugbot + Skagway focus) | Filters, Play All, albums, `filteredVideos`, queues — not a second review engine |
 | Release preparation          | Follow release-workflow.mdc + build-deploy.mdc + human verification | Versioning and tagging are high-stakes |
 
 ## Project-Specific Skills
 
+- `skagway-code-review` — v1.0 / pre-commit review: launch Bugbot with Skagway focus areas. Implementation: `.cursor/skills/skagway-code-review/SKILL.md`.
 - `skagway-playback-test` — Guide through testing all three playback modes + enter/exit/switch/scroll/column restore behavior.
 - `competitor-research` — Research assistant for Skagway competitors (direct peer: Cinematica; default top 3: Cinematica, Infuse, NeoFinder); feature / performance / cost comparison with canvas deliverable.
 - `skagway-build-check` — Validate that a change follows build/deploy rules. *(planned)*
