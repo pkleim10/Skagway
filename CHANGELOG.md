@@ -31,12 +31,11 @@ See `AGENTS.md` and `.cursor/rules/build-deploy.mdc` for the full agent and rele
 
 ## Unreleased
 
-- **v1.0 feature audit** — `ROADMAP.md` Current State is now as of v0.80.0. No built-in notes field (custom Text covers it). User manual is machii-labs `/skagway/manual`. Mac App Store dropped. `os_signpost` explained as optional profiling, not shipped instrumentation.
-- **v1.0 perf audit** — 12,174-video pass recorded in `docs/v1.0-perf-audit.md` (counts/timings only). Watch: sort ~2–2.5 s.
-- **v1.0 regression tests** — Unit coverage for rating Quick Filter, collection AND/OR (`FilterMatcher`), Play All advance (skip missing / loop), corrupt heuristic, content fingerprints, and latest-schema migrations. **107 tests, 0 failures.**
-- **v1.0 code review skill** — `.cursor/skills/skagway-code-review` launches Bugbot with Skagway focus (filters, Play All, albums, `filteredVideos`, queues). First pass on `main`: no bugs reported.
-- **v1.0 security audit** — Local FS / Process / ffmpeg / no-telemetry pass in `docs/v1.0-security-audit.md`. No medium+ issues; unsandboxed + user ffmpeg path remain intentional.
-- **v1.0 manual catch-up** — machii-labs `/skagway/manual` updated for 0.80 (search fields, rating Or Higher / No Stars, album order + Play All/Loop, exclude folders, Bulk Rename, Set Poster, Boolean fields, per-library cache).
+## 1.0.0 (build 1014) - 2026-09-03
+
+- **First 1.0.0** — Readiness pass complete: 107 unit tests, 12,174-video perf PASS (watch: sort ~2–2.5 s), feature audit (nothing 1.0-critical half-finished), Bugbot review, local FS/ffmpeg/no-telemetry security PASS.
+- **Docs** — `ROADMAP.md` Current State is as of 0.80/1.0. No built-in notes (custom Text). Manual is machii-labs `/skagway/manual` (0.80 copy + recaptured screenshots). Mac App Store dropped. Sparkle feed publish remains GTM.
+- **Testable cores** — `RatingQuickFilter`, `VideoIntegrity`, `PlayAllAdvance` extracted for unit coverage of rating filter, Play All skip/loop, corrupt heuristic, collection AND/OR, fingerprints, and migrations.
 
 ## 0.80.0 (build 1011) - 2026-09-03
 

@@ -50,7 +50,7 @@ Key qualities:
 
 ## Path to v1.0
 
-**v0.80.0 on `main`** is the **v1.0 candidate**, pending a readiness pass rather than new features:
+**v1.0.0 on `main`** is shipped (2026-09-03). The readiness pass is complete:
 
 1. **Regression tests** — **done** 2026-09-03. `SkagwayTests`: **107 passing** (rating Quick Filter, collection AND/OR, Play All advance, corrupt heuristic, fingerprints, migrations). XCUITest is a later tier.
 2. **Performance audit** — 10k+ videos (cold start, filter, scroll, playback). Do **not** assume existing `os_signpost` (none in tree).
@@ -101,4 +101,4 @@ Distribution stays Developer ID DMG. **No Mac App Store** — do not scope MAS/s
 
 ---
 
-*Last significant update: v0.80.0 (2026-09-03) — Current State rewritten; feature audit complete; no built-in notes; manual is machii-labs; MAS dropped.*
+*Last significant update: v1.0.0 (2026-09-03) — readiness pass complete; first 1.0.0 release.*

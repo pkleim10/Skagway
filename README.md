@@ -129,7 +129,7 @@ The user manual is on the Mach II Labs site: [machiilabs.com/skagway/manual](htt
 
 ## Status
 
-Skagway is under active development toward a **v1.0** readiness pass (regression coverage, performance audit, polish). It is a personal / local library tool, distributed as a notarized DMG.
+Skagway **1.0.0** is a personal / local library tool, distributed as a notarized Developer ID DMG. It is free forever and is not on the Mac App Store.
 
 ---
 
